@@ -1,0 +1,5 @@
+# Copyright 2022 Canonical.
+# See LICENSE file for licensing details.
+
+restart:
+  description: Restart the Temporal server.

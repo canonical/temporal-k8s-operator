@@ -1,0 +1,250 @@
+log:
+    stdout: true
+    level: {{ LOG_LEVEL | default("info") }}
+
+persistence:
+    numHistoryShards: {{ NUM_HISTORY_SHARDS | default(4) }}
+    defaultStore: default
+    visibilityStore: visibility
+    {%- set es = ENABLE_ES | default(False) %}
+    {%- if es %}
+    advancedVisibilityStore: es-visibility
+    {%- endif %}
+    datastores:
+        default:
+            sql:
+                pluginName: "postgres"
+                databaseName: "{{ DBNAME | default("temporal") }}"
+                connectAddr: "{{ POSTGRES_SEEDS | default("") }}:{{ DB_PORT | default("5432") }}"
+                connectProtocol: "tcp"
+                user: "{{ POSTGRES_USER | default("") }}"
+                password: "{{ POSTGRES_PWD | default("") }}"
+                maxConns: {{ SQL_MAX_CONNS | default("20") }}
+                maxIdleConns: {{ SQL_MAX_IDLE_CONNS | default("20") }}
+                maxConnLifetime: {{ SQL_MAX_CONN_TIME | default("1h") }}
+                tls:
+                    enabled: {{ SQL_TLS_ENABLED | default("false") }}
+                    caFile: {{ SQL_CA | default("") }}
+                    certFile: {{ SQL_CERT | default("") }}
+                    keyFile: {{ SQL_CERT_KEY | default("") }}
+                    enableHostVerification: {{ SQL_HOST_VERIFICATION | default("false") }}
+                    serverName: {{ SQL_HOST_NAME | default("") }}
+        visibility:
+            sql:
+                {% set visibility_seeds_default = POSTGRES_SEEDS | default("") %}
+                {% set visibility_seeds = VISIBILITY_POSTGRES_SEEDS | default(visibility_seeds_default) %}
+                {% set visibility_port_default = DB_PORT | default("5432") %}
+                {% set visibility_port = VISIBILITY_DB_PORT | default(visibility_port_default) %}
+                {% set visibility_user_default = POSTGRES_USER | default("") %}
+                {% set visibility_user = VISIBILITY_POSTGRES_USER | default(visibility_user_default) %}
+                {% set visibility_pwd_default = POSTGRES_PWD | default("") %}
+                {% set visibility_pwd = VISIBILITY_POSTGRES_PWD | default(visibility_pwd_default) %}
+                pluginName: "postgres"
+                databaseName: "{{ VISIBILITY_DBNAME | default("temporal_visibility") }}"
+                connectAddr: "{{ visibility_seeds }}:{{ visibility_port }}"
+                connectProtocol: "tcp"
+                user: "{{ visibility_user }}"
+                password: "{{ visibility_pwd }}"
+                maxConns: {{ SQL_VIS_MAX_CONNS | default("10") }}
+                maxIdleConns: {{ SQL_VIS_MAX_IDLE_CONNS | default("10") }}
+                maxConnLifetime: {{ SQL_VIS_MAX_CONN_TIME | default("1h") }}
+                tls:
+                    enabled: {{ SQL_TLS_ENABLED | default("false") }}
+                    caFile: {{ SQL_CA | default("") }}
+                    certFile: {{ SQL_CERT | default("") }}
+                    keyFile: {{ SQL_CERT_KEY | default("") }}
+                    enableHostVerification: {{ SQL_HOST_VERIFICATION | default("false") }}
+                    serverName: {{ SQL_HOST_NAME | default("") }}
+        {%- if es %}
+        es-visibility:
+            elasticsearch:
+                version: {{ ES_VERSION | default("") }}
+                url:
+                    scheme: {{ ES_SCHEME | default("http") }}
+                    host: "{{ ES_SEEDS | default("") }}:{{ ES_PORT | default("9200") }}"
+                username: "{{ ES_USER | default("") }}"
+                password: "{{ ES_PWD | default("") }}"
+                indices:
+                    visibility: "{{ ES_VIS_INDEX | default("temporal_visibility_v1_dev") }}"
+        {%- endif %}
+
+global:
+    membership:
+        maxJoinDuration: 30s
+        broadcastAddress: "{{ TEMPORAL_BROADCAST_ADDRESS | default("") }}"
+    pprof:
+        port: {{ PPROF_PORT | default("0") }}
+    tls:
+        refreshInterval: {{ TEMPORAL_TLS_REFRESH_INTERVAL | default("0s") }}
+        expirationChecks:
+            warningWindow: {{ TEMPORAL_TLS_EXPIRATION_CHECKS_WARNING_WINDOW | default("0s") }}
+            errorWindow: {{ TEMPORAL_TLS_EXPIRATION_CHECKS_ERROR_WINDOW | default("0s") }}
+            checkInterval: {{ TEMPORAL_TLS_EXPIRATION_CHECKS_CHECK_INTERVAL | default("0s") }}
+        internode:
+            # This server section configures the TLS certificate that internal temporal
+            # cluster nodes (history or matching) present to other clients within the Temporal Cluster.
+            server:
+                requireClientAuth: {{ TEMPORAL_TLS_REQUIRE_CLIENT_AUTH | default("false") }}
+
+                certFile: {{ TEMPORAL_TLS_SERVER_CERT | default("") }}
+                keyFile: {{ TEMPORAL_TLS_SERVER_KEY | default("") }}
+                {%- if TEMPORAL_TLS_SERVER_CA_CERT %}
+                clientCaFiles:
+                    - {{ TEMPORAL_TLS_SERVER_CA_CERT | default("") }}
+                {%- endif %}
+
+                certData: {{ TEMPORAL_TLS_SERVER_CERT_DATA | default("") }}
+                keyData: {{ TEMPORAL_TLS_SERVER_KEY_DATA | default("") }}
+                {%- if TEMPORAL_TLS_SERVER_CA_CERT_DATA %}
+                clientCaData:
+                    - {{ TEMPORAL_TLS_SERVER_CA_CERT_DATA | default("") }}
+                {%- endif %}
+
+            # This client section is used to configure the TLS clients within
+            # the Temporal Cluster that connect to an Internode (history or matching)
+            client:
+                serverName: {{ TEMPORAL_TLS_INTERNODE_SERVER_NAME | default("") }}
+                disableHostVerification: {{ TEMPORAL_TLS_INTERNODE_DISABLE_HOST_VERIFICATION | default("false") }}
+                {%- if TEMPORAL_TLS_SERVER_CA_CERT %}
+                rootCaFiles:
+                    - {{ TEMPORAL_TLS_SERVER_CA_CERT | default("") }}
+                {%- endif %}
+                {%- if TEMPORAL_TLS_SERVER_CA_CERT_DATA %}
+                rootCaData:
+                    - {{ TEMPORAL_TLS_SERVER_CA_CERT_DATA | default("") }}
+                {%- endif %}
+        frontend:
+            # This server section configures the TLS certificate that the Frontend
+            # server presents to all clients (specifically the Worker role within
+            # the Temporal Cluster and all External SDKs connecting to the Cluster)
+            server:
+                requireClientAuth: {{ TEMPORAL_TLS_REQUIRE_CLIENT_AUTH | default("false") }}
+                certFile: {{ TEMPORAL_TLS_FRONTEND_CERT | default("") }}
+                keyFile: {{ TEMPORAL_TLS_FRONTEND_KEY | default("") }}
+                {%- if TEMPORAL_TLS_CLIENT1_CA_CERT %}
+                clientCaFiles:
+                    - {{ TEMPORAL_TLS_CLIENT1_CA_CERT | default("") }}
+                    - {{ TEMPORAL_TLS_CLIENT2_CA_CERT | default("") }}
+                {%- endif %}
+
+                certData: {{ TEMPORAL_TLS_FRONTEND_CERT_DATA | default("") }}
+                keyData: {{ TEMPORAL_TLS_FRONTEND_KEY_DATA | default("") }}
+                {%- if TEMPORAL_TLS_CLIENT1_CA_CERT_DATA %}
+                clientCaData:
+                    - {{ TEMPORAL_TLS_CLIENT1_CA_CERT_DATA | default("") }}
+                    - {{ TEMPORAL_TLS_CLIENT2_CA_CERT_DATA | default("") }}
+                {%- endif %}
+
+            # This client section is used to configure the TLS clients within
+            # the Temporal Cluster (specifically the Worker role) that connect to the Frontend service
+            client:
+                serverName: {{ TEMPORAL_TLS_FRONTEND_SERVER_NAME | default("") }}
+                disableHostVerification: {{ TEMPORAL_TLS_FRONTEND_DISABLE_HOST_VERIFICATION | default("false") }}
+                {%- if TEMPORAL_TLS_SERVER_CA_CERT %}
+                rootCaFiles:
+                    - {{ TEMPORAL_TLS_SERVER_CA_CERT | default("") }}
+                {%- endif %}
+                {%- if TEMPORAL_TLS_SERVER_CA_CERT_DATA %}
+                rootCaData:
+                    - {{ TEMPORAL_TLS_SERVER_CA_CERT_DATA | default("") }}
+                {%- endif %}
+    {%- if STATSD_ENDPOINT %}
+    metrics:
+        statsd:
+            hostPort: {{ STATSD_ENDPOINT }}
+            prefix: "temporal"
+    {%- elif PROMETHEUS_ENDPOINT %}
+    metrics:
+        prometheus:
+            timerType: {{ PROMETHEUS_TIMER_TYPE | default("histogram") }}
+            listenAddress: "{{ PROMETHEUS_ENDPOINT }}"
+    {%- endif %}
+    authorization:
+        jwtKeyProvider:
+            keySourceURIs:
+                {%- if TEMPORAL_JWT_KEY_SOURCE1 %}
+                - {{ TEMPORAL_JWT_KEY_SOURCE1 | default("") }}
+                {%- endif %}
+                {%- if TEMPORAL_JWT_KEY_SOURCE2 %}
+                - {{ TEMPORAL_JWT_KEY_SOURCE2 | default("") }}
+                {%- endif %}
+            refreshInterval: {{ TEMPORAL_JWT_KEY_REFRESH | default("1m") }}
+        permissionsClaimName: {{ TEMPORAL_JWT_PERMISSIONS_CLAIM | default("permissions") }}
+        authorizer: {{ TEMPORAL_AUTH_AUTHORIZER | default("") }}
+        claimMapper: {{ TEMPORAL_AUTH_CLAIM_MAPPER | default("") }}
+
+{%- set temporalGrpcPort = FRONTEND_GRPC_PORT | default("7233") %}
+services:
+    frontend:
+        rpc:
+            grpcPort: {{ temporalGrpcPort }}
+            membershipPort: {{ FRONTEND_MEMBERSHIP_PORT | default("6933") }}
+            bindOnIP: {{ BIND_ON_IP | default("127.0.0.1") }}
+
+    matching:
+        rpc:
+            grpcPort: {{ MATCHING_GRPC_PORT | default("7235") }}
+            membershipPort: {{ MATCHING_MEMBERSHIP_PORT | default("6935") }}
+            bindOnIP: {{ BIND_ON_IP | default("127.0.0.1") }}
+
+    history:
+        rpc:
+            grpcPort: {{ HISTORY_GRPC_PORT | default("7234") }}
+            membershipPort: {{ HISTORY_MEMBERSHIP_PORT | default("6934") }}
+            bindOnIP: {{ BIND_ON_IP | default("127.0.0.1") }}
+
+    worker:
+        rpc:
+            grpcPort: {{ WORKER_GRPC_PORT | default("7239") }}
+            membershipPort: {{ WORKER_MEMBERSHIP_PORT | default("6939") }}
+            bindOnIP: {{ BIND_ON_IP | default("127.0.0.1") }}
+
+clusterMetadata:
+    enableGlobalNamespace: false
+    failoverVersionIncrement: 10
+    masterClusterName: "active"
+    currentClusterName: "active"
+    clusterInformation:
+        active:
+            enabled: true
+            initialFailoverVersion: 1
+            rpcName: "frontend"
+            rpcAddress: {{ "127.0.0.1:" + temporalGrpcPort }}
+
+dcRedirectionPolicy:
+    policy: "noop"
+    toDC: ""
+
+archival:
+  history:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+  visibility:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+
+namespaceDefaults:
+  archival:
+    history:
+      state: "disabled"
+      URI: "file:///tmp/temporal_archival/development"
+    visibility:
+      state: "disabled"
+      URI: "file:///tmp/temporal_vis_archival/development"
+
+{% set publicIp = BIND_ON_IP | default("127.0.0.1") -%}
+{%- set defaultPublicHostPost = publicIp + ":" + temporalGrpcPort %}
+publicClient:
+    hostPort: "{{ PUBLIC_FRONTEND_ADDRESS | default(defaultPublicHostPost) }}"
+
+dynamicConfigClient:
+    filepath: "{{ DYNAMIC_CONFIG_FILE_PATH | default("/etc/temporal/config/dynamicconfig/docker.yaml") }}"
+    pollInterval: "60s"
