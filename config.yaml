@@ -1,0 +1,15 @@
+# Copyright 2022 Canonical.
+# See LICENSE file for licensing details.
+
+options:
+  services:
+    default: frontend,history,matching,worker
+    description: |
+      A comma separated list of Temporal services to run. Temporal components
+      can be either run in a single container or spread across multiple
+      containers, which allows to independently scale each component.
+    type: string
+  log-level:
+    default: info
+    description: Temporal server logging level.
+    type: string
