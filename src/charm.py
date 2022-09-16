@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2022 Canonical.
+# Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 #
 # Learn more at: https://juju.is/docs/sdk
@@ -13,7 +13,7 @@ import os
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,11 @@ class TemporalK8SCharm(CharmBase):
     def _on_config_changed(self, event):
         """Handle configuration changes."""
         self.unit.status = WaitingStatus("configuring temporal")
+        try:
+            self._validate()
+        except ValueError as err:
+            self.unit.status = BlockedStatus(f"error in config: {err}")
+            return
         self._update(event)
 
     @log_event_handler
@@ -76,6 +81,16 @@ class TemporalK8SCharm(CharmBase):
         self.unit.status = MaintenanceStatus("restarting temporal")
         container.restart(self.name)
         self.unit.status = ActiveStatus()
+
+    def _validate(self):
+        """Validate that configuration values are correct.
+
+        Raise a ValueError in case of problems.
+        """
+        valid_services = ("frontend", "history", "matching", "worker")
+        for service in self.config["services"].split(","):
+            if service not in valid_services:
+                raise ValueError(f"services: invalid service {service!r}")
 
     def _update(self, event):
         """Update the Temporal server configuration and replan its execution."""

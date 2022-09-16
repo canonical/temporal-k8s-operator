@@ -1,4 +1,4 @@
-# Copyright 2022 Canonical.
+# Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 # For a complete list of supported options, see:
@@ -9,12 +9,12 @@ display-name: Temporal server
 description: |
   Temporal is a developer-first, open source platform that ensures
   the successful execution of services and applications (using workflows).
-maintainer: Comemrcial Systems <jaas-crew@lists.canonical.com>
+maintainer: Commercial Systems <jaas-crew@lists.canonical.com>
 tags:
   - workflow
-  - authenticator
-  - authentication
-  - identity
+  - task
+  - activities
+  - development
 
 peers:
   temporal:
@@ -28,6 +28,7 @@ requires:
 containers:
   temporal:
     resource: temporal-server-image
+    # Included for simplicity in integration tests.
     upstream-source: temporalio/server:1.17.4
 
 resources:

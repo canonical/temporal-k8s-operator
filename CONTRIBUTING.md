@@ -2,15 +2,25 @@
 
 ## Developing
 
-Create and activate a virtualenv with the development requirements:
+You can use the environments created by `tox` for development:
 
-    virtualenv -p python3 venv
-    source venv/bin/activate
-    pip install -r requirements-dev.txt
+```shell
+tox --notest -e unit
+source .tox/unit/bin/activate
+```
 
-Run `tox` for *linting* and *testing* the code, and `tox -e fmt` for formatting it.
+### Testing
 
-## Intended use case
+```shell
+tox -e fmt           # update your code according to linting rules
+tox -e lint          # code style
+tox -e unit          # unit tests
+tox -e integration   # integration tests
+tox                  # runs 'lint' and 'unit' environments
+```
+
+
+### Deploy
 
 This charm is used to deploy Temporal Server in a k8s cluster.
 For a local deployment, follow the following steps:
@@ -38,6 +48,9 @@ For a local deployment, follow the following steps:
 
     # Create a 'model' on this controller:
     juju add-model temporal
+
+    # Enable DEBUG logging:
+    juju model-config logging-config="<root>=INFO;unit=DEBUG"
 
     # Install charmcraft from snap:
     sudo snap install charmcraft --classic
