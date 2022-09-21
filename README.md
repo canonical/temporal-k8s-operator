@@ -22,7 +22,7 @@ other using the Juju command line as follows:
 ```bash
 $ juju deploy temporal-k8s
 $ juju deploy postgresql-k8s --channel edge --trust
-$ juju relate temporal-k8s postgresql-k8s
+$ juju relate temporal-k8s postgresql-k8s:db
 ```
 
 ## Contributing

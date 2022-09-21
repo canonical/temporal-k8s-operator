@@ -11,11 +11,12 @@ import logging
 import os
 
 from jinja2 import Environment, FileSystemLoader
-from ops.charm import CharmBase
-from ops.main import main
+from ops import framework, lib, main
+from ops.charm import CharmBase, RelationEvent
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
 logger = logging.getLogger(__name__)
+pgsql = lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
 
 def log_event_handler(method):
@@ -42,14 +43,28 @@ def render(template_name, context):
 class TemporalK8SCharm(CharmBase):
     """Temporal server charm."""
 
+    _state = framework.StoredState()
+
     def __init__(self, *args):
         super().__init__(*args)
         self.name = "temporal"
 
+        # Handle basic charm lifecycle.
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.temporal_pebble_ready, self._on_temporal_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.restart_action, self._on_restart_action)
+
+        # Handle db:pgsql relation.
+        self._state.set_default(db_conn=None)
+        self.db = pgsql.PostgreSQLClient(self, "db")  # This reflects the "db" relation in metadata.yaml.
+        self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
+        self.framework.observe(self.db.on.master_changed, self._on_master_changed)
+
+        # Handle admin:temporal relation.
+        self._state.set_default(schema_ready=False)
+        self.admin = Admin(self)
+        self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 
     @log_event_handler
     def _on_install(self, event):
@@ -65,11 +80,38 @@ class TemporalK8SCharm(CharmBase):
     def _on_config_changed(self, event):
         """Handle configuration changes."""
         self.unit.status = WaitingStatus("configuring temporal")
-        try:
-            self._validate()
-        except ValueError as err:
-            self.unit.status = BlockedStatus(f"error in config: {err}")
+        self._update(event)
+
+    @log_event_handler
+    def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
+        """Handle joining a db:pgsql relation."""
+        if self.model.unit.is_leader():
+            # Provide requirements to the PostgreSQL server.
+            self.unit.status = WaitingStatus("initializing database connection")
+            event.database = self.app.name  # Request database named as the Juju charm.
+        elif event.database != self.app.name:
+            # Leader has not yet set requirements. Defer, in case this unit
+            # becomes leader and needs to perform that operation.
+            event.defer()
+
+    @log_event_handler
+    def _on_master_changed(self, event: pgsql.MasterChangedEvent):
+        """Handle changes on the db:pgsql relation."""
+        # import ipdb; ipdb.set_trace()
+        if event.database != self.app.name:
+            # Leader has not yet set requirements. Wait until next event,
+            # or risk connecting to an incorrect database.
             return
+
+        self.unit.status = WaitingStatus("handling database change")
+        self._state.db_conn = None if event.master is None else dict(event.master.items())
+        self._update(event)
+
+    @log_event_handler
+    def _on_schema_changed(self, event):
+        """Handle schema becoming ready."""
+        self.unit.status = WaitingStatus("handling schema ready change")
+        self._state.schema_ready = event.schema_ready
         self._update(event)
 
     @log_event_handler
@@ -83,17 +125,30 @@ class TemporalK8SCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     def _validate(self):
-        """Validate that configuration values are correct.
+        """Validate that configuration and relations are valid and ready.
 
         Raise a ValueError in case of problems.
         """
+        # Validate config.
         valid_services = ("frontend", "history", "matching", "worker")
         for service in self.config["services"].split(","):
             if service not in valid_services:
-                raise ValueError(f"services: invalid service {service!r}")
+                raise ValueError(f"error in services config: invalid service {service!r}")
+
+        # Validate relations.
+        if self._state.db_conn is None:
+            raise ValueError("db:pgsql relation: no database connection available")
+        if not self._state.schema_ready:
+            raise ValueError("admin:temporal relation: schema is not ready")
 
     def _update(self, event):
         """Update the Temporal server configuration and replan its execution."""
+        try:
+            self._validate()
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
+            return
+
         container = self.unit.get_container(self.name)
         if not container.can_connect():
             event.defer()
@@ -104,6 +159,16 @@ class TemporalK8SCharm(CharmBase):
             "log-level": "LOG_LEVEL",
         }
         context = {config_key: self.config[key] for key, config_key in options.items()}
+        db_conn = self._state.db_conn
+        context.update(
+            {
+                "DB_NAME": db_conn["dbname"],
+                "DB_HOST": db_conn["host"],
+                "DB_PORT": db_conn["port"],
+                "DB_USER": db_conn["user"],
+                "DB_PSWD": db_conn["password"],
+            }
+        )
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
 
@@ -130,5 +195,26 @@ class TemporalK8SCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
 
+class SchemaChangedEvent(RelationEvent):
+    """The temporal schema has been created and it is ready."""
+
+    pass
+
+
+class _AdminEvents(framework.ObjectEvents):
+
+    schema_changed = framework.EventSource(SchemaChangedEvent)
+
+
+class Admin(framework.Object):
+    """Client for admin:temporal relations."""
+
+    on = _AdminEvents()
+
+    def __init__(self, charm):
+        super().__init__(charm, "admin")
+        # TODO(frankban): implement the client.
+
+
 if __name__ == "__main__":
-    main(TemporalK8SCharm)
+    main.main(TemporalK8SCharm)

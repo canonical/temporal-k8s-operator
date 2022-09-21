@@ -21,17 +21,67 @@ class TestCharm(TestCase):
         self.harness.begin()
         self.harness.set_can_connect("temporal", True)
 
-    def test_temporal_pebble_ready(self):
-        """The pebble plan is correctly generated."""
+    def test_initial_plan(self):
+        """The initial pebble plan is empty."""
+        harness = self.harness
+        initial_plan = harness.get_container_pebble_plan("temporal").to_dict()
+        self.assertEqual(initial_plan, {})
+
+    def test_blocked_by_db(self):
+        """The charm is blocked without a db:pgsql relation with a ready master."""
         harness = self.harness
 
-        # The initial Pebble plan is empty.
-        initial_plan = harness.get_container_pebble_plan("temporal")
-        self.assertEqual(initial_plan.to_yaml(), "{}\n")
-
-        # The plan is generated after pebble is ready.
+        # Simulate pebble readiness.
         container = harness.model.unit.get_container("temporal")
         harness.charm.on.temporal_pebble_ready.emit(container)
+
+        # No plans are set yet.
+        got_plan = harness.get_container_pebble_plan("temporal").to_dict()
+        self.assertEqual(got_plan, {})
+
+        # The BlockStatus is set with a message.
+        self.assertEqual(
+            harness.model.unit.status, BlockedStatus("db:pgsql relation: no database connection available")
+        )
+
+    def test_blocked_by_schema_not_ready(self):
+        """The charm is blocked without a admin:temporal relation with a ready schema."""
+        harness = self.harness
+
+        # Simulate pebble readiness.
+        container = harness.model.unit.get_container("temporal")
+        harness.charm.on.temporal_pebble_ready.emit(container)
+
+        # Simulate database readiness.
+        event = type(
+            "Event",
+            (),
+            {
+                "database": "temporal-k8s",
+                "master": {
+                    "dbname": "mydb",
+                    "host": "myhost",
+                    "port": "4247",
+                    "user": "jean-luc",
+                    "password": "inner-light",
+                },
+            },
+        )
+        harness.charm._on_master_changed(event)
+
+        # No plans are set yet.
+        got_plan = harness.get_container_pebble_plan("temporal").to_dict()
+        self.assertEqual(got_plan, {})
+
+        # The BlockStatus is set with a message.
+        self.assertEqual(harness.model.unit.status, BlockedStatus("admin:temporal relation: schema is not ready"))
+
+    def test_ready(self):
+        """The pebble plan is correctly generated when the charm is ready."""
+        harness = self.harness
+        simulate_lifecycle(harness)
+
+        # The plan is generated after pebble is ready.
         want_plan = {
             "services": {
                 "temporal": {
@@ -40,7 +90,14 @@ class TestCharm(TestCase):
                     "--service=frontend --service=history --service=matching --service=worker",
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": {"LOG_LEVEL": "info"},
+                    "environment": {
+                        "DB_HOST": "myhost",
+                        "DB_NAME": "mydb",
+                        "DB_PORT": "4247",
+                        "DB_PSWD": "inner-light",
+                        "DB_USER": "jean-luc",
+                        "LOG_LEVEL": "info",
+                    },
                 }
             },
         }
@@ -57,10 +114,7 @@ class TestCharm(TestCase):
     def test_config_changed(self):
         """The pebble plan changes according to config changes."""
         harness = self.harness
-
-        # Generate the ready plan.
-        container = harness.model.unit.get_container("temporal")
-        harness.charm.on.temporal_pebble_ready.emit(container)
+        simulate_lifecycle(harness)
 
         # Update the config.
         self.harness.update_config({"log-level": "debug", "services": "worker"})
@@ -73,7 +127,14 @@ class TestCharm(TestCase):
                     "command": "temporal-server --env charm start --service=worker",
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": {"LOG_LEVEL": "debug"},
+                    "environment": {
+                        "DB_HOST": "myhost",
+                        "DB_NAME": "mydb",
+                        "DB_PORT": "4247",
+                        "DB_PSWD": "inner-light",
+                        "DB_USER": "jean-luc",
+                        "LOG_LEVEL": "debug",
+                    },
                 }
             },
         }
@@ -86,10 +147,7 @@ class TestCharm(TestCase):
     def test_invalid_config_value(self):
         """The charm blocks if an invalid config value is provided."""
         harness = self.harness
-
-        # Generate the ready plan.
-        container = harness.model.unit.get_container("temporal")
-        harness.charm.on.temporal_pebble_ready.emit(container)
+        simulate_lifecycle(harness)
 
         # Update the config with an invalid value.
         self.harness.update_config({"services": "worker,bad-wolf"})
@@ -103,5 +161,33 @@ class TestCharm(TestCase):
 
         # The BlockStatus is set with a message.
         self.assertEqual(
-            harness.model.unit.status, BlockedStatus("error in config: services: invalid service 'bad-wolf'")
+            harness.model.unit.status, BlockedStatus("error in services config: invalid service 'bad-wolf'")
         )
+
+
+def simulate_lifecycle(harness):
+    """Simulate a healthy charm life-cycle."""
+    # Simulate pebble readiness.
+    container = harness.model.unit.get_container("temporal")
+    harness.charm.on.temporal_pebble_ready.emit(container)
+
+    # Simulate database readiness.
+    event = type(
+        "Event",
+        (),
+        {
+            "database": "temporal-k8s",
+            "master": {
+                "dbname": "mydb",
+                "host": "myhost",
+                "port": "4247",
+                "user": "jean-luc",
+                "password": "inner-light",
+            },
+        },
+    )
+    harness.charm._on_master_changed(event)
+
+    # Simulate schema readiness.
+    event = type("Event", (), {"schema_ready": True})
+    harness.charm._on_schema_changed(event)
