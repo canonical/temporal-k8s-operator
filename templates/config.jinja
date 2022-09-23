@@ -14,11 +14,11 @@ persistence:
         default:
             sql:
                 pluginName: "postgres"
-                databaseName: "{{ DBNAME | default("temporal") }}"
-                connectAddr: "{{ POSTGRES_SEEDS | default("") }}:{{ DB_PORT | default("5432") }}"
+                databaseName: "{{ DB_NAME }}"
+                connectAddr: "{{ DB_HOST }}:{{ DB_PORT }}"
                 connectProtocol: "tcp"
-                user: "{{ POSTGRES_USER | default("") }}"
-                password: "{{ POSTGRES_PWD | default("") }}"
+                user: "{{ DB_USER }}"
+                password: "{{ DB_PSWD }}"
                 maxConns: {{ SQL_MAX_CONNS | default("20") }}
                 maxIdleConns: {{ SQL_MAX_IDLE_CONNS | default("20") }}
                 maxConnLifetime: {{ SQL_MAX_CONN_TIME | default("1h") }}

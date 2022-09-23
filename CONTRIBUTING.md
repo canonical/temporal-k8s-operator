@@ -19,10 +19,9 @@ tox -e integration   # integration tests
 tox                  # runs 'lint' and 'unit' environments
 ```
 
-
 ### Deploy
 
-This charm is used to deploy Temporal Server in a k8s cluster.
+This charm is used to deploy Temporal server in a k8s cluster.
 For a local deployment, follow the following steps:
 
     # Install Microk8s from snap:
@@ -56,7 +55,19 @@ For a local deployment, follow the following steps:
     sudo snap install charmcraft --classic
 
     # Pack the charm:
-    charmcraft pack
+    charmcraft pack [--destructive-mode]
 
     # Deploy the charm:
-    juju deploy ./temporal-k8s-22.04-amd64.charm
+    juju deploy ./temporal-k8s_ubuntu-20.04-amd64.charm --resource temporal-server-image=temporalio/server:1.17.4
+
+    # Relate it to postgres:
+    juju deploy postgresql-k8s --channel edge --trust
+    juju relate temporal-k8s postgresql-k8s:db
+
+    # Check progress:
+    juju status --relations
+    juju debug-log
+
+    # Clean-up before retrying:
+    juju remove-application temporal-k8s --force
+    juju remove-application postgresql-k8s --force

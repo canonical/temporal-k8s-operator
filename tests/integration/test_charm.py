@@ -4,7 +4,6 @@
 
 
 import logging
-import urllib.request
 from pathlib import Path
 
 import pytest
@@ -17,25 +16,29 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 
 
-@pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest):
-    """Build and deploy the Temporal charm, and check the unit status."""
+@pytest.fixture(name="deploy", scope="module")
+async def deploy(ops_test: OpsTest):
     charm = await ops_test.build_charm(".")
     resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
     await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
-
     async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=True, timeout=1000)
+        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=1000)
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
 @pytest.mark.abort_on_fail
-async def test_application_is_up(ops_test: OpsTest):
-    status = await ops_test.model.get_status()  # noqa: F821
-    address = status["applications"][APP_NAME]["units"][f"{APP_NAME}/0"]["address"]
+@pytest.mark.usefixtures("deploy")
+class TestDeployment:
+    async def test_application_is_up(self, ops_test: OpsTest):
+        """The app is up and running."""
+        # TODO(frankban): do something like the following.
 
-    url = f"http://{address}"
+        # import urllib.request
 
-    logger.info("querying app address: %s", url)
-    response = urllib.request.urlopen(url, data=None, timeout=2.0)
-    assert response.code == 200
+        # status = await ops_test.model.get_status()  # noqa: F821
+        # address = status["applications"][APP_NAME]["units"][f"{APP_NAME}/0"]["address"]
+
+        # url = f"http://{address}"
+        # logger.info("querying app address: %s", url)
+        # response = urllib.request.urlopen(url, data=None, timeout=2.0)
+        # assert response.code == 200

@@ -6,6 +6,7 @@
 
 name: temporal-k8s
 display-name: Temporal server
+summary: Temporal server operator
 description: |
   Temporal is a developer-first, open source platform that ensures
   the successful execution of services and applications (using workflows).
@@ -21,6 +22,9 @@ peers:
     interface: temporal
 
 requires:
+  admin:
+    interface: temporal
+    limit: 1
   db:
     interface: pgsql
     limit: 1

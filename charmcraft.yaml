@@ -8,7 +8,12 @@ type: "charm"
 bases:
   - build-on:
     - name: "ubuntu"
-      channel: "22.04"
+      channel: "20.04"
     run-on:
     - name: "ubuntu"
-      channel: "22.04"
+      channel: "20.04"
+parts:
+  charm:
+    # Fixes jinja install during pack.
+    # See <https://github.com/canonical/charmcraft/issues/551>.
+    charm-python-packages: [setuptools, pip]
