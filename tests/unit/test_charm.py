@@ -18,8 +18,9 @@ class TestCharm(TestCase):
     def setUp(self):
         self.harness = Harness(TemporalK8SCharm)
         self.addCleanup(self.harness.cleanup)
-        self.harness.begin()
         self.harness.set_can_connect("temporal", True)
+        self.harness.set_leader(True)
+        self.harness.begin()
 
     def test_initial_plan(self):
         """The initial pebble plan is empty."""
@@ -189,5 +190,8 @@ def simulate_lifecycle(harness):
     harness.charm._on_master_changed(event)
 
     # Simulate schema readiness.
-    event = type("Event", (), {"schema_ready": True})
-    harness.charm._on_schema_changed(event)
+    app = type("App", (), {"name": "temporal-k8s"})()
+    relation = type("Relation", (), {"data": {app: {"schema_ready": True}}, "name": "admin", "id": 42})()
+    unit = type("Unit", (), {"app": app, "name": "temporal-k8s/0"})()
+    event = type("Event", (), {"app": app, "relation": relation, "unit": unit})()
+    harness.charm.admin._on_admin_relation_changed(event)
