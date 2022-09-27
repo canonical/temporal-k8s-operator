@@ -6,31 +6,19 @@
 
 """Charm definition and helpers."""
 
-import functools
 import logging
 import os
 
 from jinja2 import Environment, FileSystemLoader
 from ops import framework, lib, main
-from ops.charm import CharmBase, RelationEvent
+from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+
+import relations
+from log import log_event_handler
 
 logger = logging.getLogger(__name__)
 pgsql = lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
-
-
-def log_event_handler(method):
-    """Log when a event handler method is executed."""
-
-    @functools.wraps(method)
-    def decorated(self, event):
-        logger.debug(f"running {method.__name__}")
-        try:
-            return method(self, event)
-        finally:
-            logger.debug(f"completed {method.__name__}")
-
-    return decorated
 
 
 def render(template_name, context):
@@ -63,26 +51,26 @@ class TemporalK8SCharm(CharmBase):
 
         # Handle admin:temporal relation.
         self._state.set_default(schema_ready=False)
-        self.admin = Admin(self)
+        self.admin = relations.Admin(self, lambda: self._state.db_conn)
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 
-    @log_event_handler
+    @log_event_handler(logger)
     def _on_install(self, event):
         """Install temporal."""
         self.unit.status = MaintenanceStatus("installing temporal")
 
-    @log_event_handler
+    @log_event_handler(logger)
     def _on_temporal_pebble_ready(self, event):
         """Define and start temporal using the Pebble API."""
         self._update(event)
 
-    @log_event_handler
+    @log_event_handler(logger)
     def _on_config_changed(self, event):
         """Handle configuration changes."""
         self.unit.status = WaitingStatus("configuring temporal")
         self._update(event)
 
-    @log_event_handler
+    @log_event_handler(logger)
     def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
         """Handle joining a db:pgsql relation."""
         if self.model.unit.is_leader():
@@ -94,10 +82,9 @@ class TemporalK8SCharm(CharmBase):
             # becomes leader and needs to perform that operation.
             event.defer()
 
-    @log_event_handler
+    @log_event_handler(logger)
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
         """Handle changes on the db:pgsql relation."""
-        # import ipdb; ipdb.set_trace()
         if event.database != self.app.name:
             # Leader has not yet set requirements. Wait until next event,
             # or risk connecting to an incorrect database.
@@ -107,19 +94,19 @@ class TemporalK8SCharm(CharmBase):
         self._state.db_conn = None if event.master is None else dict(event.master.items())
         self._update(event)
 
-    @log_event_handler
+    @log_event_handler(logger)
     def _on_schema_changed(self, event):
         """Handle schema becoming ready."""
         self.unit.status = WaitingStatus("handling schema ready change")
         self._state.schema_ready = event.schema_ready
         self._update(event)
 
-    @log_event_handler
+    @log_event_handler(logger)
     def _on_restart_action(self, event):
         """Restart the temporal server, even if there are no changes."""
         container = self.unit.get_container(self.name)
 
-        logging.info("restarting temporal")
+        logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
         container.restart(self.name)
         self.unit.status = ActiveStatus()
@@ -154,7 +141,7 @@ class TemporalK8SCharm(CharmBase):
             event.defer()
             return
 
-        logging.info("configuring temporal")
+        logger.info("configuring temporal")
         options = {
             "log-level": "LOG_LEVEL",
         }
@@ -172,7 +159,7 @@ class TemporalK8SCharm(CharmBase):
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
 
-        logging.info("planning temporal execution")
+        logger.info("planning temporal execution")
         services = self.config["services"].split(",")
         services_args = " ".join(f"--service={service}" for service in services)
         pebble_layer = {
@@ -193,27 +180,6 @@ class TemporalK8SCharm(CharmBase):
         container.replan()
 
         self.unit.status = ActiveStatus()
-
-
-class SchemaChangedEvent(RelationEvent):
-    """The temporal schema has been created and it is ready."""
-
-    pass
-
-
-class _AdminEvents(framework.ObjectEvents):
-
-    schema_changed = framework.EventSource(SchemaChangedEvent)
-
-
-class Admin(framework.Object):
-    """Client for admin:temporal relations."""
-
-    on = _AdminEvents()
-
-    def __init__(self, charm):
-        super().__init__(charm, "admin")
-        # TODO(frankban): implement the client.
 
 
 if __name__ == "__main__":
