@@ -27,6 +27,9 @@ For a local deployment, follow the following steps:
     # Install Microk8s from snap:
     sudo snap install microk8s --classic --channel=1.24
 
+    # Install charmcraft from snap:
+    sudo snap install charmcraft --classic
+
     # Add the 'ubuntu' user to the Microk8s group:
     sudo usermod -a -G microk8s ubuntu
 
@@ -51,9 +54,6 @@ For a local deployment, follow the following steps:
     # Enable DEBUG logging:
     juju model-config logging-config="<root>=INFO;unit=DEBUG"
 
-    # Install charmcraft from snap:
-    sudo snap install charmcraft --classic
-
     # Pack the charm:
     charmcraft pack [--destructive-mode]
 
@@ -62,7 +62,8 @@ For a local deployment, follow the following steps:
 
     # Relate it to postgres:
     juju deploy postgresql-k8s --channel edge --trust
-    juju relate temporal-k8s postgresql-k8s:db
+    juju relate temporal-k8s:db postgresql-k8s:db
+    juju relate temporal-k8s:visibility postgresql-k8s:db
 
     # TODO(frankban): relate to temporal-admin-k8s.
 
@@ -76,15 +77,16 @@ For a local deployment, follow the following steps:
 
 ## Relations
 
-### db:pgsql
+### db:pgsql and visibility:pgsql
 
-The charm supports Temporal server backed by a PostgreSQL database. The
-application therefore needs to be related to *postgresql-k8s*. The usual events
-are handled by the charm (*database_relation_joined*, *master_changed*).
+The charm supports Temporal server backed by PostgreSQL databases. The
+application needs to be related to *postgresql-k8s* twice: once using the *db*
+relation and once using the *visibility* one). The usual events are handled by
+the charm (*database_relation_joined*, *master_changed*).
 
-One caveat is that the server cannot be started until the schema is initialized
-by the *temporal-admin-k8s* application, which provides the Temporal admin tools
-(see below).
+One caveat is that the server cannot be started until the schemas for both
+databases are initialized by the *temporal-admin-k8s* application, which
+provides the Temporal admin tools (see below).
 
 ### admin:temporal
 
@@ -94,7 +96,8 @@ tools are required. These are provided through a relation to the
 - the two applications are related;
 - once *temporal-k8s* receives db connection info from *postgresql-k8s*, this
   info is sent to *temporal-admin-k8s*;
-- the admin app uses the provided db connection info to initialize the database;
+- the admin app uses the provided db connection info (for both *db* and
+  *visibility* connections) to initialize the databases;
 - when done, the admin app sends a message to *temporal-k8s* reporting that the
   schema is ready, and that therefore the server can be started.
 

@@ -43,16 +43,51 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.restart_action, self._on_restart_action)
 
-        # Handle db:pgsql relation.
-        self._state.set_default(db_conn=None)
-        self.db = pgsql.PostgreSQLClient(self, "db")  # This reflects the "db" relation in metadata.yaml.
+        # Handle db:pgsql and visibility:pgsql relations. The "db" and
+        # "visibility" strings in this code block reflect the relation names.
+        self._state.set_default(database_connections={"db": None, "visibility": None})
+        self.db = pgsql.PostgreSQLClient(self, "db")
         self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
         self.framework.observe(self.db.on.master_changed, self._on_master_changed)
+        self.visibility = pgsql.PostgreSQLClient(self, "visibility")
+        self.framework.observe(self.visibility.on.database_relation_joined, self._on_database_relation_joined)
+        self.framework.observe(self.visibility.on.master_changed, self._on_master_changed)
 
         # Handle admin:temporal relation.
         self._state.set_default(schema_ready=False)
-        self.admin = relations.Admin(self, lambda: self._state.db_conn)
+        self.admin = relations.Admin(self)
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
+
+    def database_connections(self):
+        """Return connection info for the related databases.
+
+        The connection info is returned as a dict like the following:
+
+            {
+                "db": {
+                    "dbname": "...",
+                    "host": "...",
+                    "port": "...",
+                    "user": "...",
+                    "password": "...",
+                },  # or None.
+
+                "visibility": {
+                    "dbname": "...",
+                    "host": "...",
+                    "port": "...",
+                    "user": "...",
+                    "password": "...",
+                },  # or None.
+            }
+
+        Raise a ValueError if one of the databases is not connected yet.
+        """
+        database_connections = self._state.database_connections
+        for rel_name, db_conn in database_connections.items():
+            if db_conn is None:
+                raise ValueError(f"{rel_name}:pgsql relation: no database connection available")
+        return database_connections
 
     @log_event_handler(logger)
     def _on_install(self, event):
@@ -72,26 +107,29 @@ class TemporalK8SCharm(CharmBase):
 
     @log_event_handler(logger)
     def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
-        """Handle joining a db:pgsql relation."""
+        """Handle joining a db:pgsql and visibility:pgsql relations."""
+        dbname = f"{self.app.name}_{event.relation.name}"
         if self.model.unit.is_leader():
             # Provide requirements to the PostgreSQL server.
             self.unit.status = WaitingStatus("initializing database connection")
-            event.database = self.app.name  # Request database named as the Juju charm.
-        elif event.database != self.app.name:
+            event.database = dbname
+        elif event.database != dbname:
             # Leader has not yet set requirements. Defer, in case this unit
             # becomes leader and needs to perform that operation.
             event.defer()
 
     @log_event_handler(logger)
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
-        """Handle changes on the db:pgsql relation."""
-        if event.database != self.app.name:
+        """Handle changes on the db:pgsql and visibility:pgsql relations."""
+        dbname = f"{self.app.name}_{event.relation.name}"
+        if event.database != dbname:
             # Leader has not yet set requirements. Wait until next event,
             # or risk connecting to an incorrect database.
             return
 
-        self.unit.status = WaitingStatus("handling database change")
-        self._state.db_conn = None if event.master is None else dict(event.master.items())
+        self.unit.status = WaitingStatus(f"handling {event.relation.name} change")
+        db_conn = None if event.master is None else dict(event.master.items())
+        self._state.database_connections[event.relation.name] = db_conn
         self._update(event)
 
     @log_event_handler(logger)
@@ -123,8 +161,7 @@ class TemporalK8SCharm(CharmBase):
                 raise ValueError(f"error in services config: invalid service {service!r}")
 
         # Validate relations.
-        if self._state.db_conn is None:
-            raise ValueError("db:pgsql relation: no database connection available")
+        self.database_connections()
         if not self._state.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
 
@@ -146,7 +183,8 @@ class TemporalK8SCharm(CharmBase):
             "log-level": "LOG_LEVEL",
         }
         context = {config_key: self.config[key] for key, config_key in options.items()}
-        db_conn = self._state.db_conn
+        db_conn = self._state.database_connections["db"]
+        visibility_conn = self._state.database_connections["visibility"]
         context.update(
             {
                 "DB_NAME": db_conn["dbname"],
@@ -154,6 +192,11 @@ class TemporalK8SCharm(CharmBase):
                 "DB_PORT": db_conn["port"],
                 "DB_USER": db_conn["user"],
                 "DB_PSWD": db_conn["password"],
+                "VISIBILITY_NAME": visibility_conn["dbname"],
+                "VISIBILITY_HOST": visibility_conn["host"],
+                "VISIBILITY_PORT": visibility_conn["port"],
+                "VISIBILITY_USER": visibility_conn["user"],
+                "VISIBILITY_PSWD": visibility_conn["password"],
             }
         )
         config = render("config.jinja", context)

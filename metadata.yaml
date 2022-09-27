@@ -28,6 +28,9 @@ requires:
   db:
     interface: pgsql
     limit: 1
+  visibility:
+    interface: pgsql
+    limit: 1
 
 containers:
   temporal:

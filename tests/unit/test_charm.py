@@ -45,6 +45,27 @@ class TestCharm(TestCase):
             harness.model.unit.status, BlockedStatus("db:pgsql relation: no database connection available")
         )
 
+    def test_blocked_by_visibility(self):
+        """The charm is blocked without a visibility:pgsql relation with a ready master."""
+        harness = self.harness
+
+        # Simulate pebble readiness.
+        container = harness.model.unit.get_container("temporal")
+        harness.charm.on.temporal_pebble_ready.emit(container)
+
+        # Simulate db readiness.
+        event = make_master_changed_event("db")
+        harness.charm._on_master_changed(event)
+
+        # No plans are set yet.
+        got_plan = harness.get_container_pebble_plan("temporal").to_dict()
+        self.assertEqual(got_plan, {})
+
+        # The BlockStatus is set with a message.
+        self.assertEqual(
+            harness.model.unit.status, BlockedStatus("visibility:pgsql relation: no database connection available")
+        )
+
     def test_blocked_by_schema_not_ready(self):
         """The charm is blocked without a admin:temporal relation with a ready schema."""
         harness = self.harness
@@ -53,21 +74,12 @@ class TestCharm(TestCase):
         container = harness.model.unit.get_container("temporal")
         harness.charm.on.temporal_pebble_ready.emit(container)
 
-        # Simulate database readiness.
-        event = type(
-            "Event",
-            (),
-            {
-                "database": "temporal-k8s",
-                "master": {
-                    "dbname": "mydb",
-                    "host": "myhost",
-                    "port": "4247",
-                    "user": "jean-luc",
-                    "password": "inner-light",
-                },
-            },
-        )
+        # Simulate db readiness.
+        event = make_master_changed_event("db")
+        harness.charm._on_master_changed(event)
+
+        # Simulate visibility readiness.
+        event = make_master_changed_event("visibility")
         harness.charm._on_master_changed(event)
 
         # No plans are set yet.
@@ -93,10 +105,15 @@ class TestCharm(TestCase):
                     "override": "replace",
                     "environment": {
                         "DB_HOST": "myhost",
-                        "DB_NAME": "mydb",
+                        "DB_NAME": "temporal-k8s_db",
                         "DB_PORT": "4247",
                         "DB_PSWD": "inner-light",
-                        "DB_USER": "jean-luc",
+                        "DB_USER": "jean-luc@db",
+                        "VISIBILITY_HOST": "myhost",
+                        "VISIBILITY_NAME": "temporal-k8s_visibility",
+                        "VISIBILITY_PORT": "4247",
+                        "VISIBILITY_PSWD": "inner-light",
+                        "VISIBILITY_USER": "jean-luc@visibility",
                         "LOG_LEVEL": "info",
                     },
                 }
@@ -130,10 +147,15 @@ class TestCharm(TestCase):
                     "override": "replace",
                     "environment": {
                         "DB_HOST": "myhost",
-                        "DB_NAME": "mydb",
+                        "DB_NAME": "temporal-k8s_db",
                         "DB_PORT": "4247",
                         "DB_PSWD": "inner-light",
-                        "DB_USER": "jean-luc",
+                        "DB_USER": "jean-luc@db",
+                        "VISIBILITY_HOST": "myhost",
+                        "VISIBILITY_NAME": "temporal-k8s_visibility",
+                        "VISIBILITY_PORT": "4247",
+                        "VISIBILITY_PSWD": "inner-light",
+                        "VISIBILITY_USER": "jean-luc@visibility",
                         "LOG_LEVEL": "debug",
                     },
                 }
@@ -172,21 +194,12 @@ def simulate_lifecycle(harness):
     container = harness.model.unit.get_container("temporal")
     harness.charm.on.temporal_pebble_ready.emit(container)
 
-    # Simulate database readiness.
-    event = type(
-        "Event",
-        (),
-        {
-            "database": "temporal-k8s",
-            "master": {
-                "dbname": "mydb",
-                "host": "myhost",
-                "port": "4247",
-                "user": "jean-luc",
-                "password": "inner-light",
-            },
-        },
-    )
+    # Simulate db readiness.
+    event = make_master_changed_event("db")
+    harness.charm._on_master_changed(event)
+
+    # Simulate visibility readiness.
+    event = make_master_changed_event("visibility")
     harness.charm._on_master_changed(event)
 
     # Simulate schema readiness.
@@ -195,3 +208,25 @@ def simulate_lifecycle(harness):
     unit = type("Unit", (), {"app": app, "name": "temporal-k8s/0"})()
     event = type("Event", (), {"app": app, "relation": relation, "unit": unit})()
     harness.charm.admin._on_admin_relation_changed(event)
+
+
+def make_master_changed_event(rel_name):
+    """Create and return a mock master changed event.
+
+    The event is generated by the relation with the given name.
+    """
+    return type(
+        "Event",
+        (),
+        {
+            "database": f"temporal-k8s_{rel_name}",
+            "master": {
+                "dbname": f"temporal-k8s_{rel_name}",
+                "host": "myhost",
+                "port": "4247",
+                "user": f"jean-luc@{rel_name}",
+                "password": "inner-light",
+            },
+            "relation": type("Relation", (), {"name": rel_name}),
+        },
+    )

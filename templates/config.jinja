@@ -31,20 +31,12 @@ persistence:
                     serverName: {{ SQL_HOST_NAME | default("") }}
         visibility:
             sql:
-                {% set visibility_seeds_default = POSTGRES_SEEDS | default("") %}
-                {% set visibility_seeds = VISIBILITY_POSTGRES_SEEDS | default(visibility_seeds_default) %}
-                {% set visibility_port_default = DB_PORT | default("5432") %}
-                {% set visibility_port = VISIBILITY_DB_PORT | default(visibility_port_default) %}
-                {% set visibility_user_default = POSTGRES_USER | default("") %}
-                {% set visibility_user = VISIBILITY_POSTGRES_USER | default(visibility_user_default) %}
-                {% set visibility_pwd_default = POSTGRES_PWD | default("") %}
-                {% set visibility_pwd = VISIBILITY_POSTGRES_PWD | default(visibility_pwd_default) %}
                 pluginName: "postgres"
-                databaseName: "{{ VISIBILITY_DBNAME | default("temporal_visibility") }}"
-                connectAddr: "{{ visibility_seeds }}:{{ visibility_port }}"
+                databaseName: "{{ VISIBILITY_NAME }}"
+                connectAddr: "{{ VISIBILITY_HOST }}:{{ VISIBILITY_PORT }}"
                 connectProtocol: "tcp"
-                user: "{{ visibility_user }}"
-                password: "{{ visibility_pwd }}"
+                user: "{{ VISIBILITY_USER }}"
+                password: "{{ VISIBILITY_PSWD }}"
                 maxConns: {{ SQL_VIS_MAX_CONNS | default("10") }}
                 maxIdleConns: {{ SQL_VIS_MAX_IDLE_CONNS | default("10") }}
                 maxConnLifetime: {{ SQL_VIS_MAX_CONN_TIME | default("1h") }}
