@@ -3,6 +3,7 @@
 
 """Define the Temporal server relations."""
 
+import json
 import logging
 
 from ops import framework
@@ -84,7 +85,7 @@ class Admin(framework.Object):
         if not self.charm.model.unit.is_leader():
             return
 
-        schema_ready = event.relation.data[event.app].get("schema_ready")
+        schema_ready = event.relation.data[event.app].get("schema_status") == "ready"
         logger.debug(f"admin:temporal: schema {'is ready' if schema_ready else 'is not ready'}")
         self.on.schema_changed.emit(relation=event.relation, app=event.app, unit=event.unit, schema_ready=schema_ready)
 
@@ -103,4 +104,4 @@ class Admin(framework.Object):
             return
         for relation in admin_relations:
             logger.debug(f"admin:temporal: providing database connections on relation {relation.id}")
-            relation.data[charm.app].update({"database_connections": database_connections})
+            relation.data[charm.app].update({"database_connections": json.dumps(database_connections)})
