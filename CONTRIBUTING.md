@@ -107,7 +107,7 @@ initializing the charm:
 def __init__(self, *args):
     super().__init__(*args)
     self._state.set_default(schema_ready=False)
-    self.admin = relations.Admin(self, lambda: self._state.db_conn)
+    self.admin = relations.Admin(self)
     self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 ```
 The `self._on_schema_changed` method can then check whether `event.schema_ready`

@@ -83,10 +83,13 @@ class TemporalK8SCharm(CharmBase):
 
         Raise a ValueError if one of the databases is not connected yet.
         """
-        database_connections = self._state.database_connections
-        for rel_name, db_conn in database_connections.items():
+        # Copy key/value pairs in a new dict as self._state.database_connections
+        # and its values (of type ops.framework.StoredDict) are not serializable.
+        database_connections = {}
+        for rel_name, db_conn in self._state.database_connections.items():
             if db_conn is None:
                 raise ValueError(f"{rel_name}:pgsql relation: no database connection available")
+            database_connections[rel_name] = dict(db_conn)
         return database_connections
 
     @log_event_handler(logger)

@@ -28,7 +28,6 @@ juju relate temporal-k8s:visibility postgresql-k8s:db
 
 ## Contributing
 
-This charm is still in active development. Please see the [Juju SDK
-docs](https://juju.is/docs/sdk) for guidelines on enhancements to this charm
-following best practice guidelines, and `CONTRIBUTING.md` for developer
-guidance.
+This charm is still in active development. Please see the
+[Juju SDK docs](https://juju.is/docs/sdk) for guidelines on enhancements to this charm
+following best practice guidelines, and `CONTRIBUTING.md` for developer guidance.

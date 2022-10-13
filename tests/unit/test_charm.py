@@ -187,6 +187,35 @@ class TestCharm(TestCase):
             harness.model.unit.status, BlockedStatus("error in services config: invalid service 'bad-wolf'")
         )
 
+    def test_database_connections(self):
+        """The method returns database connections as a dict."""
+        harness = self.harness
+        simulate_lifecycle(harness)
+
+        database_connections = harness.charm.database_connections()
+        self.assertEqual(
+            database_connections,
+            {
+                "db": {
+                    "dbname": "temporal-k8s_db",
+                    "host": "myhost",
+                    "password": "inner-light",
+                    "port": "4247",
+                    "user": "jean-luc@db",
+                },
+                "visibility": {
+                    "dbname": "temporal-k8s_visibility",
+                    "host": "myhost",
+                    "password": "inner-light",
+                    "port": "4247",
+                    "user": "jean-luc@visibility",
+                },
+            },
+        )
+        self.assertIsInstance(database_connections, dict)
+        for v in database_connections.values():
+            self.assertIsInstance(v, dict)
+
 
 def simulate_lifecycle(harness):
     """Simulate a healthy charm life-cycle."""
@@ -204,7 +233,7 @@ def simulate_lifecycle(harness):
 
     # Simulate schema readiness.
     app = type("App", (), {"name": "temporal-k8s"})()
-    relation = type("Relation", (), {"data": {app: {"schema_ready": True}}, "name": "admin", "id": 42})()
+    relation = type("Relation", (), {"data": {app: {"schema_status": "ready"}}, "name": "admin", "id": 42})()
     unit = type("Unit", (), {"app": app, "name": "temporal-k8s/0"})()
     event = type("Event", (), {"app": app, "relation": relation, "unit": unit})()
     harness.charm.admin._on_admin_relation_changed(event)
