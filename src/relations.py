@@ -54,6 +54,7 @@ class Admin(framework.Object):
         super().__init__(charm, "admin")
         self.charm = charm
         charm.framework.observe(charm.on.admin_relation_joined, self._on_admin_relation_joined)
+        charm.framework.observe(charm.on.admin_relation_changed, self._on_admin_relation_changed)
         charm.framework.observe(charm.db.on.master_changed, self._on_master_changed)
         charm.framework.observe(charm.visibility.on.master_changed, self._on_master_changed)
 
