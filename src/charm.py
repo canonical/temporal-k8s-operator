@@ -17,6 +17,11 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 import relations
 from log import log_event_handler
 
+# Nginx Ingress Integrator
+from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
+from lightkube.models.core_v1 import ServicePort
+
 logger = logging.getLogger(__name__)
 pgsql = lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
@@ -57,6 +62,14 @@ class TemporalK8SCharm(CharmBase):
         self._state.set_default(schema_ready=False)
         self.admin = relations.Admin(self)
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
+
+        # Handle Ingress
+        self.ingress = IngressRequires(self, {"service-hostname": self.config["external-hostname"] or self.app.name,
+                                      "service-name": self.app.name,
+                                      "service-port": 7233})
+        
+        # Patch the k8s service created by juju, until juju fixes how it handles service ports.
+        self.service_patcher = KubernetesServicePatch(self, [ServicePort(8080, name=f"{self.app.name}-8080")])
 
     def database_connections(self):
         """Return connection info for the related databases.
@@ -106,6 +119,7 @@ class TemporalK8SCharm(CharmBase):
     def _on_config_changed(self, event):
         """Handle configuration changes."""
         self.unit.status = WaitingStatus("configuring temporal")
+        self.ingress.update_config({"service-hostname": self.config["external-hostname"] or self.app.name})
         self._update(event)
 
     @log_event_handler(logger)

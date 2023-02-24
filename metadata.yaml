@@ -31,6 +31,8 @@ requires:
   visibility:
     interface: pgsql
     limit: 1
+  ingress:
+    interface: ingress
 
 containers:
   temporal:
