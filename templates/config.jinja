@@ -63,7 +63,7 @@ persistence:
 global:
     membership:
         maxJoinDuration: 30s
-        broadcastAddress: "{{ TEMPORAL_BROADCAST_ADDRESS | default("") }}"
+        broadcastAddress: "{{ TEMPORAL_BROADCAST_ADDRESS | default("0.0.0.0") }}"
     pprof:
         port: {{ PPROF_PORT | default("0") }}
     tls:
@@ -171,25 +171,25 @@ services:
         rpc:
             grpcPort: {{ temporalGrpcPort }}
             membershipPort: {{ FRONTEND_MEMBERSHIP_PORT | default("6933") }}
-            bindOnIP: {{ BIND_ON_IP | default("127.0.0.1") }}
+            bindOnIP: {{ BIND_ON_IP | default("0.0.0.0") }}
 
     matching:
         rpc:
             grpcPort: {{ MATCHING_GRPC_PORT | default("7235") }}
             membershipPort: {{ MATCHING_MEMBERSHIP_PORT | default("6935") }}
-            bindOnIP: {{ BIND_ON_IP | default("127.0.0.1") }}
+            bindOnIP: {{ BIND_ON_IP | default("0.0.0.0") }}
 
     history:
         rpc:
             grpcPort: {{ HISTORY_GRPC_PORT | default("7234") }}
             membershipPort: {{ HISTORY_MEMBERSHIP_PORT | default("6934") }}
-            bindOnIP: {{ BIND_ON_IP | default("127.0.0.1") }}
+            bindOnIP: {{ BIND_ON_IP | default("0.0.0.0") }}
 
     worker:
         rpc:
             grpcPort: {{ WORKER_GRPC_PORT | default("7239") }}
             membershipPort: {{ WORKER_MEMBERSHIP_PORT | default("6939") }}
-            bindOnIP: {{ BIND_ON_IP | default("127.0.0.1") }}
+            bindOnIP: {{ BIND_ON_IP | default("0.0.0.0") }}
 
 clusterMetadata:
     enableGlobalNamespace: false
@@ -201,7 +201,7 @@ clusterMetadata:
             enabled: true
             initialFailoverVersion: 1
             rpcName: "frontend"
-            rpcAddress: {{ "127.0.0.1:" + temporalGrpcPort }}
+            rpcAddress: {{ "0.0.0.0:" + temporalGrpcPort }}
 
 dcRedirectionPolicy:
     policy: "noop"
