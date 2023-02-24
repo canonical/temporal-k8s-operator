@@ -9,6 +9,8 @@
 import logging
 import os
 
+# Nginx Ingress Integrator
+from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 from jinja2 import Environment, FileSystemLoader
 from ops import framework, lib, main
 from ops.charm import CharmBase
@@ -16,9 +18,6 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 
 import relations
 from log import log_event_handler
-
-# Nginx Ingress Integrator
-from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 
 logger = logging.getLogger(__name__)
 pgsql = lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
@@ -62,9 +61,14 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 
         # Handle Ingress
-        self.ingress = IngressRequires(self, {"service-hostname": self.config["external-hostname"] or self.app.name,
-                                      "service-name": self.app.name,
-                                      "service-port": 7233})
+        self.ingress = IngressRequires(
+            self,
+            {
+                "service-hostname": self.config["external-hostname"] or self.app.name,
+                "service-name": self.app.name,
+                "service-port": 7233,
+            },
+        )
 
     def database_connections(self):
         """Return connection info for the related databases.
