@@ -125,6 +125,17 @@ is *True*.
 
 The charm exposes itself using the Nginx Ingress Integrator charm. Once deployed, find the IP of the ingress controller by running ``` microk8s kubectl get pods -n ingress -o wide ``` and add the IP-to-hostname mapping in your /etc/hosts file. By default, the hostname will be set to ```temporal-k8s```. You can then connect a Temporal client through this hostname on port 80 i.e. ```Client.connect("temporal-k8s:80")```.
 
+You will need to modify the ingress resource to accept gRPC traffic. This can be done as follows:
+
+```bash
+# Edit the ingress resource
+microk8s edit ingress -n <NAMESPACE>
+
+## Add the following line under annotations
+nginx.ingress.kubernetes.io/backend-protocol: GRPC
+
+```
+
 One thing to note is that Temporal Server uses gRPC protocol and requires the server to use HTTP/2. If you try connecting a client without TLS to the operator through the ingress IP address and receive a connection error, you need to modify the nginx ingress controller to listen on port 80 and use HTTP/2. This can be done as follows:
 
 ```bash
