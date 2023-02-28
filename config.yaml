@@ -19,4 +19,3 @@ options:
         application.
     default: ""
     type: string
-    
