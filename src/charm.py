@@ -37,6 +37,7 @@ class TemporalK8SCharm(CharmBase):
 
     @property
     def external_hostname(self):
+        """Return the DNS listing used for external connections."""
         return self.config["external-hostname"] or self.app.name
 
     def __init__(self, *args):
