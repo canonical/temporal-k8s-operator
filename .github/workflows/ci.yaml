@@ -1,6 +1,9 @@
 name: Tests
 on:
   workflow_call:
+    secrets:
+      charmcraft-credentials:
+        required: true
 
 jobs:
   lint:
@@ -23,11 +26,16 @@ jobs:
         run: python -m pip install tox
       - name: Run tests
         run: tox -e unit
-  check-lib:
+  lib-check:
     name: Check libraries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-      - name: Check libraries
-        uses: canonical/charming-actions/check-libraries@2.2.0
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Check libs
+        uses: canonical/charming-actions/check-libraries@2.1.1
+        with:
+          credentials: "${{ secrets.charmcraft-credentials }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
