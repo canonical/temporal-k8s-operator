@@ -15,7 +15,7 @@ options:
     type: string
   external-hostname:
     description: |
-        The external hostname to use. Will default to the name of the deployed
+        The DNS listing used for external connections. Will default to the name of the deployed
         application.
     default: ""
     type: string

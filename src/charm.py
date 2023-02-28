@@ -35,6 +35,10 @@ class TemporalK8SCharm(CharmBase):
 
     _state = framework.StoredState()
 
+    @property
+    def external_hostname(self):
+        return self.config["external-hostname"] or self.app.name
+
     def __init__(self, *args):
         super().__init__(*args)
         self.name = "temporal"
@@ -64,7 +68,7 @@ class TemporalK8SCharm(CharmBase):
         self.ingress = IngressRequires(
             self,
             {
-                "service-hostname": self.config["external-hostname"] or self.app.name,
+                "service-hostname": self.external_hostname,
                 "service-name": self.app.name,
                 "service-port": 7233,
             },
@@ -118,7 +122,7 @@ class TemporalK8SCharm(CharmBase):
     def _on_config_changed(self, event):
         """Handle configuration changes."""
         self.unit.status = WaitingStatus("configuring temporal")
-        self.ingress.update_config({"service-hostname": self.config["external-hostname"] or self.app.name})
+        self.ingress.update_config({"service-hostname": self.external_hostname})
         self._update(event)
 
     @log_event_handler(logger)
