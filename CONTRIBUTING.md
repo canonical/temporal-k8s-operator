@@ -58,14 +58,22 @@ For a local deployment, follow the following steps:
     charmcraft pack [--destructive-mode]
 
     # Deploy the charm:
-    juju deploy ./temporal-k8s_ubuntu-20.04-amd64.charm --resource temporal-server-image=temporalio/server:1.17.4
+    juju deploy ./temporal-k8s_ubuntu-22.04-amd64.charm --resource temporal-server-image=temporalio/server:1.17.4
 
-    # Relate it to postgres:
+    # Relate operator to postgres:
     juju deploy postgresql-k8s --channel edge --trust
     juju relate temporal-k8s:db postgresql-k8s:db
     juju relate temporal-k8s:visibility postgresql-k8s:db
 
-    # TODO(frankban): relate to temporal-admin-k8s.
+    # Relate operator to temporal-admin-k8s:
+    juju relate temporal-k8s:admin temporal-admin-k8s:admin
+
+    # Deploy ingress controller:
+    microk8s enable ingress
+
+    # Relate operator to nginx-ingress-integrator:
+    juju deploy nginx-ingress-integrator
+    juju relate temporal-k8s:ingress nginx-ingress-integrator:ingress
 
     # Check progress:
     juju status --relations
@@ -112,3 +120,36 @@ def __init__(self, *args):
 ```
 The `self._on_schema_changed` method can then check whether `event.schema_ready`
 is *True*.
+
+### ingress
+
+The charm exposes itself using the Nginx Ingress Integrator charm. Once deployed, find the IP of the ingress controller by running ``` microk8s kubectl get pods -n ingress -o wide ``` and add the IP-to-hostname mapping in your /etc/hosts file. By default, the hostname will be set to ```temporal-k8s```. You can then connect a Temporal client through this hostname on port 80 i.e. ```Client.connect("temporal-k8s:80")```.
+
+You will need to modify the ingress resource to accept gRPC traffic. This can be done as follows:
+
+```bash
+# Edit the ingress resource
+microk8s edit ingress -n <NAMESPACE>
+
+## Add the following line under annotations
+nginx.ingress.kubernetes.io/backend-protocol: GRPC
+
+```
+
+One thing to note is that Temporal Server uses gRPC protocol and requires the server to use HTTP/2. If you try connecting a client without TLS to the operator through the ingress IP address and receive a connection error, you need to modify the nginx ingress controller to listen on port 80 and use HTTP/2. This can be done as follows:
+
+```bash
+# SSH into the nginx ingress controller
+kubectl exec -it -n ingress <CONTROLLER_NAME> -- bash
+
+# Modify nginx config file
+nano nginx.conf
+
+# Navigate to ## start server and ensure that the lines relating to port 80 have http2 at the end
+listen 80 default_server reuseport backlog=4096 http2;
+listen [::]:80 default_server reuseport backlog=4096 http2;
+
+# Reload the controller and exit
+nginx -s reload
+exit
+```

@@ -6,3 +6,5 @@ jobs:
   run-tests:
     name: Run Tests
     uses: ./.github/workflows/ci.yaml
+    secrets:
+      charmcraft-credentials: ${{ secrets.CHARMHUB_TOKEN }}

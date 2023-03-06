@@ -1,6 +1,9 @@
 name: Tests
 on:
   workflow_call:
+    secrets:
+      charmcraft-credentials:
+        required: true
 
 jobs:
   lint:
@@ -23,22 +26,16 @@ jobs:
         run: python -m pip install tox
       - name: Run tests
         run: tox -e unit
-  integration-test-microk8s:
-    name: Integration tests (microk8s)
-    runs-on: ubuntu-latest
+  lib-check:
+    name: Check libraries
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-      - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
+        uses: actions/checkout@v2
         with:
-          provider: microk8s
-      - name: Run integration tests
-        # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox -e integration -- --model testing
-      - name: Dump logs
-        uses: canonical/charm-logdump-action@main
-        if: failure()
+          fetch-depth: 0
+      - name: Check libs
+        uses: canonical/charming-actions/check-libraries@2.1.1
         with:
-          app: temporal-k8s
-          model: testing
+          credentials: "${{ secrets.charmcraft-credentials }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"

@@ -13,3 +13,9 @@ options:
     default: info
     description: Temporal server logging level.
     type: string
+  external-hostname:
+    description: |
+        The DNS listing used for external connections. Will default to the name of the deployed
+        application.
+    default: ""
+    type: string
