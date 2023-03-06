@@ -11,12 +11,12 @@ import os
 
 # Nginx Ingress Integrator
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
 from jinja2 import Environment, FileSystemLoader
+from lightkube.models.core_v1 import ServicePort
 from ops import framework, lib, main
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
-from lightkube.models.core_v1 import ServicePort
 
 import relations
 from log import log_event_handler

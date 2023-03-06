@@ -2,15 +2,16 @@
 # Copyright 2022 Canonical Ltd Ltd.
 # See LICENSE file for licensing details.
 
-from multiprocessing import Process
 import logging
+from multiprocessing import Process
 from pathlib import Path
-from temporal_client.run_worker import sync_run_worker
-from temporal_client.run_workflow import run_workflow
+
 import pytest
 import pytest_asyncio
 import yaml
 from pytest_operator.plugin import OpsTest
+from temporal_client.run_worker import sync_run_worker
+from temporal_client.run_workflow import run_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,10 @@ APP_NAME = METADATA["name"]
 METADATA_ADMIN = yaml.safe_load(Path("../temporal-admin-k8s-operator/metadata.yaml").read_text())
 APP_NAME_ADMIN = METADATA_ADMIN["name"]
 
+
 @pytest_asyncio.fixture(name="deploy", scope="module")
 async def deploy(ops_test: OpsTest):
     """The app is up and running."""
-
     charm = await ops_test.build_charm(".")
     resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
 
@@ -49,7 +50,11 @@ async def deploy(ops_test: OpsTest):
 
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
-        action = await ops_test.model.applications[APP_NAME_ADMIN].units[0].run_action("tctl", args="--ns default namespace register -rd 3")
+        action = (
+            await ops_test.model.applications[APP_NAME_ADMIN]
+            .units[0]
+            .run_action("tctl", args="--ns default namespace register -rd 3")
+        )
         result = (await action.wait()).results
 
         logger.info(f"tctl result: {result}")
