@@ -15,6 +15,8 @@ from jinja2 import Environment, FileSystemLoader
 from ops import framework, lib, main
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
+from lightkube.models.core_v1 import ServicePort
 
 import relations
 from log import log_event_handler
@@ -74,6 +76,9 @@ class TemporalK8SCharm(CharmBase):
                 "service-port": 7233,
             },
         )
+
+        # Patch the k8s service created by juju, until juju fixes how it handles service ports.
+        self.service_patcher = KubernetesServicePatch(self, [ServicePort(7233, name=f"{self.app.name}-{7233}")])
 
     def database_connections(self):
         """Return connection info for the related databases.
