@@ -31,10 +31,10 @@ async def deploy(ops_test: OpsTest):
     admin_resources = {"temporal-admin-image": METADATA_ADMIN["containers"]["temporal-admin"]["upstream-source"]}
     admin_charm = await ops_test.build_charm("../temporal-admin-k8s-operator")
 
-    # Deploy temporal server, temporal admin and postgresql charms
+    # Deploy temporal server, temporal admin and postgresql charms.
     await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
     await ops_test.model.deploy(admin_charm, resources=admin_resources, application_name=APP_NAME_ADMIN)
-    await ops_test.model.deploy("postgresql-k8s", channel="edge", trust=True)
+    await ops_test.model.deploy("postgresql-k8s", channel="edge")
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
@@ -44,23 +44,21 @@ async def deploy(ops_test: OpsTest):
             apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
         )
 
+        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
         await ops_test.model.relate(f"{APP_NAME}:db", "postgresql-k8s:db")
         await ops_test.model.relate(f"{APP_NAME}:visibility", "postgresql-k8s:db")
         await ops_test.model.relate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
-
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
+        # Register default namespace from admin charm.
         action = (
             await ops_test.model.applications[APP_NAME_ADMIN]
             .units[0]
             .run_action("tctl", args="--ns default namespace register -rd 3")
         )
         result = (await action.wait()).results
-
         logger.info(f"tctl result: {result}")
-
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
-
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
@@ -71,18 +69,14 @@ class TestDeployment:
 
         status = await ops_test.model.get_status()  # noqa: F821
         address = status["applications"][APP_NAME]["units"][f"{APP_NAME}/0"]["address"]
-
         url = f"{address}:7233"
         logger.info("running workflow on app address: %s", url)
 
-        t = Process(target=sync_run_worker, args=[url])
-        t.start()
-
+        p = Process(target=sync_run_worker, args=[url])
+        p.start()
         logger.info("temporal worker running")
-
         name = "Jean-luc"
         result = await run_workflow(url, name)
-
-        t.terminate()
+        p.terminate()
 
         assert result == f"Hello, {name}!"
