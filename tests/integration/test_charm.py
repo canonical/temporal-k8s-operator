@@ -11,7 +11,7 @@ import pytest_asyncio
 import yaml
 from pytest_operator.plugin import OpsTest
 from temporal_client.run_worker import sync_run_worker
-from temporal_client.run_workflow import run_workflow
+from temporal_client.trigger_workflow import trigger_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +45,19 @@ async def deploy(ops_test: OpsTest):
         )
 
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
-        await ops_test.model.relate(f"{APP_NAME}:db", "postgresql-k8s:db")
-        await ops_test.model.relate(f"{APP_NAME}:visibility", "postgresql-k8s:db")
-        await ops_test.model.relate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
+        await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:db")
+        await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:db")
+        await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
+
+        await ops_test.juju(
+            "exec",
+            "--unit",
+            "temporal-k8s/0",
+            "--",
+            "open-port",
+            "7233",
+        )
 
         # Register default namespace from admin charm.
         action = (
@@ -58,6 +67,8 @@ async def deploy(ops_test: OpsTest):
         )
         result = (await action.wait()).results
         logger.info(f"tctl result: {result}")
+        assert "result" in result and result["result"] == "command succeeded"
+
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
@@ -76,7 +87,7 @@ class TestDeployment:
         p.start()
         logger.info("temporal worker running")
         name = "Jean-luc"
-        result = await run_workflow(url, name)
+        result = await trigger_workflow(url, name)
         p.terminate()
 
         assert result == f"Hello, {name}!"

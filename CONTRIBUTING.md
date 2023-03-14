@@ -65,8 +65,12 @@ For a local deployment, follow the following steps:
     juju relate temporal-k8s:db postgresql-k8s:db
     juju relate temporal-k8s:visibility postgresql-k8s:db
 
-    # Relate operator to temporal-admin-k8s:
+    # Relate operator to temporal-admin-k8s (Navigate to temporal-admin-k8s directory):
+    juju deploy ./temporal-admin-k8s_ubuntu-22.04-amd64.charm --resource temporal-admin-image=temporalio/admin-tools
     juju relate temporal-k8s:admin temporal-admin-k8s:admin
+
+    # Create default namespace:
+    juju run temporal-admin-k8s/0 tctl args="--ns default namespace register -rd 3"
 
     # Deploy ingress controller:
     microk8s enable ingress
@@ -129,7 +133,7 @@ You will need to modify the ingress resource to accept gRPC traffic. This can be
 
 ```bash
 # Edit the ingress resource
-microk8s edit ingress -n <NAMESPACE>
+kubectl edit ingress -n <NAMESPACE>
 
 ## Add the following line under annotations
 nginx.ingress.kubernetes.io/backend-protocol: GRPC
@@ -140,7 +144,7 @@ One thing to note is that Temporal Server uses gRPC protocol and requires the se
 
 ```bash
 # SSH into the nginx ingress controller
-kubectl exec -it -n ingress <CONTROLLER_NAME> -- bash
+kubectl exec -it -n ingress <INGRESS_CONTROLLER_NAME> -- bash
 
 # Modify nginx config file
 nano nginx.conf

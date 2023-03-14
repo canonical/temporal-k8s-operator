@@ -7,7 +7,7 @@ from temporalio.client import Client
 from .workflows import SayHello
 
 
-async def run_workflow(url, name):
+async def trigger_workflow(url, name):
     client = await Client.connect(url)
 
     # Execute a workflow

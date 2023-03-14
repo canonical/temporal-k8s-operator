@@ -3,7 +3,7 @@
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
-from unittest import TestCase, mock
+from unittest import TestCase
 
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
@@ -15,7 +15,6 @@ class TestCharm(TestCase):
 
     maxDiff = None
 
-    @mock.patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
         self.harness = Harness(TemporalK8SCharm)
         self.addCleanup(self.harness.cleanup)
