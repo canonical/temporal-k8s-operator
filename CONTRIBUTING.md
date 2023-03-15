@@ -66,7 +66,7 @@ For a local deployment, follow the following steps:
     juju relate temporal-k8s:visibility postgresql-k8s:db
 
     # Relate operator to temporal-admin-k8s (Navigate to temporal-admin-k8s directory):
-    juju deploy ./temporal-admin-k8s_ubuntu-22.04-amd64.charm --resource temporal-admin-image=temporalio/admin-tools
+    juju deploy temporal-admin-k8s --channel edge
     juju relate temporal-k8s:admin temporal-admin-k8s:admin
 
     # Create default namespace:
@@ -133,7 +133,7 @@ You will need to modify the ingress resource to accept gRPC traffic. This can be
 
 ```bash
 # Edit the ingress resource
-kubectl edit ingress -n <NAMESPACE>
+kubectl edit ingress -n <MODEL_NAME>
 
 ## Add the following line under annotations
 nginx.ingress.kubernetes.io/backend-protocol: GRPC
@@ -149,7 +149,7 @@ kubectl exec -it -n ingress <INGRESS_CONTROLLER_NAME> -- bash
 # Modify nginx config file
 nano nginx.conf
 
-# Navigate to ## start server and ensure that the lines relating to port 80 have http2 at the end
+# Navigate to "## start server" and ensure that the lines relating to port 80 have http2 at the end
 listen 80 default_server reuseport backlog=4096 http2;
 listen [::]:80 default_server reuseport backlog=4096 http2;
 

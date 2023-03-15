@@ -5,7 +5,7 @@
 # https://juju.is/docs/sdk/metadata-reference
 
 name: temporal-k8s
-display-name: Temporal server
+display-name: Temporal Server
 summary: Temporal server operator
 description: |
   Temporal is a developer-first, open source platform that ensures
@@ -16,6 +16,10 @@ tags:
   - task
   - activities
   - development
+issues: https://github.com/canonical/temporal-k8s-operator/issues
+assumes:
+  - juju >= 3.1
+  - k8s-api
 
 peers:
   temporal:
