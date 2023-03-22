@@ -10,8 +10,11 @@ summary: Temporal server operator
 description: |
   Temporal is a developer-first, open source platform that ensures
   the successful execution of services and applications (using workflows).
-maintainer: Commercial Systems <jaas-crew@lists.canonical.com>
+maintainers: 
+  - Commercial Systems <jaas-crew@lists.canonical.com>
+docs: https://discourse.charmhub.io/t/temporal-server-documentation-overview/8948
 tags:
+  - temporal
   - workflow
   - task
   - activities

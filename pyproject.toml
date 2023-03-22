@@ -1,6 +1,11 @@
 # Copyright 2022 Canonical Ltd Ltd.
 # See LICENSE file for licensing details.
 
+[tool.bandit]
+exclude_dirs = ["/venv/"]
+[tool.bandit.assert_used]
+skips = ["*/*test.py", "*/test_*.py", "*tests/*.py"]
+
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
@@ -14,7 +19,7 @@ log_cli_level = "INFO"
 
 # Formatting tools configuration
 [tool.black]
-line-length = 120
+line-length = 100
 target-version = ["py38"]
 
 [tool.isort]
@@ -22,7 +27,7 @@ profile = "black"
 
 # Linting tools configuration
 [tool.flake8]
-max-line-length = 120
+max-line-length = 100
 max-doc-length = 99
 max-complexity = 10
 exclude = [".git", "__pycache__", ".tox", "build", "dist", "*.egg_info", "venv"]
