@@ -2,6 +2,9 @@
 # Copyright 2023 Canonical Ltd Ltd.
 # See LICENSE file for licensing details.
 
+
+"""Temporal client sample workflow."""
+
 from datetime import timedelta
 
 from temporalio import workflow
@@ -13,6 +16,18 @@ with workflow.unsafe.imports_passed_through():
 
 @workflow.defn
 class SayHello:
+    """Temporal workflow class."""
+
     @workflow.run
     async def run(self, name: str) -> str:
-        return await workflow.execute_activity(say_hello, name, schedule_to_close_timeout=timedelta(seconds=5))
+        """Workflow execution method.
+
+        Args:
+            name: used to run the dynamic activity.
+
+        Returns:
+            Workflow execution
+        """
+        return await workflow.execute_activity(
+            say_hello, name, schedule_to_close_timeout=timedelta(seconds=5)
+        )
