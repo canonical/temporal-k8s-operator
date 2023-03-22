@@ -24,14 +24,27 @@ pgsql = lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
 
 def render(template_name, context):
-    """Render the template with the given name using the given context dict."""
+    """Render the template with the given name using the given context dict.
+
+    Args:
+        template_name: File name to read the template from.
+        context: Dict used for rendering.
+
+    Returns:
+        A dict containing the rendered template.
+    """
     charm_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     loader = FileSystemLoader(os.path.join(charm_dir, "templates"))
-    return Environment(loader=loader).get_template(template_name).render(**context)
+    return Environment(loader=loader, autoescape=True).get_template(template_name).render(**context)
 
 
 class TemporalK8SCharm(CharmBase):
-    """Temporal server charm."""
+    """Temporal server charm.
+
+    Attrs:
+        _state: used to store data that is persisted across invocations.
+        external_hostname: DNS listing used for external connections.
+    """
 
     _state = framework.StoredState()
 
@@ -41,6 +54,11 @@ class TemporalK8SCharm(CharmBase):
         return self.config["external-hostname"] or self.app.name
 
     def __init__(self, *args):
+        """Construct.
+
+        Args:
+            args: Ignore.
+        """
         super().__init__(*args)
         self.name = "temporal"
 
@@ -54,10 +72,14 @@ class TemporalK8SCharm(CharmBase):
         # "visibility" strings in this code block reflect the relation names.
         self._state.set_default(database_connections={"db": None, "visibility": None})
         self.db = pgsql.PostgreSQLClient(self, "db")
-        self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
+        self.framework.observe(
+            self.db.on.database_relation_joined, self._on_database_relation_joined
+        )
         self.framework.observe(self.db.on.master_changed, self._on_master_changed)
         self.visibility = pgsql.PostgreSQLClient(self, "visibility")
-        self.framework.observe(self.visibility.on.database_relation_joined, self._on_database_relation_joined)
+        self.framework.observe(
+            self.visibility.on.database_relation_joined, self._on_database_relation_joined
+        )
         self.framework.observe(self.visibility.on.master_changed, self._on_master_changed)
 
         # Handle admin:temporal relation.
@@ -74,6 +96,9 @@ class TemporalK8SCharm(CharmBase):
                 "service-port": 7233,
             },
         )
+
+        # Open server port
+        self.model.unit.open_port(protocol="tcp", port=7233)
 
     def database_connections(self):
         """Return connection info for the related databases.
@@ -98,7 +123,11 @@ class TemporalK8SCharm(CharmBase):
                 },  # or None.
             }
 
-        Raise a ValueError if one of the databases is not connected yet.
+        Raises:
+            ValueError: one of the databases is not connected yet
+
+        Returns:
+            DB connection info dict.
         """
         # Copy key/value pairs in a new dict as self._state.database_connections
         # and its values (of type ops.framework.StoredDict) are not serializable.
@@ -111,24 +140,40 @@ class TemporalK8SCharm(CharmBase):
 
     @log_event_handler(logger)
     def _on_install(self, event):
-        """Install temporal."""
+        """Install temporal.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
         self.unit.status = MaintenanceStatus("installing temporal")
 
     @log_event_handler(logger)
     def _on_temporal_pebble_ready(self, event):
-        """Define and start temporal using the Pebble API."""
+        """Define and start temporal using the Pebble API.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
         self._update(event)
 
     @log_event_handler(logger)
     def _on_config_changed(self, event):
-        """Handle configuration changes."""
+        """Handle configuration changes.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
         self.unit.status = WaitingStatus("configuring temporal")
         self.ingress.update_config({"service-hostname": self.external_hostname})
         self._update(event)
 
     @log_event_handler(logger)
-    def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
-        """Handle joining a db:pgsql and visibility:pgsql relations."""
+    def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):  # type: ignore
+        """Handle joining a db:pgsql and visibility:pgsql relations.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
         dbname = f"{self.app.name}_{event.relation.name}"
         if self.model.unit.is_leader():
             # Provide requirements to the PostgreSQL server.
@@ -140,8 +185,12 @@ class TemporalK8SCharm(CharmBase):
             event.defer()
 
     @log_event_handler(logger)
-    def _on_master_changed(self, event: pgsql.MasterChangedEvent):
-        """Handle changes on the db:pgsql and visibility:pgsql relations."""
+    def _on_master_changed(self, event: pgsql.MasterChangedEvent):  # type: ignore
+        """Handle changes on the db:pgsql and visibility:pgsql relations.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
         dbname = f"{self.app.name}_{event.relation.name}"
         if event.database != dbname:
             # Leader has not yet set requirements. Wait until next event,
@@ -155,14 +204,22 @@ class TemporalK8SCharm(CharmBase):
 
     @log_event_handler(logger)
     def _on_schema_changed(self, event):
-        """Handle schema becoming ready."""
+        """Handle schema becoming ready.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
         self.unit.status = WaitingStatus("handling schema ready change")
         self._state.schema_ready = event.schema_ready
         self._update(event)
 
     @log_event_handler(logger)
     def _on_restart_action(self, event):
-        """Restart the temporal server, even if there are no changes."""
+        """Restart the temporal server, even if there are no changes.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
         container = self.unit.get_container(self.name)
 
         logger.info("restarting temporal")
@@ -173,7 +230,8 @@ class TemporalK8SCharm(CharmBase):
     def _validate(self):
         """Validate that configuration and relations are valid and ready.
 
-        Raise a ValueError in case of problems.
+        Raises:
+            ValueError: in case of invalid configuration.
         """
         # Validate config.
         valid_services = ("frontend", "history", "matching", "worker")
@@ -187,7 +245,11 @@ class TemporalK8SCharm(CharmBase):
             raise ValueError("admin:temporal relation: schema is not ready")
 
     def _update(self, event):
-        """Update the Temporal server configuration and replan its execution."""
+        """Update the Temporal server configuration and replan its execution.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
         try:
             self._validate()
         except ValueError as err:
