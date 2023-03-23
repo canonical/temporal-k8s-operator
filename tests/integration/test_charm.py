@@ -45,9 +45,7 @@ async def deploy(ops_test: OpsTest):
         await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:db")
         await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:db")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600
-        )
+        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
         # Register default namespace from admin charm.
         action = (
@@ -59,9 +57,7 @@ async def deploy(ops_test: OpsTest):
         logger.info(f"tctl result: {result}")
         assert "result" in result and result["result"] == "command succeeded"
 
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600
-        )
+        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 

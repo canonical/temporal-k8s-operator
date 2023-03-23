@@ -127,9 +127,7 @@ class Admin(framework.Object):
 
         schema_ready = event.relation.data[event.app].get("schema_status") == "ready"
         logger.debug(f"admin:temporal: schema {'is ready' if schema_ready else 'is not ready'}")
-        self.on.schema_changed.emit(
-            relation=event.relation, app=event.app, unit=event.unit, schema_ready=schema_ready
-        )
+        self.on.schema_changed.emit(relation=event.relation, app=event.app, unit=event.unit, schema_ready=schema_ready)
 
     def _provide_db_info(self):
         """Provide DB info to the admin charm."""
@@ -146,9 +144,5 @@ class Admin(framework.Object):
             logger.debug("admin:temporal: not providing database connections: admin not ready")
             return
         for relation in admin_relations:
-            logger.debug(
-                f"admin:temporal: providing database connections on relation {relation.id}"
-            )
-            relation.data[charm.app].update(
-                {"database_connections": json.dumps(database_connections)}
-            )
+            logger.debug(f"admin:temporal: providing database connections on relation {relation.id}")
+            relation.data[charm.app].update({"database_connections": json.dumps(database_connections)})

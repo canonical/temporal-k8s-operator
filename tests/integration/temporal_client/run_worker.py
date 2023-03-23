@@ -23,9 +23,7 @@ async def run_worker(url):
     client = await Client.connect(url)
 
     # Run the worker
-    worker = Worker(
-        client, task_queue="my-task-queue", workflows=[SayHello], activities=[say_hello]
-    )
+    worker = Worker(client, task_queue="my-task-queue", workflows=[SayHello], activities=[say_hello])
     await worker.run()
 
 

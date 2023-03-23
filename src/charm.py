@@ -72,14 +72,10 @@ class TemporalK8SCharm(CharmBase):
         # "visibility" strings in this code block reflect the relation names.
         self._state.set_default(database_connections={"db": None, "visibility": None})
         self.db = pgsql.PostgreSQLClient(self, "db")
-        self.framework.observe(
-            self.db.on.database_relation_joined, self._on_database_relation_joined
-        )
+        self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
         self.framework.observe(self.db.on.master_changed, self._on_master_changed)
         self.visibility = pgsql.PostgreSQLClient(self, "visibility")
-        self.framework.observe(
-            self.visibility.on.database_relation_joined, self._on_database_relation_joined
-        )
+        self.framework.observe(self.visibility.on.database_relation_joined, self._on_database_relation_joined)
         self.framework.observe(self.visibility.on.master_changed, self._on_master_changed)
 
         # Handle admin:temporal relation.

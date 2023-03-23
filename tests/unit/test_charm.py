@@ -100,9 +100,7 @@ class TestCharm(TestCase):
         self.assertEqual(got_plan, {})
 
         # The BlockStatus is set with a message.
-        self.assertEqual(
-            harness.model.unit.status, BlockedStatus("admin:temporal relation: schema is not ready")
-        )
+        self.assertEqual(harness.model.unit.status, BlockedStatus("admin:temporal relation: schema is not ready"))
 
     def test_ready(self):
         """The pebble plan is correctly generated when the charm is ready."""
@@ -191,10 +189,10 @@ class TestCharm(TestCase):
         self.harness.update_config({"services": "worker,bad-wolf"})
 
         # The change is not applied to the plan.
-        want_command = "temporal-server --env charm start --service=frontend --service=history --service=matching --service=worker"
-        got_command = harness.get_container_pebble_plan("temporal").to_dict()["services"][
-            "temporal"
-        ]["command"]
+        want_command = (
+            "temporal-server --env charm start --service=frontend --service=history --service=matching --service=worker"
+        )
+        got_command = harness.get_container_pebble_plan("temporal").to_dict()["services"]["temporal"]["command"]
         self.assertEqual(got_command, want_command)
 
         # The BlockStatus is set with a message.
@@ -253,9 +251,7 @@ def simulate_lifecycle(harness):
 
     # Simulate schema readiness.
     app = type("App", (), {"name": "temporal-k8s"})()
-    relation = type(
-        "Relation", (), {"data": {app: {"schema_status": "ready"}}, "name": "admin", "id": 42}
-    )()
+    relation = type("Relation", (), {"data": {app: {"schema_status": "ready"}}, "name": "admin", "id": 42})()
     unit = type("Unit", (), {"app": app, "name": "temporal-k8s/0"})()
     event = type("Event", (), {"app": app, "relation": relation, "unit": unit})()
     harness.charm.admin._on_admin_relation_changed(event)
