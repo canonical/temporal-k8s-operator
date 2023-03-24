@@ -27,7 +27,7 @@ This repo uses CI/CD workflows as outlined by [operator-workflows](https://githu
 - `test_and_publish_charm.yaml`: This runs either by manual dispatch or on every push to the main branch or a special track/** branch. Once a PR is merged with one of these branches, this workflow runs to ensure the tests have passed before building the charm and publishing the new version to the edge channel on Charmhub.
 - `promote_charm.yaml`: This is a manually triggered workflow which publishes the charm currently on the edge channel to the stable channel on Charmhub.
 
-These tests require extensive linting and formatting. Before creating a PR, please run `tox` to ensure proper formatting and linting is performed.
+These tests validate extensive linting and formatting rules. Before creating a PR, please run `tox` to ensure proper formatting and linting is performed.
 
 ### Deploy
 
