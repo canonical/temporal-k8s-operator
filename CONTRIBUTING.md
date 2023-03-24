@@ -167,3 +167,7 @@ listen [::]:80 default_server reuseport backlog=4096 http2;
 nginx -s reload
 exit
 ```
+
+### ui:temporal
+
+In order to access the Temporal Web UI, the Temporal UI charm must be deployed. Once done, the hostname will be set to the application name `temporal-ui-k8s` by default and can be changed through the `external-hostname` config. If the ingress relation has already been created through the previous step, then the web UI can be accessed by visiting `temporal-ui-k8s:443`. As this setup is currently deployed in a development environment and TLS is not yet configured, the Temporal server and UI must be accessed through two different ports due to the [limitation](https://github.com/kubernetes/ingress-nginx/issues/4095) of port 80 not being able to multiplex between HTTP and gRPC traffic. This will be resolved in the near future when TLS certificates are implemented in this charm.

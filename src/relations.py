@@ -8,6 +8,7 @@ import logging
 
 from ops import framework
 from ops.charm import RelationEvent
+from ops.model import ActiveStatus
 
 from log import log_event_handler
 
@@ -146,3 +147,59 @@ class Admin(framework.Object):
         for relation in admin_relations:
             logger.debug(f"admin:temporal: providing database connections on relation {relation.id}")
             relation.data[charm.app].update({"database_connections": json.dumps(database_connections)})
+
+
+class UI(framework.Object):
+    """Client for ui:temporal relations."""
+
+    def __init__(self, charm):
+        """Construct.
+
+        Args:
+            charm: The charm to attach the hooks to.
+        """
+        super().__init__(charm, "ui")
+        self.charm = charm
+        charm.framework.observe(charm.on.ui_relation_joined, self._on_ui_relation_joined)
+        charm.framework.observe(charm.on.ui_relation_changed, self._on_ui_relation_changed)
+
+    @log_event_handler(logger)
+    def _on_ui_relation_joined(self, event):
+        """Handle new ui:temporal relations.
+
+        Attempt to provide server status to the ui unit.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
+        if self.charm.model.unit.is_leader():
+            self._provide_server_status()
+
+    @log_event_handler(logger)
+    def _on_ui_relation_changed(self, event):
+        """Handle changes on the ui:temporal relation.
+
+        Report whether the server is ready by sending a flag to the UI charm.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
+        if not self.charm.model.unit.is_leader():
+            return
+
+        server_status = self.charm.model.unit.status == ActiveStatus()
+        logger.debug(f"ui:temporal: server {'is ready' if server_status else 'is not ready'}")
+        self._provide_server_status()
+
+    def _provide_server_status(self):
+        """Provide server status to the UI charm."""
+        charm = self.charm
+        server_status = charm.model.unit.status == ActiveStatus()
+
+        ui_relations = charm.model.relations["ui"]
+        if not ui_relations:
+            logger.debug("ui:temporal: not providing server status: ui not ready")
+            return
+        for relation in ui_relations:
+            logger.debug(f"ui:temporal: providing server status on relation {relation.id}")
+            relation.data[charm.app].update({"server_status": "ready" if server_status else "blocked"})
