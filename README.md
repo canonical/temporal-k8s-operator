@@ -1,3 +1,6 @@
+[![Charmhub Badge](https://charmhub.io/temporal-k8s/badge.svg)](https://charmhub.io/temporal-k8s)
+[![Release Edge](https://github.com/canonical/temporal-k8s-operator/actions/workflows/test_and_publish_charm.yaml)](https://github.com/canonical/temporal-k8s-operator/actions/workflows/test_and_publish_charm.yaml)
+
 # Temporal K8s Operator
 
 This is the Kubernetes Python Operator for [Temporal](https://temporal.io/).

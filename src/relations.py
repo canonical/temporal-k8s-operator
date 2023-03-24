@@ -21,36 +21,66 @@ class SchemaChangedEvent(RelationEvent):
     """
 
     def __init__(self, handle, relation, app, unit, schema_ready):
+        """Construct.
+
+        Args:
+            handle: Defines a name for an object in the form of a hierarchical path.
+            relation: The relation involved in the event.
+            app: The remote application that has triggered the event.
+            unit: The remote unit that has triggered the event.
+            schema_ready: A flag to indicate whether the DB schema is ready or not.
+        """
         super().__init__(handle, relation, app, unit)
         self.schema_ready = schema_ready
 
     def snapshot(self):
-        """Return the event data that must be stored by the framework.
+        """Snapshot getter.
 
         The framework uses pickle to serialize and restore event data and,
         without this method, the resulting event might not have the schema_ready
         attribute, potentially leading to many WTF moments.
+
+        Returns:
+           The event data that must be stored by the framework.
         """
         return (super().snapshot(), {"schema_ready": self.schema_ready})
 
     def restore(self, snapshot):
-        """Restore from snapshot."""
+        """Restore from snapshot.
+
+        Args:
+            snapshot: snapshot to restore from.
+        """
         sup, mine = snapshot
         super().restore(sup)
         self.schema_ready = mine["schema_ready"]
 
 
 class _AdminEvents(framework.ObjectEvents):
+    """Definition for admin:temporal schema changed events.
+
+    Attrs:
+        schema_changed: abc
+    """
 
     schema_changed = framework.EventSource(SchemaChangedEvent)
 
 
 class Admin(framework.Object):
-    """Client for admin:temporal relations."""
+    """Client for admin:temporal relations.
+
+    Attrs:
+        on: AdminEvents object.
+    """
 
     on = _AdminEvents()
 
     def __init__(self, charm):
+        """Construct.
+
+        Args:
+            charm: The charm to attach the hooks to.
+        """
         super().__init__(charm, "admin")
         self.charm = charm
         charm.framework.observe(charm.on.admin_relation_joined, self._on_admin_relation_joined)
@@ -63,6 +93,9 @@ class Admin(framework.Object):
         """Handle new admin:temporal relations.
 
         Attempt to provide db info if already available to the admin unit.
+
+        Args:
+            event: The event triggered when the relation changed.
         """
         if self.charm.model.unit.is_leader():
             self._provide_db_info()
@@ -73,6 +106,9 @@ class Admin(framework.Object):
 
         If an admin:temporal relation is established, then send database
         connection info to the remote unit.
+
+        Args:
+            event: The event triggered when the relation changed.
         """
         if self.charm.model.unit.is_leader():
             self._provide_db_info()
@@ -82,6 +118,9 @@ class Admin(framework.Object):
         """Handle changes on the admin:temporal relation.
 
         Report whether the schema is ready by emitting a schema_changed event.
+
+        Args:
+            event: The event triggered when the relation changed.
         """
         if not self.charm.model.unit.is_leader():
             return
@@ -91,6 +130,7 @@ class Admin(framework.Object):
         self.on.schema_changed.emit(relation=event.relation, app=event.app, unit=event.unit, schema_ready=schema_ready)
 
     def _provide_db_info(self):
+        """Provide DB info to the admin charm."""
         charm = self.charm
 
         try:
