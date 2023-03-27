@@ -161,7 +161,7 @@ class UI(framework.Object):
         super().__init__(charm, "ui")
         self.charm = charm
         charm.framework.observe(charm.on.ui_relation_joined, self._on_ui_relation_joined)
-        charm.framework.observe(charm.on.ui_relation_changed, self._on_ui_relation_changed)
+        charm.framework.observe(charm.on.ui_relation_changed, self._on_ui_relation_joined)
 
     @log_event_handler(logger)
     def _on_ui_relation_joined(self, event):
@@ -174,22 +174,6 @@ class UI(framework.Object):
         """
         if self.charm.model.unit.is_leader():
             self._provide_server_status()
-
-    @log_event_handler(logger)
-    def _on_ui_relation_changed(self, event):
-        """Handle changes on the ui:temporal relation.
-
-        Report whether the server is ready by sending a flag to the UI charm.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.model.unit.is_leader():
-            return
-
-        server_status = self.charm.model.unit.status == ActiveStatus()
-        logger.debug(f"ui:temporal: server {'is ready' if server_status else 'is not ready'}")
-        self._provide_server_status()
 
     def _provide_server_status(self):
         """Provide server status to the UI charm."""
