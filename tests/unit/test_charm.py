@@ -39,9 +39,27 @@ class TestCharm(TestCase):
         initial_plan = harness.get_container_pebble_plan("temporal").to_dict()
         self.assertEqual(initial_plan, {})
 
+    def test_blocked_by_peer_relation_not_ready(self):
+        """The charm is blocked without a peer relation."""
+        harness = self.harness
+
+        # Simulate pebble readiness.
+        container = harness.model.unit.get_container("temporal")
+        harness.charm.on.temporal_pebble_ready.emit(container)
+
+        # No plans are set yet.
+        got_plan = harness.get_container_pebble_plan("temporal").to_dict()
+        self.assertEqual(got_plan, {})
+
+        # The BlockStatus is set with a message.
+        self.assertEqual(harness.model.unit.status, BlockedStatus("peer relation not ready"))
+
     def test_blocked_by_db(self):
         """The charm is blocked without a db:pgsql relation with a ready master."""
         harness = self.harness
+
+        # Simulate peer relation readiness.
+        self.harness.add_relation("peer", "temporal")
 
         # Simulate pebble readiness.
         container = harness.model.unit.get_container("temporal")
@@ -54,12 +72,15 @@ class TestCharm(TestCase):
         # The BlockStatus is set with a message.
         self.assertEqual(
             harness.model.unit.status,
-            BlockedStatus("db:pgsql relation: no database connection available"),
+            BlockedStatus("database relation not ready"),
         )
 
     def test_blocked_by_visibility(self):
         """The charm is blocked without a visibility:pgsql relation with a ready master."""
         harness = self.harness
+
+        # Simulate peer relation readiness.
+        self.harness.add_relation("peer", "temporal")
 
         # Simulate pebble readiness.
         container = harness.model.unit.get_container("temporal")
@@ -82,6 +103,9 @@ class TestCharm(TestCase):
     def test_blocked_by_schema_not_ready(self):
         """The charm is blocked without a admin:temporal relation with a ready schema."""
         harness = self.harness
+
+        # Simulate peer relation readiness.
+        self.harness.add_relation("peer", "temporal")
 
         # Simulate pebble readiness.
         container = harness.model.unit.get_container("temporal")
@@ -237,6 +261,9 @@ def simulate_lifecycle(harness):
     Args:
         harness: ops.testing.Harness object used to simulate charm lifecycle.
     """
+    # Simulate peer relation readiness.
+    harness.add_relation("peer", "temporal")
+
     # Simulate pebble readiness.
     container = harness.model.unit.get_container("temporal")
     harness.charm.on.temporal_pebble_ready.emit(container)

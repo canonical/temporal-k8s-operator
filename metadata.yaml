@@ -25,7 +25,7 @@ assumes:
   - k8s-api
 
 peers:
-  temporal:
+  peer:
     interface: temporal
 
 requires:

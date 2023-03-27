@@ -18,6 +18,10 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 
 import relations
 from log import log_event_handler
+from state import State
+
+VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
+
 
 logger = logging.getLogger(__name__)
 pgsql = lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
@@ -46,8 +50,6 @@ class TemporalK8SCharm(CharmBase):
         external_hostname: DNS listing used for external connections.
     """
 
-    _state = framework.StoredState()
-
     @property
     def external_hostname(self):
         """Return the DNS listing used for external connections."""
@@ -60,6 +62,7 @@ class TemporalK8SCharm(CharmBase):
             args: Ignore.
         """
         super().__init__(*args)
+        self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal"
 
         # Handle basic charm lifecycle.
@@ -70,7 +73,6 @@ class TemporalK8SCharm(CharmBase):
 
         # Handle db:pgsql and visibility:pgsql relations. The "db" and
         # "visibility" strings in this code block reflect the relation names.
-        self._state.set_default(database_connections={"db": None, "visibility": None})
         self.db = pgsql.PostgreSQLClient(self, "db")
         self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
         self.framework.observe(self.db.on.master_changed, self._on_master_changed)
@@ -79,7 +81,6 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.visibility.on.master_changed, self._on_master_changed)
 
         # Handle admin:temporal relation.
-        self._state.set_default(schema_ready=False)
         self.admin = relations.Admin(self)
         self.ui = relations.UI(self)
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
@@ -129,6 +130,10 @@ class TemporalK8SCharm(CharmBase):
         # Copy key/value pairs in a new dict as self._state.database_connections
         # and its values (of type ops.framework.StoredDict) are not serializable.
         database_connections = {}
+
+        if self._state.database_connections is None:
+            raise ValueError("database relation not ready")
+
         for rel_name, db_conn in self._state.database_connections.items():
             if db_conn is None:
                 raise ValueError(f"{rel_name}:pgsql relation: no database connection available")
@@ -171,6 +176,10 @@ class TemporalK8SCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
+        if not self._state.is_ready():
+            event.defer()
+            return
+
         dbname = f"{self.app.name}_{event.relation.name}"
         if self.model.unit.is_leader():
             # Provide requirements to the PostgreSQL server.
@@ -196,8 +205,22 @@ class TemporalK8SCharm(CharmBase):
 
         self.unit.status = WaitingStatus(f"handling {event.relation.name} change")
         db_conn = None if event.master is None else dict(event.master.items())
-        self._state.database_connections[event.relation.name] = db_conn
+        self._update_db_connections(event.relation.name, db_conn)
         self._update(event)
+
+    def _update_db_connections(self, name, db_conn):
+        """Assign nested value in peer relation.
+
+        Args:
+            name: key to set in database_connections dict.
+            db_conn: value to assign to the named key.
+        """
+        if self._state.database_connections is None:
+            self._state.database_connections = {"db": None, "visibility": None}
+
+        database_connections = self._state.database_connections
+        database_connections[name] = db_conn
+        self._state.database_connections = database_connections
 
     @log_event_handler(logger)
     def _on_schema_changed(self, event):
@@ -206,6 +229,10 @@ class TemporalK8SCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
+        if not self._state.is_ready():
+            event.defer()
+            return
+
         self.unit.status = WaitingStatus("handling schema ready change")
         self._state.schema_ready = event.schema_ready
         self._update(event)
@@ -230,6 +257,12 @@ class TemporalK8SCharm(CharmBase):
         Raises:
             ValueError: in case of invalid configuration.
         """
+        log_level = self.model.config["log-level"].lower()
+        if log_level not in VALID_LOG_LEVELS:
+            raise ValueError(f"config: invalid log level {log_level!r}")
+        if not self._state.is_ready():
+            raise ValueError("peer relation not ready")
+
         # Validate config.
         valid_services = ("frontend", "history", "matching", "worker")
         for service in self.config["services"].split(","):
