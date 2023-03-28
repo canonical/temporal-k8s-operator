@@ -81,6 +81,7 @@ class TemporalK8SCharm(CharmBase):
         # Handle admin:temporal relation.
         self._state.set_default(schema_ready=False)
         self.admin = relations.Admin(self)
+        self.ui = relations.UI(self)
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 
         # Handle Ingress

@@ -40,6 +40,11 @@ requires:
     limit: 1
   ingress:
     interface: ingress
+    limit: 1
+  ui:
+    interface: temporal
+    limit: 1
+    optional: true
 
 containers:
   temporal:

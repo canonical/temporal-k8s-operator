@@ -1,5 +1,5 @@
 [![Charmhub Badge](https://charmhub.io/temporal-k8s/badge.svg)](https://charmhub.io/temporal-k8s)
-[![Release Edge](https://github.com/canonical/temporal-k8s-operator/actions/workflows/test_and_publish_charm.yaml)](https://github.com/canonical/temporal-k8s-operator/actions/workflows/test_and_publish_charm.yaml)
+[![Release Edge](https://github.com/canonical/temporal-k8s-operator/actions/workflows/test_and_publish_charm.yaml/badge.svg)](https://github.com/canonical/temporal-k8s-operator/actions/workflows/test_and_publish_charm.yaml)
 
 # Temporal K8s Operator
 
@@ -55,6 +55,18 @@ juju relate temporal-k8s:ingress nginx-ingress-integrator:ingress
 Once deployed, the hostname will default to the name of the application (```temporal-k8s```), and can be configured using the ```external-hostname``` configuration on the Temporal operator.
 
 Note: The Temporal operator currently does not support TLS functionality. As such, please check [CONTRIBUTING.md](./CONTRIBUTING.md) for instructions on how to enable insecure HTTP/2 connections on port 80 as a temporary workaround.
+
+### Deploying Temporal UI
+To view workflow runs on a web UI, the Temporal operator requires integration with the [Temporal UI operator](https://github.com/canonical/temporal-ui-k8s-operator). Once the Temporal UI operator is deployed, it can be connected to the Temporal operator using the Juju command line as follows:
+
+```bash
+juju deploy temporal-ui-k8s
+juju relate temporal-k8s:ui temporal-ui-k8s:ui
+```
+
+Once deployed, the hostname will default to the name of the application (```temporal-ui-k8s```), and can be configured using the ```external-hostname``` configuration on the Temporal operator.
+
+Note: As mentioned previously, the Temporal operator currently does not support TLS functionality. As such, please check [CONTRIBUTING.md](./CONTRIBUTING.md) for instructions on how to access the web UI as a temporary workaround.
 
 ## Verifying
 To verify that the setup is running correctly, run ```juju status --relations --watch 1s``` and ensure that all pods are active and all required integrations exist.
