@@ -113,9 +113,10 @@ juju attach-resource temporal-k8s promtail-bin=<PATH_TO_PROMTAIL_BINARY>/promtai
 
 
 ```bash
-# Access grafana:
+# Access grafana with username "admin" and password:
 juju run grafana/0 -m cos get-admin-password --wait 1m
 # Grafana is listening on port 3000 of the app ip address.
+# Dashboard can be accessed under "Temporal Server Metrics", make sure to select the juju model which contains your Temporal charm.
 ```
 
 ## Verifying
