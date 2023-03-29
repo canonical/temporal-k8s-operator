@@ -9,8 +9,10 @@
 import logging
 import os
 
-# Nginx Ingress Integrator
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from ops import framework, lib, main
 from ops.charm import CharmBase
@@ -21,10 +23,13 @@ from log import log_event_handler
 from state import State
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
-
+LOG_FILE = "/var/log/temporal"
 
 logger = logging.getLogger(__name__)
 pgsql = lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
+
+SERVER_PORT = 7233
+PROMETHEUS_PORT = 9090
 
 
 def render(template_name, context):
@@ -91,12 +96,26 @@ class TemporalK8SCharm(CharmBase):
             {
                 "service-hostname": self.external_hostname,
                 "service-name": self.app.name,
-                "service-port": 7233,
+                "service-port": SERVER_PORT,
             },
         )
 
         # Open server port
-        self.model.unit.open_port(protocol="tcp", port=7233)
+        self.model.unit.open_port(protocol="tcp", port=SERVER_PORT)
+
+        # Prometheus
+        self._prometheus_scraping = MetricsEndpointProvider(
+            self,
+            relation_name="metrics-endpoint",
+            jobs=[{"static_configs": [{"targets": [f"*:{PROMETHEUS_PORT}"]}]}],
+            refresh_event=self.on.config_changed,
+        )
+
+        # Loki
+        self.log_proxy = LogProxyConsumer(self, log_files=[LOG_FILE], relation_name="log-proxy")
+
+        # Grafana
+        self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
     def database_connections(self):
         """Return connection info for the related databases.

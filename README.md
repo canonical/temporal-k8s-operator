@@ -68,6 +68,56 @@ Once deployed, the hostname will default to the name of the application (```temp
 
 Note: As mentioned previously, the Temporal operator currently does not support TLS functionality. As such, please check [CONTRIBUTING.md](./CONTRIBUTING.md) for instructions on how to access the web UI as a temporary workaround.
 
+### Observability
+
+The Temporal server charm can be related to the
+[Canonical Observability Stack](https://charmhub.io/topics/canonical-observability-stack)
+in order to collect logs and telemetry.
+To deploy cos-lite and expose its endpoints as offers, follow these steps:
+
+```bash
+# Deploy the cos-lite bundle:
+juju add-model cos
+juju deploy cos-lite --trust
+```
+
+```bash
+# Expose the cos integration endpoints:
+juju offer prometheus:metrics-endpoint
+juju offer loki:logging
+juju offer grafana:grafana-dashboard
+
+# Relate Temporal to the cos-lite apps:
+juju relate temporal-k8s admin/cos.grafana
+juju relate temporal-k8s admin/cos.loki
+juju relate temporal-k8s admin/cos.prometheus
+```
+
+After relating the Temporal server charm to cos-lite services,
+we need, for the time being, to attach the promtail-bin resource so that
+Loki works without trying to download promtail from the web:
+
+```bash
+# Download promtail binary
+curl -O -L "https://github.com/grafana/loki/releases/download/v2.7.5/promtail-linux-amd64.zip"
+
+# Extract the binary
+unzip "promtail-linux-amd64.zip"
+
+# Make sure it is executable
+chmod a+x "promtail-linux-amd64"
+
+juju switch <TEMPORAL_JUJU_MODEL>
+juju attach-resource temporal-k8s promtail-bin=<PATH_TO_PROMTAIL_BINARY>/promtail-linux-amd64
+```
+
+
+```bash
+# Access grafana:
+juju run grafana/0 -m cos get-admin-password --wait 1m
+# Grafana is listening on port 3000 of the app ip address.
+```
+
 ## Verifying
 To verify that the setup is running correctly, run ```juju status --relations --watch 1s``` and ensure that all pods are active and all required integrations exist.
 
