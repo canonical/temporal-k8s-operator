@@ -14,7 +14,7 @@ from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
-from ops import framework, lib, main
+from ops import lib, main
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
