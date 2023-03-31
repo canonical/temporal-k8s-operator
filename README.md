@@ -62,6 +62,7 @@ To view workflow runs on a web UI, the Temporal operator requires integration wi
 ```bash
 juju deploy temporal-ui-k8s
 juju relate temporal-k8s:ui temporal-ui-k8s:ui
+juju relate temporal-ui-k8s:ingress nginx-ingress-integrator:ingress
 ```
 
 Once deployed, the hostname will default to the name of the application (```temporal-ui-k8s```), and can be configured using the ```external-hostname``` configuration on the Temporal operator.
