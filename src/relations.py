@@ -98,6 +98,10 @@ class Admin(framework.Object):
         Args:
             event: The event triggered when the relation changed.
         """
+        if not self.charm._state.is_ready():
+            event.defer()
+            return
+
         if self.charm.model.unit.is_leader():
             self._provide_db_info()
 
@@ -111,6 +115,10 @@ class Admin(framework.Object):
         Args:
             event: The event triggered when the relation changed.
         """
+        if not self.charm._state.is_ready():
+            event.defer()
+            return
+
         if self.charm.model.unit.is_leader():
             self._provide_db_info()
 

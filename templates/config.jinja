@@ -145,12 +145,13 @@ global:
         statsd:
             hostPort: {{ STATSD_ENDPOINT }}
             prefix: "temporal"
-    {%- elif PROMETHEUS_ENDPOINT %}
+    {%- endif %}
     metrics:
+        tags:
+            type: frontend
         prometheus:
             timerType: {{ PROMETHEUS_TIMER_TYPE | default("histogram") }}
-            listenAddress: "{{ PROMETHEUS_ENDPOINT }}"
-    {%- endif %}
+            listenAddress: {{ PROMETHEUS_ENDPOINT | default("0.0.0.0:9090") }}
     authorization:
         jwtKeyProvider:
             keySourceURIs:

@@ -25,7 +25,7 @@ assumes:
   - k8s-api
 
 peers:
-  temporal:
+  peer:
     interface: temporal
 
 requires:
@@ -43,8 +43,18 @@ requires:
     limit: 1
   ui:
     interface: temporal
-    limit: 1
     optional: true
+    limit: 1
+  log-proxy:
+    interface: loki_push_api
+    optional: true
+    limit: 1
+
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+  grafana-dashboard:
+    interface: grafana_dashboard  
 
 containers:
   temporal:
@@ -56,3 +66,7 @@ resources:
   temporal-server-image:
     type: oci-image
     description: OCI image for Temporal
+  promtail-bin:
+    type: file
+    description: Promtail binary for logging
+    filename: promtail-linux
