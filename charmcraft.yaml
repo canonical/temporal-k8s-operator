@@ -14,6 +14,16 @@ bases:
       channel: "22.04"
 parts:
   charm:
+    build-packages:
+      # The following are needed for tls-certificates-interface
+      - build-essential
+      - python3-dev
+      - pkg-config
+      - libffi-dev
+      - libssl-dev
+      - rustc
+      - cargo
     # Fixes jinja install during pack.
     # See <https://github.com/canonical/charmcraft/issues/551>.
     charm-python-packages: [setuptools, pip]
+    charm-binary-python-packages: ["cryptography==39.0.2"]
