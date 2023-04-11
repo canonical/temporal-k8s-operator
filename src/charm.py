@@ -21,7 +21,6 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 import relations
 from log import log_event_handler
 from state import State
-from tls import TemporalTLS
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 LOG_FILE = "/var/log/temporal"
@@ -110,9 +109,6 @@ class TemporalK8SCharm(CharmBase):
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
-
-        # TLS
-        self.tls = TemporalTLS(self)
 
     def _require_nginx_route(self):
         """Require nginx-route relation based on current configuration."""
@@ -335,19 +331,8 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_PORT": visibility_conn["port"],
                 "VISIBILITY_USER": visibility_conn["user"],
                 "VISIBILITY_PSWD": visibility_conn["password"],
-                # "DYNAMIC_CONFIG_FILE_PATH": "/etc/temporal/config/dynamicconfig/development.yaml"
             }
         )
-
-        # if container.exists("/etc/temporal/tls/server.crt"):
-        #     context.update({"TEMPORAL_TLS_FRONTEND_CERT": "/etc/temporal/tls/server.crt"})
-        # else:
-        #     context.update({"TEMPORAL_TLS_FRONTEND_CERT": ""})
-
-        # if container.exists("/etc/temporal/tls/server.key"):
-        #     context.update({"TEMPORAL_TLS_FRONTEND_KEY": "/etc/temporal/tls/server.key"})
-        # else:
-        #     context.update({"TEMPORAL_TLS_FRONTEND_KEY": ""})
 
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
