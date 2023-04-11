@@ -49,10 +49,6 @@ requires:
     interface: loki_push_api
     optional: true
     limit: 1
-  certificates:
-    interface: tls-certificates
-    limit: 1
-    optional: true
 
 provides:
   metrics-endpoint:
@@ -70,7 +66,3 @@ resources:
   temporal-server-image:
     type: oci-image
     description: OCI image for Temporal
-  # promtail-bin:
-  #   type: file
-  #   description: Promtail binary for logging
-  #   filename: promtail-linux
