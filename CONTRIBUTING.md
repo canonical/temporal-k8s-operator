@@ -70,24 +70,46 @@ For a local deployment, follow the following steps:
     # Deploy the charm:
     juju deploy ./temporal-k8s_ubuntu-22.04-amd64.charm --resource temporal-server-image=temporalio/server:1.17.4
 
+    # Deploy admin charm (Only if modifying admin charm, otherwise deploy as shown below):
+    juju deploy ./temporal-admin-k8s_ubuntu-22.04-amd64.charm --resource temporal-admin-image=temporalio/admin-tools:1.18.0
+
+    # Deploy ui charm (Only if modifying UI charm, otherwise deploy as shown below):
+    juju deploy ./temporal-ui-k8s_ubuntu-22.04-amd64.charm --resource temporal-ui-image=temporalio/ui:2.10.3
+
     # Relate operator to postgres:
     juju deploy postgresql-k8s --channel edge --trust
     juju relate temporal-k8s:db postgresql-k8s:db
     juju relate temporal-k8s:visibility postgresql-k8s:db
 
-    # Relate operator to temporal-admin-k8s (Navigate to temporal-admin-k8s directory):
+    # Relate operator to temporal-admin-k8s:
     juju deploy temporal-admin-k8s --channel edge
     juju relate temporal-k8s:admin temporal-admin-k8s:admin
 
     # Create default namespace:
     juju run temporal-admin-k8s/0 tctl args="--ns default namespace register -rd 3"
 
+    # Generate private key
+    openssl genrsa -out server.key 2048
+
+    # Generate a certificate signing request
+    openssl req -new -key server.key -out server.csr -subj "/CN=temporal-k8s"
+
+    # Create self-signed certificate
+    openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt -extfile <(printf "subjectAltName=DNS:temporal-k8s")
+
+    # Create a k8s secret
+    kubectl create secret tls temporal-tls --cert=server.crt --key=server.key
+    
     # Deploy ingress controller:
-    microk8s enable ingress
+    microk8s enable ingress:default-ssl-certificate=temporal/temporal-tls
 
     # Relate operator to nginx-ingress-integrator:
     juju deploy nginx-ingress-integrator
-    juju relate temporal-k8s:ingress nginx-ingress-integrator:ingress
+    juju relate temporal-k8s nginx-ingress-integrator
+    
+    # Relate operator to temporal-ui-k8s:
+    juju deploy temporal-ui-k8s --channel edge
+    juju relate temporal-k8s:ui temporal-ui-k8s:ui
 
     # Check progress:
     juju status --relations
@@ -137,7 +159,7 @@ is *True*.
 
 ### ingress
 
-The charm exposes itself using the Nginx Ingress Integrator charm. Once deployed, find the IP of the ingress controller by running ``` microk8s kubectl get pods -n ingress -o wide ``` and add the IP-to-hostname mapping in your /etc/hosts file. By default, the hostname will be set to ```temporal-k8s```. You can then connect a Temporal client through this hostname on port 80 i.e. ```Client.connect("temporal-k8s:80")```.
+The charm exposes itself using the Nginx Ingress Integrator charm. Once deployed, find the IP of the ingress controller by running ``` microk8s kubectl get pods -n ingress -o wide ``` and add the IP-to-hostname mapping in your /etc/hosts file. By default, the hostname will be set to ```temporal-k8s```. You can then connect a Temporal client through this hostname i.e. ```Client.connect("temporal-k8s")```.
 
 You will need to modify the ingress resource to accept gRPC traffic. This can be done as follows:
 
@@ -150,24 +172,6 @@ nginx.ingress.kubernetes.io/backend-protocol: GRPC
 
 ```
 
-One thing to note is that Temporal Server uses gRPC protocol and requires the server to use HTTP/2. If you try connecting a client without TLS to the operator through the ingress IP address and receive a connection error, you need to modify the nginx ingress controller to listen on port 80 and use HTTP/2. This can be done as follows:
-
-```bash
-# SSH into the nginx ingress controller
-kubectl exec -it -n ingress <INGRESS_CONTROLLER_NAME> -- bash
-
-# Modify nginx config file
-nano nginx.conf
-
-# Navigate to "## start server" and ensure that the lines relating to port 80 have http2 at the end
-listen 80 default_server reuseport backlog=4096 http2;
-listen [::]:80 default_server reuseport backlog=4096 http2;
-
-# Reload the controller and exit
-nginx -s reload
-exit
-```
-
 ### ui:temporal
 
-In order to access the Temporal Web UI, the Temporal UI charm must be deployed. Once done, the hostname will be set to the application name `temporal-ui-k8s` by default and can be changed through the `external-hostname` config. If the ingress relation has already been created through the previous step, then the web UI can be accessed by visiting `temporal-ui-k8s:443`. As this setup is currently deployed in a development environment and TLS is not yet configured, the Temporal server and UI must be accessed through two different ports due to the [limitation](https://github.com/kubernetes/ingress-nginx/issues/4095) of port 80 not being able to multiplex between HTTP and gRPC traffic. This will be resolved in the near future when TLS certificates are implemented in this charm.
+In order to access the Temporal Web UI, the Temporal UI charm must be deployed. Once done, the hostname will be set to the application name `temporal-ui-k8s` by default and can be changed through the `external-hostname` config. If the ingress relation has already been created through the previous step, then the web UI can be accessed by visiting `https://temporal-ui-k8s`.
