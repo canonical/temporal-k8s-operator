@@ -11,7 +11,7 @@ import os
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
-from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from ops import lib, main
@@ -91,14 +91,7 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 
         # Handle Ingress
-        self.ingress = IngressRequires(
-            self,
-            {
-                "service-hostname": self.external_hostname,
-                "service-name": self.app.name,
-                "service-port": SERVER_PORT,
-            },
-        )
+        self._require_nginx_route()
 
         # Open server port
         self.model.unit.open_port(protocol="tcp", port=SERVER_PORT)
@@ -112,10 +105,20 @@ class TemporalK8SCharm(CharmBase):
         )
 
         # Loki
-        self.log_proxy = LogProxyConsumer(self, log_files=[LOG_FILE], relation_name="log-proxy")
+        self._log_proxy = LogProxyConsumer(self, log_files=[LOG_FILE], relation_name="log-proxy")
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
+
+    def _require_nginx_route(self):
+        """Require nginx-route relation based on current configuration."""
+        require_nginx_route(
+            charm=self,
+            service_hostname=self.external_hostname,
+            service_name=self.app.name,
+            service_port=SERVER_PORT,
+            tls_secret_name=self.config["tls-secret-name"],
+        )
 
     def database_connections(self):
         """Return connection info for the related databases.
@@ -185,7 +188,6 @@ class TemporalK8SCharm(CharmBase):
             event: The event triggered when the relation changed.
         """
         self.unit.status = WaitingStatus("configuring temporal")
-        self.ingress.update_config({"service-hostname": self.external_hostname})
         self._update(event)
 
     @log_event_handler(logger)
@@ -331,6 +333,7 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_PSWD": visibility_conn["password"],
             }
         )
+
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
 

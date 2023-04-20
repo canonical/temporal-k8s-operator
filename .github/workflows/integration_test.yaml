@@ -15,6 +15,7 @@ jobs:
         with:
           juju-channel: 3.1/stable
           provider: microk8s
+          microk8s-addons: "ingress storage dns rbac registry"
           channel: 1.25-strict/stable
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action

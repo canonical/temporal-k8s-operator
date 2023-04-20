@@ -17,6 +17,8 @@ from ops.testing import Harness
 from charm import TemporalK8SCharm
 from state import State
 
+SERVER_PORT = "7233"
+
 
 class TestCharm(TestCase):
     """Unit tests.
@@ -33,6 +35,7 @@ class TestCharm(TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.set_can_connect("temporal", True)
         self.harness.set_leader(True)
+        self.harness.set_model_name("temporal-model")
         self.harness.begin()
 
     def test_initial_plan(self):
@@ -255,6 +258,47 @@ class TestCharm(TestCase):
         self.assertIsInstance(database_connections, dict)
         for v in database_connections.values():
             self.assertIsInstance(v, dict)
+
+    def test_ingress(self):
+        """The charm relates correctly to the nginx ingress charm and can be configured."""
+        harness = self.harness
+
+        simulate_lifecycle(harness)
+
+        nginx_route_relation_id = harness.add_relation("nginx-route", "ingress")
+        harness.charm._require_nginx_route()
+
+        assert harness.get_relation_data(nginx_route_relation_id, harness.charm.app) == {
+            "service-namespace": harness.charm.model.name,
+            "service-hostname": harness.charm.app.name,
+            "service-name": harness.charm.app.name,
+            "service-port": SERVER_PORT,
+            "tls-secret-name": "temporal-tls",
+        }
+
+        new_hostname = "new-temporal-ui-k8s"
+        harness.update_config({"external-hostname": new_hostname})
+        harness.charm._require_nginx_route()
+
+        assert harness.get_relation_data(nginx_route_relation_id, harness.charm.app) == {
+            "service-namespace": harness.charm.model.name,
+            "service-hostname": new_hostname,
+            "service-name": harness.charm.app.name,
+            "service-port": SERVER_PORT,
+            "tls-secret-name": "temporal-tls",
+        }
+
+        new_tls = "new-tls"
+        harness.update_config({"tls-secret-name": new_tls})
+        harness.charm._require_nginx_route()
+
+        assert harness.get_relation_data(nginx_route_relation_id, harness.charm.app) == {
+            "service-namespace": harness.charm.model.name,
+            "service-hostname": new_hostname,
+            "service-name": harness.charm.app.name,
+            "service-port": SERVER_PORT,
+            "tls-secret-name": new_tls,
+        }
 
 
 def simulate_lifecycle(harness):
