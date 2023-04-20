@@ -66,3 +66,7 @@ resources:
   temporal-server-image:
     type: oci-image
     description: OCI image for Temporal
+  promtail-bin:
+    type: file
+    description: Promtail binary for logging
+    filename: promtail-linux
