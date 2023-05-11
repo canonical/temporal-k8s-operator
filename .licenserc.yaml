@@ -18,6 +18,7 @@ header:
     - '**/*.rule'
     - '**/*.tmpl'
     - '**/*.txt'
+    - '**/*.jinja'
     - '.codespellignore'
     - '.dockerignore'
     - '.flake8'
