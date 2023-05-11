@@ -29,8 +29,8 @@ other using the Juju command line as follows:
 ```bash
 juju deploy temporal-k8s
 juju deploy postgresql-k8s --channel edge --trust
-juju relate temporal-k8s:db postgresql-k8s:db
-juju relate temporal-k8s:visibility postgresql-k8s:db
+juju relate temporal-k8s:db postgresql-k8s:database
+juju relate temporal-k8s:visibility postgresql-k8s:database
 ```
 
 ### Deploying Temporal Admin

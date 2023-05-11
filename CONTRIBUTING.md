@@ -21,18 +21,29 @@ tox                  # runs 'lint' and 'unit' environments
 
 ### Committing
 
-This repo uses CI/CD workflows as outlined by [operator-workflows](https://github.com/canonical/operator-workflows). The four workflows are as follows:
-- `test.yaml`: This is a series of tests including linting, unit tests and library checks which run on every pull request.
-- `integration_test.yaml`: This runs the suite of integration tests included with the charm and runs on every pull request.
-- `test_and_publish_charm.yaml`: This runs either by manual dispatch or on every push to the main branch or a special track/** branch. Once a PR is merged with one of these branches, this workflow runs to ensure the tests have passed before building the charm and publishing the new version to the edge channel on Charmhub.
-- `promote_charm.yaml`: This is a manually triggered workflow which publishes the charm currently on the edge channel to the stable channel on Charmhub.
+This repo uses CI/CD workflows as outlined by
+[operator-workflows](https://github.com/canonical/operator-workflows). The four
+workflows are as follows:
 
-These tests validate extensive linting and formatting rules. Before creating a PR, please run `tox` to ensure proper formatting and linting is performed.
+- `test.yaml`: This is a series of tests including linting, unit tests and
+  library checks which run on every pull request.
+- `integration_test.yaml`: This runs the suite of integration tests included
+  with the charm and runs on every pull request.
+- `test_and_publish_charm.yaml`: This runs either by manual dispatch or on every
+  push to the main branch or a special track/\*\* branch. Once a PR is merged
+  with one of these branches, this workflow runs to ensure the tests have passed
+  before building the charm and publishing the new version to the edge channel
+  on Charmhub.
+- `promote_charm.yaml`: This is a manually triggered workflow which publishes
+  the charm currently on the edge channel to the stable channel on Charmhub.
+
+These tests validate extensive linting and formatting rules. Before creating a
+PR, please run `tox` to ensure proper formatting and linting is performed.
 
 ### Deploy
 
-This charm is used to deploy Temporal server in a k8s cluster.
-For a local deployment, follow the following steps:
+This charm is used to deploy Temporal server in a k8s cluster. For a local
+deployment, follow the following steps:
 
     # Install Microk8s from snap:
     sudo snap install microk8s --classic --channel=1.24
@@ -78,8 +89,8 @@ For a local deployment, follow the following steps:
 
     # Relate operator to postgres:
     juju deploy postgresql-k8s --channel edge --trust
-    juju relate temporal-k8s:db postgresql-k8s:db
-    juju relate temporal-k8s:visibility postgresql-k8s:db
+    juju relate temporal-k8s:db postgresql-k8s:database
+    juju relate temporal-k8s:visibility postgresql-k8s:database
 
     # Relate operator to temporal-admin-k8s:
     juju deploy temporal-admin-k8s --channel edge
@@ -99,14 +110,14 @@ For a local deployment, follow the following steps:
 
     # Create a k8s secret
     kubectl create secret tls temporal-tls --cert=server.crt --key=server.key
-    
+
     # Deploy ingress controller:
     microk8s enable ingress:default-ssl-certificate=temporal/temporal-tls
 
     # Relate operator to nginx-ingress-integrator:
     juju deploy nginx-ingress-integrator
     juju relate temporal-k8s nginx-ingress-integrator
-    
+
     # Relate operator to temporal-ui-k8s:
     juju deploy temporal-ui-k8s --channel edge
     juju relate temporal-k8s:ui temporal-ui-k8s:ui
@@ -124,29 +135,31 @@ For a local deployment, follow the following steps:
 ### db:pgsql and visibility:pgsql
 
 The charm supports Temporal server backed by PostgreSQL databases. The
-application needs to be related to *postgresql-k8s* twice: once using the *db*
-relation and once using the *visibility* one). The usual events are handled by
-the charm (*database_relation_joined*, *master_changed*).
+application needs to be related to _postgresql-k8s_ twice: once using the _db_
+relation and once using the _visibility_ one). The usual events are handled by
+the charm (_database_created_, _endpoints_changed_).
 
 One caveat is that the server cannot be started until the schemas for both
-databases are initialized by the *temporal-admin-k8s* application, which
+databases are initialized by the _temporal-admin-k8s_ application, which
 provides the Temporal admin tools (see below).
 
 ### admin:temporal
 
 In order to be able to initialize the related PostgreSQL database schema, admin
 tools are required. These are provided through a relation to the
-*temporal-admin-k8s* application. The relation works like this:
+_temporal-admin-k8s_ application. The relation works like this:
+
 - the two applications are related;
-- once *temporal-k8s* receives db connection info from *postgresql-k8s*, this
-  info is sent to *temporal-admin-k8s*;
-- the admin app uses the provided db connection info (for both *db* and
-  *visibility* connections) to initialize the databases;
-- when done, the admin app sends a message to *temporal-k8s* reporting that the
+- once _temporal-k8s_ receives db connection info from _postgresql-k8s_, this
+  info is sent to _temporal-admin-k8s_;
+- the admin app uses the provided db connection info (for both _db_ and
+  _visibility_ connections) to initialize the databases;
+- when done, the admin app sends a message to _temporal-k8s_ reporting that the
   schema is ready, and that therefore the server can be started.
 
-On the **API**, the flow described above can be handled in a very simple way while
-initializing the charm:
+On the **API**, the flow described above can be handled in a very simple way
+while initializing the charm:
+
 ```Python
 def __init__(self, *args):
     super().__init__(*args)
@@ -154,14 +167,21 @@ def __init__(self, *args):
     self.admin = relations.Admin(self)
     self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 ```
+
 The `self._on_schema_changed` method can then check whether `event.schema_ready`
-is *True*.
+is _True_.
 
 ### ingress
 
-The charm exposes itself using the Nginx Ingress Integrator charm. Once deployed, find the IP of the ingress controller by running ``` microk8s kubectl get pods -n ingress -o wide ``` and add the IP-to-hostname mapping in your /etc/hosts file. By default, the hostname will be set to ```temporal-k8s```. You can then connect a Temporal client through this hostname i.e. ```Client.connect("temporal-k8s")```.
+The charm exposes itself using the Nginx Ingress Integrator charm. Once
+deployed, find the IP of the ingress controller by running
+`microk8s kubectl get pods -n ingress -o wide` and add the IP-to-hostname
+mapping in your /etc/hosts file. By default, the hostname will be set to
+`temporal-k8s`. You can then connect a Temporal client through this hostname
+i.e. `Client.connect("temporal-k8s")`.
 
-You will need to modify the ingress resource to accept gRPC traffic. This can be done as follows:
+You will need to modify the ingress resource to accept gRPC traffic. This can be
+done as follows:
 
 ```bash
 # Edit the ingress resource
@@ -174,4 +194,8 @@ nginx.ingress.kubernetes.io/backend-protocol: GRPC
 
 ### ui:temporal
 
-In order to access the Temporal Web UI, the Temporal UI charm must be deployed. Once done, the hostname will be set to the application name `temporal-ui-k8s` by default and can be changed through the `external-hostname` config. If the ingress relation has already been created through the previous step, then the web UI can be accessed by visiting `https://temporal-ui-k8s`.
+In order to access the Temporal Web UI, the Temporal UI charm must be deployed.
+Once done, the hostname will be set to the application name `temporal-ui-k8s` by
+default and can be changed through the `external-hostname` config. If the
+ingress relation has already been created through the previous step, then the
+web UI can be accessed by visiting `https://temporal-ui-k8s`.

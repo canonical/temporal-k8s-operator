@@ -86,8 +86,10 @@ class Admin(framework.Object):
         self.charm = charm
         charm.framework.observe(charm.on.admin_relation_joined, self._on_admin_relation_joined)
         charm.framework.observe(charm.on.admin_relation_changed, self._on_admin_relation_changed)
-        charm.framework.observe(charm.db.on.master_changed, self._on_master_changed)
-        charm.framework.observe(charm.visibility.on.master_changed, self._on_master_changed)
+        charm.framework.observe(charm.db.on.database_created, self._on_database_changed)
+        charm.framework.observe(charm.visibility.on.database_created, self._on_database_changed)
+        charm.framework.observe(charm.db.on.endpoints_changed, self._on_database_changed)
+        charm.framework.observe(charm.visibility.on.endpoints_changed, self._on_database_changed)
 
     @log_event_handler(logger)
     def _on_admin_relation_joined(self, event):
@@ -102,11 +104,11 @@ class Admin(framework.Object):
             event.defer()
             return
 
-        if self.charm.model.unit.is_leader():
+        if self.charm.unit.is_leader():
             self._provide_db_info()
 
     @log_event_handler(logger)
-    def _on_master_changed(self, event):
+    def _on_database_changed(self, event):
         """Handle changes on the db:pgsql relation.
 
         If an admin:temporal relation is established, then send database
@@ -119,7 +121,7 @@ class Admin(framework.Object):
             event.defer()
             return
 
-        if self.charm.model.unit.is_leader():
+        if self.charm.unit.is_leader():
             self._provide_db_info()
 
     @log_event_handler(logger)
@@ -131,7 +133,7 @@ class Admin(framework.Object):
         Args:
             event: The event triggered when the relation changed.
         """
-        if not self.charm.model.unit.is_leader():
+        if not self.charm.unit.is_leader():
             return
 
         schema_ready = event.relation.data[event.app].get("schema_status") == "ready"
@@ -180,7 +182,7 @@ class UI(framework.Object):
         Args:
             event: The event triggered when the relation changed.
         """
-        if self.charm.model.unit.is_leader():
+        if self.charm.unit.is_leader():
             self._provide_server_status()
 
     def _provide_server_status(self):

@@ -33,10 +33,10 @@ requires:
     interface: temporal
     limit: 1
   db:
-    interface: pgsql
+    interface: postgresql_client
     limit: 1
   visibility:
-    interface: pgsql
+    interface: postgresql_client
     limit: 1
   nginx-route:
     interface: nginx-route

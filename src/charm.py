@@ -9,12 +9,16 @@
 import logging
 import os
 
+from charms.data_platform_libs.v0.database_requires import (
+    DatabaseEvent,
+    DatabaseRequires,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
-from ops import lib, main
+from ops import main
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
@@ -24,9 +28,10 @@ from state import State
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 LOG_FILE = "/var/log/temporal"
+DB_NAME = "temporal-k8s_db"
+VISIBILITY_DB_NAME = "temporal-k8s_visibility"
 
 logger = logging.getLogger(__name__)
-pgsql = lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
 SERVER_PORT = 7233
 PROMETHEUS_PORT = 9090
@@ -78,23 +83,27 @@ class TemporalK8SCharm(CharmBase):
 
         # Handle db:pgsql and visibility:pgsql relations. The "db" and
         # "visibility" strings in this code block reflect the relation names.
-        self.db = pgsql.PostgreSQLClient(self, "db")
-        self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
-        self.framework.observe(self.db.on.master_changed, self._on_master_changed)
-        self.visibility = pgsql.PostgreSQLClient(self, "visibility")
-        self.framework.observe(self.visibility.on.database_relation_joined, self._on_database_relation_joined)
-        self.framework.observe(self.visibility.on.master_changed, self._on_master_changed)
+        self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME)
+        self.framework.observe(self.db.on.database_created, self._on_database_changed)
+        self.framework.observe(self.db.on.endpoints_changed, self._on_database_changed)
+        self.framework.observe(self.on.db_relation_broken, self._on_database_relation_broken)
+
+        self.visibility = DatabaseRequires(self, relation_name="visibility", database_name=VISIBILITY_DB_NAME)
+        self.framework.observe(self.visibility.on.database_created, self._on_database_changed)
+        self.framework.observe(self.visibility.on.endpoints_changed, self._on_database_changed)
+        self.framework.observe(self.on.visibility_relation_broken, self._on_database_relation_broken)
 
         # Handle admin:temporal relation.
         self.admin = relations.Admin(self)
         self.ui = relations.UI(self)
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 
+        if self.unit.is_leader():
+            # Open server port
+            self.model.unit.open_port(protocol="tcp", port=SERVER_PORT)
+
         # Handle Ingress
         self._require_nginx_route()
-
-        # Open server port
-        self.model.unit.open_port(protocol="tcp", port=SERVER_PORT)
 
         # Prometheus
         self._prometheus_scraping = MetricsEndpointProvider(
@@ -118,6 +127,7 @@ class TemporalK8SCharm(CharmBase):
             service_name=self.app.name,
             service_port=SERVER_PORT,
             tls_secret_name=self.config["tls-secret-name"],
+            backend_protocol="GRPC",
         )
 
     def database_connections(self):
@@ -169,7 +179,8 @@ class TemporalK8SCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
-        self.unit.status = MaintenanceStatus("installing temporal")
+        if self.unit.is_leader():
+            self.unit.status = MaintenanceStatus("installing temporal")
 
     @log_event_handler(logger)
     def _on_temporal_pebble_ready(self, event):
@@ -191,8 +202,8 @@ class TemporalK8SCharm(CharmBase):
         self._update(event)
 
     @log_event_handler(logger)
-    def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):  # type: ignore
-        """Handle joining a db:pgsql and visibility:pgsql relations.
+    def _on_database_changed(self, event: DatabaseEvent) -> None:
+        """Handle database creation/change events.
 
         Args:
             event: The event triggered when the relation changed.
@@ -201,43 +212,44 @@ class TemporalK8SCharm(CharmBase):
             event.defer()
             return
 
-        dbname = f"{self.app.name}_{event.relation.name}"
-        if self.model.unit.is_leader():
-            # Provide requirements to the PostgreSQL server.
-            self.unit.status = WaitingStatus("initializing database connection")
-            event.database = dbname
-        elif event.database != dbname:
-            # Leader has not yet set requirements. Defer, in case this unit
-            # becomes leader and needs to perform that operation.
-            event.defer()
+        if self.unit.is_leader():
+            self.unit.status = WaitingStatus(f"handling {event.relation.name} change")
+            self._update_db_connections(event)
+            self._update(event)
 
     @log_event_handler(logger)
-    def _on_master_changed(self, event: pgsql.MasterChangedEvent):  # type: ignore
-        """Handle changes on the db:pgsql and visibility:pgsql relations.
+    def _on_database_relation_broken(self, event: DatabaseEvent) -> None:
+        """Handle broken relations with the database.
 
         Args:
             event: The event triggered when the relation changed.
         """
-        dbname = f"{self.app.name}_{event.relation.name}"
-        if event.database != dbname:
-            # Leader has not yet set requirements. Wait until next event,
-            # or risk connecting to an incorrect database.
+        if not self._state.is_ready():
+            event.defer()
             return
 
-        self.unit.status = WaitingStatus(f"handling {event.relation.name} change")
-        db_conn = None if event.master is None else dict(event.master.items())
-        self._update_db_connections(event.relation.name, db_conn)
-        self._update(event)
+        if self.unit.is_leader():
+            self._state.database_connections[event.relation.name] = None
+            self._update(event)
 
-    def _update_db_connections(self, name, db_conn):
+    def _update_db_connections(self, event):
         """Assign nested value in peer relation.
 
         Args:
-            name: key to set in database_connections dict.
-            db_conn: value to assign to the named key.
+            event: The event triggered when the relation changed.
         """
         if self._state.database_connections is None:
             self._state.database_connections = {"db": None, "visibility": None}
+        host, port = event.endpoints.split(",", 1)[0].split(":")
+        name = event.relation.name
+
+        db_conn = {
+            "dbname": DB_NAME if name == "db" else VISIBILITY_DB_NAME,
+            "host": host,
+            "port": port,
+            "password": event.password,
+            "user": event.username,
+        }
 
         database_connections = self._state.database_connections
         database_connections[name] = db_conn
@@ -254,9 +266,10 @@ class TemporalK8SCharm(CharmBase):
             event.defer()
             return
 
-        self.unit.status = WaitingStatus("handling schema ready change")
-        self._state.schema_ready = event.schema_ready
-        self._update(event)
+        if self.unit.is_leader():
+            self.unit.status = WaitingStatus("handling schema ready change")
+            self._state.schema_ready = event.schema_ready
+            self._update(event)
 
     @log_event_handler(logger)
     def _on_restart_action(self, event):
