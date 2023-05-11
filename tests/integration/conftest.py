@@ -4,18 +4,13 @@
 """Temporal charm integration test config."""
 
 import logging
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
-import yaml
+from helpers import APP_NAME, APP_NAME_ADMIN, METADATA
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
-
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-APP_NAME = METADATA["name"]
-APP_NAME_ADMIN = "temporal-admin-k8s"
 
 
 @pytest.mark.skip_if_deployed

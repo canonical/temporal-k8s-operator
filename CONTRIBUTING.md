@@ -88,7 +88,7 @@ deployment, follow the following steps:
     juju deploy ./temporal-ui-k8s_ubuntu-22.04-amd64.charm --resource temporal-ui-image=temporalio/ui:2.10.3
 
     # Relate operator to postgres:
-    juju deploy postgresql-k8s --channel edge --trust
+    juju deploy postgresql-k8s --channel 14/stable --trust
     juju relate temporal-k8s:db postgresql-k8s:database
     juju relate temporal-k8s:visibility postgresql-k8s:database
 
