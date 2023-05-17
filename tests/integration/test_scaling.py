@@ -4,11 +4,9 @@
 """Temporal charm scaling integration tests."""
 
 import logging
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
-import yaml
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -21,8 +19,6 @@ from pytest_operator.plugin import OpsTest
 ALL_SERVICES = ["temporal-k8s-matching", "temporal-k8s-history", "temporal-k8s", "temporal-k8s-worker"]
 ALL_SERVICES_2 = ["temporal-k8s-matching", "temporal-k8s-history", "temporal-k8s-worker"]
 
-METADATA_ADMIN = yaml.safe_load(Path("../temporal-admin-k8s-operator/metadata.yaml").read_text())
-
 logger = logging.getLogger(__name__)
 
 
@@ -33,17 +29,13 @@ async def deploy(ops_test: OpsTest):
     charm = await ops_test.build_charm(".")
     resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
 
-    admin_resources = {"temporal-admin-image": METADATA_ADMIN["containers"]["temporal-admin"]["upstream-source"]}
-    admin_charm = await ops_test.build_charm("../temporal-admin-k8s-operator")
-
     # Deploy temporal server, temporal admin and postgresql charms.
     await ops_test.model.deploy(charm, resources=resources, application_name="temporal-k8s-matching", num_units=1)
     await ops_test.model.deploy(charm, resources=resources, application_name="temporal-k8s-history", num_units=1)
     await ops_test.model.deploy(charm, resources=resources, application_name="temporal-k8s", num_units=1)
     await ops_test.model.deploy(charm, resources=resources, application_name="temporal-k8s-worker", num_units=1)
 
-    # await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
-    await ops_test.model.deploy(admin_charm, resources=admin_resources, application_name=APP_NAME_ADMIN)
+    await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
     await ops_test.model.deploy("postgresql-k8s", channel="14", trust=True)
 
     async with ops_test.fast_forward():
