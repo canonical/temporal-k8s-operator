@@ -81,6 +81,12 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.restart_action, self._on_restart_action)
 
+        # Peer relation
+        # self.framework.observe(self.on.leader_elected, self._on_leader_elected)
+        # self.framework.observe(self.on.peer_relation_joined, self._on_peer_relation_joined)
+        # self.framework.observe(self.on.peer_relation_departed, self._on_peer_relation_departed)
+        # self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
+
         # Handle db:pgsql and visibility:pgsql relations. The "db" and
         # "visibility" strings in this code block reflect the relation names.
         self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME)
@@ -98,9 +104,17 @@ class TemporalK8SCharm(CharmBase):
         self.ui = relations.UI(self)
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 
-        if self.unit.is_leader():
-            # Open server port
-            self.model.unit.open_port(protocol="tcp", port=SERVER_PORT)
+        # if self.unit.is_leader():
+        # Open server port
+        # self.model.unit.open_port(protocol="tcp", port=SERVER_PORT)
+        # self.model.unit.open_port(protocol="tcp", port="7235")
+        # self.model.unit.open_port(protocol="tcp", port="7234")
+        # self.model.unit.open_port(protocol="tcp", port="7239")
+
+        # self.model.unit.open_port(protocol="tcp", port="6933")
+        # self.model.unit.open_port(protocol="tcp", port="6935")
+        # self.model.unit.open_port(protocol="tcp", port="6934")
+        # self.model.unit.open_port(protocol="tcp", port="6939")
 
         # Handle Ingress
         self._require_nginx_route()
@@ -200,6 +214,33 @@ class TemporalK8SCharm(CharmBase):
         """
         self.unit.status = WaitingStatus("configuring temporal")
         self._update(event)
+
+    # @log_event_handler(logger)
+    # def _on_leader_elected(self, event) -> None:
+    #     """Handle the leader-elected event"""
+    #     logger.debug("Leader %s setting some data!", self.unit.name)
+
+    # @log_event_handler(logger)
+    # def _on_peer_relation_joined(self, event) -> None:
+    #     """Handle relation-joined event for the peer relation"""
+    #     logger.debug("Hello from %s to %s", self.unit.name, event.unit.name)
+
+    #     # Check if we're the leader
+    #     if self.unit.is_leader():
+    #         # Get the bind address from the juju model
+    #         logger.debug("Leader %s setting some data!", self.unit.name)
+
+    # @log_event_handler(logger)
+    # def _on_peer_relation_departed(self, event) -> None:
+    #     """Handle relation-departed event for the peer relation"""
+    #     logger.debug("Goodbye from %s to %s", self.unit.name, event.unit.name)
+
+    # @log_event_handler(logger)
+    # def _on_peer_relation_changed(self, event) -> None:
+    #     """Handle relation-changed event for the peer relation"""
+    #     logger.debug("Unit %s can see the following data: %s", self.unit.name,
+    # event.relation.data.keys())
+    #     self._update(event)
 
     @log_event_handler(logger)
     def _on_database_changed(self, event: DatabaseEvent) -> None:
@@ -302,11 +343,32 @@ class TemporalK8SCharm(CharmBase):
         for service in self.config["services"].split(","):
             if service not in valid_services:
                 raise ValueError(f"error in services config: invalid service {service!r}")
+            if self.unit.is_leader():
+                self.open_service_ports(service)
 
         # Validate relations.
         self.database_connections()
         if not self._state.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
+
+    def open_service_ports(self, service):
+        """Open the respective ports based on Temporal service.
+
+        Args:
+            service: Temporal service.
+        """
+        if service == "matching":
+            self.model.unit.open_port(protocol="tcp", port="7235")
+            self.model.unit.open_port(protocol="tcp", port="6935")
+        if service == "frontend":
+            self.model.unit.open_port(protocol="tcp", port="7233")
+            self.model.unit.open_port(protocol="tcp", port="6933")
+        if service == "history":
+            self.model.unit.open_port(protocol="tcp", port="7234")
+            self.model.unit.open_port(protocol="tcp", port="6934")
+        if service == "worker":
+            self.model.unit.open_port(protocol="tcp", port="7239")
+            self.model.unit.open_port(protocol="tcp", port="6939")
 
     def _update(self, event):
         """Update the Temporal server configuration and replan its execution.
@@ -344,6 +406,8 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_PORT": visibility_conn["port"],
                 "VISIBILITY_USER": visibility_conn["user"],
                 "VISIBILITY_PSWD": visibility_conn["password"],
+                "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.ingress_address),
+                "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
             }
         )
 

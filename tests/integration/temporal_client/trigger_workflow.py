@@ -3,6 +3,8 @@
 
 """Temporal client workflow runner."""
 
+import uuid
+
 from temporalio.client import Client
 
 from .workflows import SayHello
@@ -21,6 +23,8 @@ async def trigger_workflow(url, name):
     client = await Client.connect(url)
 
     # Execute a workflow
-    result = await client.execute_workflow(SayHello.run, name, id="my-workflow-id", task_queue="my-task-queue")
+    result = await client.execute_workflow(
+        SayHello.run, name, id=str(uuid.uuid1()), task_queue="my-task-queue", task_timeout=60
+    )
 
     return result

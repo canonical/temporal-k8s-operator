@@ -35,6 +35,24 @@ async def run_sample_workflow(ops_test: OpsTest):
     logger.info("temporal worker running")
     name = "Jean-luc"
     result = await trigger_workflow(url, name)
+    logger.info(f"result: {result}")
     p.terminate()
 
     assert result == f"Hello, {name}!"
+
+
+async def create_default_namespace(ops_test: OpsTest):
+    """Creates default namespace on Temporal server using tctl.
+
+    Args:
+        ops_test: PyTest object.
+    """
+    # Register default namespace from admin charm.
+    action = (
+        await ops_test.model.applications[APP_NAME_ADMIN]
+        .units[0]
+        .run_action("tctl", args="--ns default namespace register -rd 3")
+    )
+    result = (await action.wait()).results
+    logger.info(f"tctl result: {result}")
+    assert "result" in result and result["result"] == "command succeeded"
