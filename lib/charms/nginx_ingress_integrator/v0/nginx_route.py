@@ -13,6 +13,7 @@ Import `require_nginx_route` in your charm, with four required keyword arguments
 
 Other optional arguments include:
 - additional_hostnames
+- backend_protocol
 - limit_rps
 - limit_whitelist
 - max_body_size
@@ -68,7 +69,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 __all__ = ["require_nginx_route", "provide_nginx_route"]
 
@@ -159,6 +160,7 @@ def require_nginx_route(  # pylint: disable=too-many-locals,too-many-branches
     service_name: str,
     service_port: int,
     additional_hostnames: typing.Optional[str] = None,
+    backend_protocol: typing.Optional[str] = None,
     limit_rps: typing.Optional[int] = None,
     limit_whitelist: typing.Optional[str] = None,
     max_body_size: typing.Optional[int] = None,
@@ -187,6 +189,8 @@ def require_nginx_route(  # pylint: disable=too-many-locals,too-many-branches
             option via relation.
         additional_hostnames: configure Nginx ingress integrator
             additional-hostnames option via relation, optional.
+        backend_protocol: configure Nginx ingress integrator
+            backend-protocol option via relation, optional.
         limit_rps: configure Nginx ingress integrator limit-rps
             option via relation, optional.
         limit_whitelist: configure Nginx ingress integrator
@@ -225,6 +229,8 @@ def require_nginx_route(  # pylint: disable=too-many-locals,too-many-branches
         config["service-port"] = service_port
     if additional_hostnames is not None:
         config["additional-hostnames"] = additional_hostnames
+    if backend_protocol is not None:
+        config["backend-protocol"] = backend_protocol
     if limit_rps is not None:
         config["limit-rps"] = limit_rps
     if limit_whitelist is not None:

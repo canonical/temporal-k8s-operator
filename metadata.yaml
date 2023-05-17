@@ -1,4 +1,4 @@
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 # For a complete list of supported options, see:
@@ -12,6 +12,7 @@ description: |
   the successful execution of services and applications (using workflows).
 maintainers: 
   - Commercial Systems <jaas-crew@lists.canonical.com>
+source: https://github.com/canonical/temporal-k8s-operator
 docs: https://discourse.charmhub.io/t/temporal-server-documentation-overview/8948
 tags:
   - temporal
@@ -33,10 +34,10 @@ requires:
     interface: temporal
     limit: 1
   db:
-    interface: pgsql
+    interface: postgresql_client
     limit: 1
   visibility:
-    interface: pgsql
+    interface: postgresql_client
     limit: 1
   nginx-route:
     interface: nginx-route

@@ -1,4 +1,4 @@
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
@@ -92,8 +92,8 @@ class TestCharm(TestCase):
         harness.charm.on.temporal_pebble_ready.emit(container)
 
         # Simulate db readiness.
-        event = make_master_changed_event("db")
-        harness.charm._on_master_changed(event)
+        event = make_database_changed_event("db")
+        harness.charm._on_database_changed(event)
 
         # No plans are set yet.
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
@@ -117,12 +117,12 @@ class TestCharm(TestCase):
         harness.charm.on.temporal_pebble_ready.emit(container)
 
         # Simulate db readiness.
-        event = make_master_changed_event("db")
-        harness.charm._on_master_changed(event)
+        event = make_database_changed_event("db")
+        harness.charm._on_database_changed(event)
 
         # Simulate visibility readiness.
-        event = make_master_changed_event("visibility")
-        harness.charm._on_master_changed(event)
+        event = make_database_changed_event("visibility")
+        harness.charm._on_database_changed(event)
 
         # No plans are set yet.
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
@@ -148,12 +148,12 @@ class TestCharm(TestCase):
                     "environment": {
                         "DB_HOST": "myhost",
                         "DB_NAME": "temporal-k8s_db",
-                        "DB_PORT": "4247",
+                        "DB_PORT": "5432",
                         "DB_PSWD": "inner-light",
                         "DB_USER": "jean-luc@db",
                         "VISIBILITY_HOST": "myhost",
                         "VISIBILITY_NAME": "temporal-k8s_visibility",
-                        "VISIBILITY_PORT": "4247",
+                        "VISIBILITY_PORT": "5432",
                         "VISIBILITY_PSWD": "inner-light",
                         "VISIBILITY_USER": "jean-luc@visibility",
                         "LOG_LEVEL": "info",
@@ -190,12 +190,12 @@ class TestCharm(TestCase):
                     "environment": {
                         "DB_HOST": "myhost",
                         "DB_NAME": "temporal-k8s_db",
-                        "DB_PORT": "4247",
+                        "DB_PORT": "5432",
                         "DB_PSWD": "inner-light",
                         "DB_USER": "jean-luc@db",
                         "VISIBILITY_HOST": "myhost",
                         "VISIBILITY_NAME": "temporal-k8s_visibility",
-                        "VISIBILITY_PORT": "4247",
+                        "VISIBILITY_PORT": "5432",
                         "VISIBILITY_PSWD": "inner-light",
                         "VISIBILITY_USER": "jean-luc@visibility",
                         "LOG_LEVEL": "debug",
@@ -243,14 +243,14 @@ class TestCharm(TestCase):
                     "dbname": "temporal-k8s_db",
                     "host": "myhost",
                     "password": "inner-light",
-                    "port": "4247",
+                    "port": "5432",
                     "user": "jean-luc@db",
                 },
                 "visibility": {
                     "dbname": "temporal-k8s_visibility",
                     "host": "myhost",
                     "password": "inner-light",
-                    "port": "4247",
+                    "port": "5432",
                     "user": "jean-luc@visibility",
                 },
             },
@@ -273,10 +273,11 @@ class TestCharm(TestCase):
             "service-hostname": harness.charm.app.name,
             "service-name": harness.charm.app.name,
             "service-port": SERVER_PORT,
+            "backend-protocol": "GRPC",
             "tls-secret-name": "temporal-tls",
         }
 
-        new_hostname = "new-temporal-ui-k8s"
+        new_hostname = "new-temporal-k8s"
         harness.update_config({"external-hostname": new_hostname})
         harness.charm._require_nginx_route()
 
@@ -285,6 +286,7 @@ class TestCharm(TestCase):
             "service-hostname": new_hostname,
             "service-name": harness.charm.app.name,
             "service-port": SERVER_PORT,
+            "backend-protocol": "GRPC",
             "tls-secret-name": "temporal-tls",
         }
 
@@ -297,6 +299,7 @@ class TestCharm(TestCase):
             "service-hostname": new_hostname,
             "service-name": harness.charm.app.name,
             "service-port": SERVER_PORT,
+            "backend-protocol": "GRPC",
             "tls-secret-name": new_tls,
         }
 
@@ -315,12 +318,12 @@ def simulate_lifecycle(harness):
     harness.charm.on.temporal_pebble_ready.emit(container)
 
     # Simulate db readiness.
-    event = make_master_changed_event("db")
-    harness.charm._on_master_changed(event)
+    event = make_database_changed_event("db")
+    harness.charm._on_database_changed(event)
 
     # Simulate visibility readiness.
-    event = make_master_changed_event("visibility")
-    harness.charm._on_master_changed(event)
+    event = make_database_changed_event("visibility")
+    harness.charm._on_database_changed(event)
 
     # Simulate schema readiness.
     app = type("App", (), {"name": "temporal-k8s"})()
@@ -330,13 +333,13 @@ def simulate_lifecycle(harness):
     harness.charm.admin._on_admin_relation_changed(event)
 
 
-def make_master_changed_event(rel_name):
+def make_database_changed_event(rel_name):
     """Create and return a mock master changed event.
 
-    The event is generated by the relation with the given name.
+        The event is generated by the relation with the given name.
 
     Args:
-        rel_name: Relationship name.
+        rel_name: Name of the database relation (db or visibility)
 
     Returns:
         Event dict.
@@ -345,14 +348,9 @@ def make_master_changed_event(rel_name):
         "Event",
         (),
         {
-            "database": f"temporal-k8s_{rel_name}",
-            "master": {
-                "dbname": f"temporal-k8s_{rel_name}",
-                "host": "myhost",
-                "port": "4247",
-                "user": f"jean-luc@{rel_name}",
-                "password": "inner-light",
-            },
+            "endpoints": "myhost:5432,anotherhost:2345",
+            "username": f"jean-luc@{rel_name}",
+            "password": "inner-light",
             "relation": type("Relation", (), {"name": rel_name}),
         },
     )
