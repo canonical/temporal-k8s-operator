@@ -36,6 +36,7 @@ class TestCharm(TestCase):
         self.harness.set_can_connect("temporal", True)
         self.harness.set_leader(True)
         self.harness.set_model_name("temporal-model")
+        self.harness.add_network("10.0.0.10", endpoint="peer")
         self.harness.begin()
 
     def test_initial_plan(self):
@@ -157,6 +158,10 @@ class TestCharm(TestCase):
                         "VISIBILITY_PSWD": "inner-light",
                         "VISIBILITY_USER": "jean-luc@visibility",
                         "LOG_LEVEL": "info",
+                        "TEMPORAL_BROADCAST_ADDRESS": str(
+                            self.harness.model.get_binding("peer").network.ingress_address
+                        ),
+                        "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
                     },
                 }
             },
@@ -199,6 +204,10 @@ class TestCharm(TestCase):
                         "VISIBILITY_PSWD": "inner-light",
                         "VISIBILITY_USER": "jean-luc@visibility",
                         "LOG_LEVEL": "debug",
+                        "TEMPORAL_BROADCAST_ADDRESS": str(
+                            self.harness.model.get_binding("peer").network.ingress_address
+                        ),
+                        "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
                     },
                 }
             },

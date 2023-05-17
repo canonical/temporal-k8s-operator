@@ -358,17 +358,17 @@ class TemporalK8SCharm(CharmBase):
             service: Temporal service.
         """
         if service == "matching":
-            self.model.unit.open_port(protocol="tcp", port="7235")
-            self.model.unit.open_port(protocol="tcp", port="6935")
+            self.model.unit.open_port(protocol="tcp", port=7235)
+            self.model.unit.open_port(protocol="tcp", port=6935)
         if service == "frontend":
-            self.model.unit.open_port(protocol="tcp", port="7233")
-            self.model.unit.open_port(protocol="tcp", port="6933")
+            self.model.unit.open_port(protocol="tcp", port=7233)
+            self.model.unit.open_port(protocol="tcp", port=6933)
         if service == "history":
-            self.model.unit.open_port(protocol="tcp", port="7234")
-            self.model.unit.open_port(protocol="tcp", port="6934")
+            self.model.unit.open_port(protocol="tcp", port=7234)
+            self.model.unit.open_port(protocol="tcp", port=6934)
         if service == "worker":
-            self.model.unit.open_port(protocol="tcp", port="7239")
-            self.model.unit.open_port(protocol="tcp", port="6939")
+            self.model.unit.open_port(protocol="tcp", port=7239)
+            self.model.unit.open_port(protocol="tcp", port=6939)
 
     def _update(self, event):
         """Update the Temporal server configuration and replan its execution.
