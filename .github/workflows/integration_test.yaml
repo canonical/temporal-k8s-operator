@@ -19,10 +19,18 @@ jobs:
           channel: 1.25-strict/stable
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox -e integration -- --model testing
+        run: tox -e integration -- --model test-charm
       - name: Dump logs
         uses: canonical/charm-logdump-action@main
         if: failure()
         with:
           app: temporal-k8s
-          model: testing
+          model: test-charm
+      - name: Run integration tests
+        run: tox -e integration -- --model test-scaling
+      - name: Dump logs
+        uses: canonical/charm-logdump-action@main
+        if: failure()
+        with:
+          app: temporal-k8s
+          model: test-scaling
