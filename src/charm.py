@@ -104,18 +104,6 @@ class TemporalK8SCharm(CharmBase):
         self.ui = relations.UI(self)
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 
-        # if self.unit.is_leader():
-        # Open server port
-        # self.model.unit.open_port(protocol="tcp", port=SERVER_PORT)
-        # self.model.unit.open_port(protocol="tcp", port="7235")
-        # self.model.unit.open_port(protocol="tcp", port="7234")
-        # self.model.unit.open_port(protocol="tcp", port="7239")
-
-        # self.model.unit.open_port(protocol="tcp", port="6933")
-        # self.model.unit.open_port(protocol="tcp", port="6935")
-        # self.model.unit.open_port(protocol="tcp", port="6934")
-        # self.model.unit.open_port(protocol="tcp", port="6939")
-
         # Handle Ingress
         self._require_nginx_route()
 
@@ -344,14 +332,14 @@ class TemporalK8SCharm(CharmBase):
             if service not in valid_services:
                 raise ValueError(f"error in services config: invalid service {service!r}")
             if self.unit.is_leader():
-                self.open_service_ports(service)
+                self._open_service_ports(service)
 
         # Validate relations.
         self.database_connections()
         if not self._state.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
 
-    def open_service_ports(self, service):
+    def _open_service_ports(self, service):
         """Open the respective ports based on Temporal service.
 
         Args:

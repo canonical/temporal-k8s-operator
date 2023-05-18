@@ -3,7 +3,7 @@
 
 """Temporal client workflow runner."""
 
-import uuid
+from datetime import timedelta
 
 from temporalio.client import Client
 
@@ -24,7 +24,7 @@ async def trigger_workflow(url, name):
 
     # Execute a workflow
     result = await client.execute_workflow(
-        SayHello.run, name, id=str(uuid.uuid1()), task_queue="my-task-queue", task_timeout=60
+        SayHello.run, name, id="my-workflow-id", task_queue="my-task-queue", task_timeout=timedelta(seconds=60)
     )
 
     return result
