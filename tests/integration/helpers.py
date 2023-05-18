@@ -20,6 +20,29 @@ APP_NAME = METADATA["name"]
 APP_NAME_ADMIN = "temporal-admin-k8s"
 
 
+async def scale(ops_test: OpsTest, app, units):
+    """Scale the application to the provided number and wait for idle.
+
+    Args:
+        ops_test: PyTest object.
+        app: Application to be scaled.
+        units: Number of units required.
+    """
+    await ops_test.model.applications[app].scale(scale=units)
+
+    # Wait for model to settle
+    await ops_test.model.wait_for_idle(
+        apps=[app],
+        status="active",
+        idle_period=30,
+        raise_on_blocked=True,
+        timeout=300,
+        wait_for_exact_units=units,
+    )
+
+    assert len(ops_test.model.applications[app].units) == units
+
+
 async def run_sample_workflow(ops_test: OpsTest):
     """Connects a client and runs a basic Temporal workflow.
 

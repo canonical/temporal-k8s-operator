@@ -13,11 +13,11 @@ from helpers import (
     METADATA,
     create_default_namespace,
     run_sample_workflow,
+    scale,
 )
 from pytest_operator.plugin import OpsTest
 
 ALL_SERVICES = ["temporal-k8s", "temporal-k8s-history", "temporal-k8s-matching", "temporal-k8s-worker"]
-ALL_SERVICES_2 = ["temporal-k8s-history", "temporal-k8s-matching", "temporal-k8s-worker"]
 
 logger = logging.getLogger(__name__)
 
@@ -30,19 +30,16 @@ async def deploy(ops_test: OpsTest):
     resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
 
     # Deploy temporal server, temporal admin and postgresql charms.
-    await ops_test.model.deploy(charm, resources=resources, application_name="temporal-k8s", num_units=1)
-    await ops_test.model.deploy(charm, resources=resources, application_name="temporal-k8s-matching", num_units=1)
-    await ops_test.model.deploy(charm, resources=resources, application_name="temporal-k8s-history", num_units=1)
-    await ops_test.model.deploy(charm, resources=resources, application_name="temporal-k8s-worker", num_units=1)
+    for service in ALL_SERVICES:
+        await ops_test.model.deploy(charm, resources=resources, application_name=service, num_units=1)
 
     await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
     await ops_test.model.deploy("postgresql-k8s", channel="14", trust=True)
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, APP_NAME_ADMIN], status="blocked", raise_on_blocked=False, timeout=1200
+            apps=[APP_NAME_ADMIN] + ALL_SERVICES, status="blocked", raise_on_blocked=False, timeout=1200
         )
-        await ops_test.model.wait_for_idle(apps=ALL_SERVICES_2, status="blocked", raise_on_blocked=False, timeout=1200)
         await ops_test.model.wait_for_idle(
             apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
         )
@@ -50,15 +47,17 @@ async def deploy(ops_test: OpsTest):
         for service in ALL_SERVICES:
             assert ops_test.model.applications[service].units[0].workload_status == "blocked"
 
+        # Must integrate temporal-k8s frontend service first
         await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
         await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
 
-        for service in ALL_SERVICES_2:
-            await ops_test.model.integrate(f"{service}:db", "postgresql-k8s:database")
-            await ops_test.model.integrate(f"{service}:visibility", "postgresql-k8s:database")
-            await ops_test.model.integrate(f"{service}:admin", f"{APP_NAME_ADMIN}:admin")
+        for service in ALL_SERVICES:
+            if service != "temporal-k8s":
+                await ops_test.model.integrate(f"{service}:db", "postgresql-k8s:database")
+                await ops_test.model.integrate(f"{service}:visibility", "postgresql-k8s:database")
+                await ops_test.model.integrate(f"{service}:admin", f"{APP_NAME_ADMIN}:admin")
 
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
 
@@ -90,20 +89,7 @@ class TestScaling:
     async def test_scaling_up(self, ops_test: OpsTest):
         """Scale Temporal charm up to 2 units."""
         for service in ALL_SERVICES:
-            await ops_test.model.applications[service].scale(scale=2)
-
-        # Wait for model to settle
-        await ops_test.model.wait_for_idle(
-            apps=ALL_SERVICES,
-            status="active",
-            idle_period=30,
-            raise_on_blocked=True,
-            timeout=300,
-            wait_for_exact_units=2,
-        )
-
-        for service in ALL_SERVICES:
-            assert len(ops_test.model.applications[service].units) == 2
+            await scale(ops_test, app=service, units=2)
 
         await run_sample_workflow(ops_test)
 
@@ -111,18 +97,6 @@ class TestScaling:
     async def test_scaling_down(self, ops_test: OpsTest):
         """Scale Temporal charm down to 1 unit."""
         for service in ALL_SERVICES:
-            await ops_test.model.applications[service].scale(scale=1)
-
-        # Wait for model to settle
-        await ops_test.model.wait_for_idle(
-            apps=ALL_SERVICES,
-            status="active",
-            idle_period=30,
-            raise_on_blocked=True,
-            timeout=600,
-            wait_for_exact_units=1,
-        )
-
-        assert len(ops_test.model.applications[service].units) == 1
+            await scale(ops_test, app=service, units=1)
 
         await run_sample_workflow(ops_test)
