@@ -6,6 +6,12 @@ on:
 jobs:
   integration-test-microk8s:
     name: Integration tests (microk8s)
+    strategy:
+      fail-fast: false
+      matrix:
+        tox-environments:
+          - integration-charm
+          - integration-scaling
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,18 +25,10 @@ jobs:
           channel: 1.25-strict/stable
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox -e integration-charm -- --model test-charm
-      - name: Dump logs
-        uses: canonical/charm-logdump-action@main
-        if: failure()
-        with:
-          app: temporal-k8s
-          model: test-charm
-      - name: Run integration tests
-        run: tox -e integration-scaling -- --model test-scaling
-      - name: Dump logs
-        uses: canonical/charm-logdump-action@main
-        if: failure()
-        with:
-          app: temporal-k8s
-          model: test-scaling
+        run: tox -e ${{ matrix.tox-environments }}
+      # - name: Dump logs
+      #   uses: canonical/charm-logdump-action@main
+      #   if: failure()
+      #   with:
+      #     app: temporal-k8s
+      #     model: test-charm
