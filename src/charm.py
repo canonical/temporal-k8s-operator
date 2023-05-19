@@ -382,7 +382,7 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_PORT": visibility_conn["port"],
                 "VISIBILITY_USER": visibility_conn["user"],
                 "VISIBILITY_PSWD": visibility_conn["password"],
-                "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.ingress_address),
+                "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.bind_address),
                 # TODO(kelkawi-a): do not assume the app is always deployed with this name.
                 "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
             }

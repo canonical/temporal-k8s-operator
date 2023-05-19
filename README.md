@@ -43,6 +43,9 @@ connected to the Temporal operator using the Juju command line as follows:
 ```bash
 juju deploy temporal-admin-k8s
 juju relate temporal-k8s:admin temporal-admin-k8s:admin
+
+# Create default namespace:
+juju run temporal-admin-k8s/0 tctl args="--ns default namespace register -rd 3"
 ```
 
 ### Deploying Nginx Ingress Integrator

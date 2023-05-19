@@ -18,6 +18,7 @@ from helpers import (
 from pytest_operator.plugin import OpsTest
 
 ALL_SERVICES = ["temporal-k8s", "temporal-k8s-history", "temporal-k8s-matching", "temporal-k8s-worker"]
+ALL_CONFIG = ["frontend", "history", "matching", "worker"]
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,11 @@ async def deploy(ops_test: OpsTest):
     resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
 
     # Deploy temporal server, temporal admin and postgresql charms.
-    for service in ALL_SERVICES:
-        await ops_test.model.deploy(charm, resources=resources, application_name=service, num_units=1)
+    for i in range(4):
+        # for service in ALL_SERVICES:
+        await ops_test.model.deploy(
+            charm, resources=resources, application_name=ALL_SERVICES[i], config={"services": ALL_CONFIG[i]}
+        )
 
     await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
     await ops_test.model.deploy("postgresql-k8s", channel="14", trust=True)
@@ -65,20 +69,6 @@ async def deploy(ops_test: OpsTest):
 
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=300)
         assert ops_test.model.applications["temporal-k8s"].units[0].workload_status == "active"
-
-        application = ops_test.model.applications["temporal-k8s-matching"]
-        await application.set_config({"services": "matching"})
-
-        application = ops_test.model.applications["temporal-k8s"]
-        await application.set_config({"services": "frontend"})
-
-        application = ops_test.model.applications["temporal-k8s-history"]
-        await application.set_config({"services": "history"})
-
-        application = ops_test.model.applications["temporal-k8s-worker"]
-        await application.set_config({"services": "worker"})
-
-        await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=600)
 
 
 @pytest.mark.abort_on_fail

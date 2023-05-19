@@ -64,26 +64,24 @@ applications. It may take a few minutes to see the following output where all
 nodes are showing `Workload=Active` and `Agent=idle`:
 
 ```
-Model     Controller           Cloud/Region        Version  SLA          Timestamp
-temporal  temporal-controller  microk8s/localhost  3.1.0    unsupported  15:18:19+03:00
+Model         Controller           Cloud/Region        Version  SLA          Timestamp
+temporal      temporal-controller  microk8s/localhost  3.1.2    unsupported  14:31:41+03:00
 
-App                    Version  Status  Scale  Charm               Channel  Rev  Address         Exposed  Message
-postgresql-k8s                  active      1  postgresql-k8s      edge      62  10.152.183.138  no       Primary
-temporal-admin-k8s              active      1  temporal-admin-k8s             1  10.152.183.83   no
-temporal-k8s                    active      1  temporal-k8s                  79  10.152.183.140  no
-temporal-k8s-history            active      1  temporal-k8s                  81  10.152.183.32   no
-temporal-k8s-matching           active      1  temporal-k8s                  80  10.152.183.170  no
-temporal-k8s-worker             active      1  temporal-k8s                  83  10.152.183.116  no
-temporal-ui-k8s                 active      1  temporal-ui-k8s                8  10.152.183.154  no
+App                    Version  Status  Scale  Charm               Channel    Rev  Address         Exposed  Message
+postgresql-k8s         14.7     active      1  postgresql-k8s      14/stable   73  10.152.183.171  no       Primary
+temporal-admin-k8s              active      1  temporal-admin-k8s  edge         4  10.152.183.35   no
+temporal-k8s                    active      1  temporal-k8s                     0  10.152.183.95   no
+temporal-k8s-history            active      1  temporal-k8s                     1  10.152.183.52   no
+temporal-k8s-matching           active      1  temporal-k8s                     2  10.152.183.122  no
+temporal-k8s-worker             active      1  temporal-k8s                     3  10.152.183.134  no
 
-Unit                       Workload  Agent  Address      Ports  Message
-postgresql-k8s/0*          active    idle   10.1.232.50         Primary
-temporal-admin-k8s/0*      active    idle   10.1.232.42
-temporal-k8s-history/0     active    idle   10.1.232.27
-temporal-k8s-matching/0*   active    idle   10.1.232.47
-temporal-k8s-worker/0*     active    idle   10.1.232.51
-temporal-k8s/0*            active    idle   10.1.232.44
-temporal-ui-k8s/0*         active    idle   10.1.232.5
+Unit                      Workload  Agent  Address      Ports  Message
+postgresql-k8s/0*         active    idle   10.1.232.60         Primary
+temporal-admin-k8s/0*     active    idle   10.1.232.20
+temporal-k8s-history/0*   active    idle   10.1.232.6
+temporal-k8s-matching/0*  active    idle   10.1.232.61
+temporal-k8s-worker/0*    active    idle   10.1.232.42
+temporal-k8s/0*           active    idle   10.1.232.26
 ```
 
 To confirm the four services can reach other, you can run
@@ -105,13 +103,13 @@ output: |
     "serverVersion": "1.17.3",
     "membershipInfo": {
       "currentHost": {
-        "identity": "10.152.183.140:7233"
+        "identity": "10.1.232.26:7233"
       },
       "reachableMembers": [
-        "10.152.183.32:6934",
-        "10.152.183.116:6939",
-        "10.152.183.140:6933",
-        "10.152.183.170:6935"
+        "10.1.232.42:6939",
+        "10.1.232.61:6935",
+        "10.1.232.6:6934",
+        "10.1.232.26:6933"
       ],
       "rings": [
         {
@@ -119,7 +117,7 @@ output: |
           "memberCount": 1,
           "members": [
             {
-              "identity": "10.152.183.140:7233"
+              "identity": "10.1.232.26:7233"
             }
           ]
         },
@@ -128,7 +126,7 @@ output: |
           "memberCount": 1,
           "members": [
             {
-              "identity": "10.152.183.32:7234"
+              "identity": "10.1.232.6:7234"
             }
           ]
         },
@@ -137,7 +135,7 @@ output: |
           "memberCount": 1,
           "members": [
             {
-              "identity": "10.152.183.170:7235"
+              "identity": "10.1.232.61:7235"
             }
           ]
         },
@@ -146,13 +144,13 @@ output: |
           "memberCount": 1,
           "members": [
             {
-              "identity": "10.152.183.116:7239"
+              "identity": "10.1.232.42:7239"
             }
           ]
         }
       ]
     },
-    "clusterId": "81b8274b-086f-4a4e-85be-860da8be81e0",
+    "clusterId": "514dd854-eb26-4e93-9f3c-1355cb8aa99a",
     "clusterName": "active",
     "historyShardCount": 4,
     "persistenceStore": "postgres",
@@ -189,27 +187,118 @@ nodes are showing `Workload=Active` and `Agent=idle`:
 Model     Controller           Cloud/Region        Version  SLA          Timestamp
 temporal  temporal-controller  microk8s/localhost  3.1.0    unsupported  15:18:19+03:00
 
-App                    Version  Status  Scale  Charm               Channel  Rev  Address         Exposed  Message
-postgresql-k8s                  active      1  postgresql-k8s      edge      62  10.152.183.138  no       Primary
-temporal-admin-k8s              active      1  temporal-admin-k8s             1  10.152.183.83   no
-temporal-k8s                    active      2  temporal-k8s                  79  10.152.183.140  no
-temporal-k8s-history            active      2  temporal-k8s                  81  10.152.183.32   no
-temporal-k8s-matching           active      2  temporal-k8s                  80  10.152.183.170  no
-temporal-k8s-worker             active      2  temporal-k8s                  83  10.152.183.116  no
-temporal-ui-k8s                 active      1  temporal-ui-k8s     beta       8  10.152.183.154  no
+App                    Version  Status  Scale  Charm               Channel    Rev  Address         Exposed  Message
+postgresql-k8s         14.7     active      1  postgresql-k8s      14/stable   73  10.152.183.171  no       Primary
+temporal-admin-k8s              active      1  temporal-admin-k8s  edge         4  10.152.183.35   no
+temporal-k8s                    active      2  temporal-k8s                     0  10.152.183.95   no
+temporal-k8s-history            active      2  temporal-k8s                     1  10.152.183.52   no
+temporal-k8s-matching           active      2  temporal-k8s                     2  10.152.183.122  no
+temporal-k8s-worker             active      2  temporal-k8s                     3  10.152.183.134  no
 
 Unit                      Workload  Agent  Address      Ports  Message
-postgresql-k8s/0*         active    idle   10.1.232.50         Primary
-temporal-admin-k8s/0*     active    idle   10.1.232.42
-temporal-k8s-history/0*   active    idle   10.1.232.27
-temporal-k8s-history/1    active    idle   10.1.232.48
-temporal-k8s-matching/0*  active    idle   10.1.232.47
-temporal-k8s-matching/1   active    idle   10.1.232.31
-temporal-k8s-worker/0*    active    idle   10.1.232.51
-temporal-k8s-worker/1     active    idle   10.1.232.38
-temporal-k8s/0*           active    idle   10.1.232.44
-temporal-k8s/1            active    idle   10.1.232.37
-temporal-ui-k8s/0*        active    idle   10.1.232.5
+postgresql-k8s/0*         active    idle   10.1.232.60         Primary
+temporal-admin-k8s/0*     active    idle   10.1.232.20
+temporal-k8s-history/0*   active    idle   10.1.232.6
+temporal-k8s-history/1    active    idle   10.1.232.51
+temporal-k8s-matching/0*  active    idle   10.1.232.61
+temporal-k8s-matching/1   active    idle   10.1.232.38
+temporal-k8s-worker/0*    active    idle   10.1.232.42
+temporal-k8s-worker/1     active    idle   10.1.232.23
+temporal-k8s/0*           active    idle   10.1.232.26
+temporal-k8s/1            active    idle   10.1.232.25
+```
+
+To confirm the four scaled services can reach other, you can run
+`juju run temporal-admin-k8s/0 tctl args="adm cl d"`, you should see the
+following:
+
+```
+output: |
+  {
+    "supportedClients": {
+      "temporal-cli": "\u003c2.0.0",
+      "temporal-go": "\u003c2.0.0",
+      "temporal-java": "\u003c2.0.0",
+      "temporal-php": "\u003c2.0.0",
+      "temporal-server": "\u003c2.0.0",
+      "temporal-typescript": "\u003c2.0.0",
+      "temporal-ui": "\u003c3.0.0"
+    },
+    "serverVersion": "1.17.3",
+    "membershipInfo": {
+      "currentHost": {
+        "identity": "10.1.232.25:7233"
+      },
+      "reachableMembers": [
+        "10.1.232.42:6939",
+        "10.1.232.6:6934",
+        "10.1.232.25:6933",
+        "10.1.232.51:6934",
+        "10.1.232.23:6939",
+        "10.1.232.38:6935",
+        "10.1.232.61:6935",
+        "10.1.232.26:6933"
+      ],
+      "rings": [
+        {
+          "role": "frontend",
+          "memberCount": 2,
+          "members": [
+            {
+              "identity": "10.1.232.26:7233"
+            },
+            {
+              "identity": "10.1.232.25:7233"
+            }
+          ]
+        },
+        {
+          "role": "history",
+          "memberCount": 2,
+          "members": [
+            {
+              "identity": "10.1.232.6:7234"
+            },
+            {
+              "identity": "10.1.232.51:7234"
+            }
+          ]
+        },
+        {
+          "role": "matching",
+          "memberCount": 2,
+          "members": [
+            {
+              "identity": "10.1.232.61:7235"
+            },
+            {
+              "identity": "10.1.232.38:7235"
+            }
+          ]
+        },
+        {
+          "role": "worker",
+          "memberCount": 2,
+          "members": [
+            {
+              "identity": "10.1.232.42:7239"
+            },
+            {
+              "identity": "10.1.232.23:7239"
+            }
+          ]
+        }
+      ]
+    },
+    "clusterId": "514dd854-eb26-4e93-9f3c-1355cb8aa99a",
+    "clusterName": "active",
+    "historyShardCount": 4,
+    "persistenceStore": "postgres",
+    "visibilityStore": "postgres",
+    "failoverVersionIncrement": "10",
+    "initialFailoverVersion": "1"
+  }
+result: command succeeded
 ```
 
 ## Removing Replicas
@@ -239,25 +328,23 @@ nodes are showing `Workload=Active` and `Agent=idle`:
 Model     Controller           Cloud/Region        Version  SLA          Timestamp
 temporal  temporal-controller  microk8s/localhost  3.1.0    unsupported  15:18:19+03:00
 
-App                    Version  Status  Scale  Charm               Channel  Rev  Address         Exposed  Message
-postgresql-k8s                  active      1  postgresql-k8s      edge      62  10.152.183.138  no       Primary
-temporal-admin-k8s              active      1  temporal-admin-k8s             1  10.152.183.83   no
-temporal-k8s                    active      1  temporal-k8s                  79  10.152.183.140  no
-temporal-k8s-history            active      1  temporal-k8s                  81  10.152.183.32   no
-temporal-k8s-matching           active      1  temporal-k8s                  80  10.152.183.170  no
-temporal-k8s-worker             active      1  temporal-k8s                  83  10.152.183.116  no
-temporal-ui-k8s                 active      1  temporal-ui-k8s     beta       8  10.152.183.154  no
+App                    Version  Status  Scale  Charm               Channel    Rev  Address         Exposed  Message
+postgresql-k8s         14.7     active      1  postgresql-k8s      14/stable   73  10.152.183.171  no       Primary
+temporal-admin-k8s              active      1  temporal-admin-k8s  edge         4  10.152.183.35   no
+temporal-k8s                    active      2  temporal-k8s                     0  10.152.183.95   no
+temporal-k8s-history            active      2  temporal-k8s                     1  10.152.183.52   no
+temporal-k8s-matching           active      2  temporal-k8s                     2  10.152.183.122  no
+temporal-k8s-worker             active      2  temporal-k8s                     3  10.152.183.134  no
 
-Unit                       Workload  Agent  Address      Ports  Message
-postgresql-k8s/0*          active     idle   10.1.232.50         Primary
-temporal-admin-k8s/0*      active     idle   10.1.232.42
-temporal-k8s-history/0*    active     idle   10.1.232.27
-temporal-k8s-history/1     unknown    idle   10.1.232.48         agent lost, see 'juju show-status-log temporal-k8s-history/1'
-temporal-k8s-matching/0*   active     idle   10.1.232.47
-temporal-k8s-matching/1    unknown    idle   10.1.232.31         agent lost, see 'juju show-status-log temporal-k8s-matching/1'
-temporal-k8s-worker/0*     active     idle   10.1.232.51
-temporal-k8s-worker/1      unknown    idle   10.1.232.38         agent lost, see 'juju show-status-log temporal-k8s-worker/1'
-temporal-k8s/0*            active     idle   10.1.232.44
-temporal-k8s/1             unknown    idle   10.1.232.37         agent lost, see 'juju show-status-log temporal-k8s/1'
-temporal-ui-k8s/0*         active     idle   10.1.232.5
+Unit                      Workload  Agent  Address      Ports  Message
+postgresql-k8s/0*         active    idle   10.1.232.60         Primary
+temporal-admin-k8s/0*     active    idle   10.1.232.20
+temporal-k8s-history/0*   active    idle   10.1.232.6
+temporal-k8s-history/1    active    idle   10.1.232.51         agent lost, see 'juju show-status-log temporal-k8s-history/1'
+temporal-k8s-matching/0*  active    idle   10.1.232.61
+temporal-k8s-matching/1   active    idle   10.1.232.38         agent lost, see 'juju show-status-log temporal-k8s-matching/1'
+temporal-k8s-worker/0*    active    idle   10.1.232.42
+temporal-k8s-worker/1     active    idle   10.1.232.23         agent lost, see 'juju show-status-log temporal-k8s-worker/1'
+temporal-k8s/0*           active    idle   10.1.232.26
+temporal-k8s/1            active    idle   10.1.232.25         agent lost, see 'juju show-status-log temporal-k8s/1'
 ```
