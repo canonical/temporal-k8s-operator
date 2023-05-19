@@ -59,6 +59,12 @@ juju relate temporal-k8s-worker:visibility postgresql-k8s:database
 juju relate temporal-k8s-worker:admin temporal-admin-k8s:admin
 ```
 
+Note: The
+[nginx-ingress-integrator](https://charmhub.io/nginx-ingress-integrator) and
+[temporal-ui-k8s](https://charmhub.io/temporal-ui-k8s) charms should be deployed
+and integrated with the `temporal-k8s` charm as outlined in
+[here](../../README.md).
+
 Once deployed, you can run `juju status --watch 1s` to watch the status of your
 applications. It may take a few minutes to see the following output where all
 nodes are showing `Workload=Active` and `Agent=idle`:
@@ -85,8 +91,9 @@ temporal-k8s/0*           active    idle   10.1.232.26
 ```
 
 To confirm the four services can reach other, you can run
-`juju run temporal-admin-k8s/0 tctl args="adm cl d"`, you should see the
-following:
+`juju run temporal-admin-k8s/0 tctl args="adm cl d"`, you should see the output
+below. As can be seen from the output, the reachable members use the k8s pod IP
+address to communicate with other services.
 
 ```
 output: |
