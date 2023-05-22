@@ -1,23 +1,23 @@
-The Temporal Server consists of four independently scalable services:
+Excerpt from
+[Temporal's documentation](https://docs.temporal.io/clusters#temporal-server):
 
-- Frontend gateway: for rate limiting, routing, authorizing.
-- History subsystem: maintains data (mutable state, queues, and timers).
-- Matching subsystem: hosts Task Queues for dispatching.
-- Worker Service: for internal background Workflows.
-
-For example, a real-life production deployment can have 5 Frontend, 15 History,
-17 Matching, and 3 Worker Services per cluster.
-
-The Temporal Server services can run independently or be grouped together into
-shared processes on one or more physical or virtual machines. For live
-(production) environments, we recommend that each service runs independently,
-because each one has different scaling requirements and troubleshooting becomes
-easier. The History, Matching, and Worker Services can scale horizontally within
-a Cluster. The Frontend Service scales differently than the others because it
-has no sharding or partitioning; it is just stateless.
-
-(The above was extracted from
-[Temporal's documentation](https://docs.temporal.io/clusters#temporal-server))
+> The Temporal Server consists of four independently scalable services:
+>
+> - Frontend gateway: for rate limiting, routing, authorizing.
+> - History subsystem: maintains data (mutable state, queues, and timers).
+> - Matching subsystem: hosts Task Queues for dispatching.
+> - Worker Service: for internal background Workflows.
+>
+> For example, a real-life production deployment can have 5 Frontend, 15
+> History, 17 Matching, and 3 Worker Services per cluster.
+>
+> The Temporal Server services can run independently or be grouped together into
+> shared processes on one or more physical or virtual machines. For live
+> (production) environments, we recommend that each service runs independently,
+> because each one has different scaling requirements and troubleshooting
+> becomes easier. The History, Matching, and Worker Services can scale
+> horizontally within a Cluster. The Frontend Service scales differently than
+> the others because it has no sharding or partitioning; it is just stateless.
 
 The Temporal server charm is designed such that each service can be deployed as
 a separate application which can then be connected together by integrating with
@@ -90,7 +90,7 @@ temporal-k8s-worker/0*    active    idle   10.1.232.42
 temporal-k8s/0*           active    idle   10.1.232.26
 ```
 
-To confirm the four services can reach other, you can run
+To confirm the four services can reach each other, you can run
 `juju run temporal-admin-k8s/0 tctl args="adm cl d"`, you should see the output
 below. As can be seen from the output, the reachable members use the k8s pod IP
 address to communicate with other services.
@@ -215,7 +215,7 @@ temporal-k8s/0*           active    idle   10.1.232.26
 temporal-k8s/1            active    idle   10.1.232.25
 ```
 
-To confirm the four scaled services can reach other, you can run
+To confirm the four scaled services can reach each other, you can run
 `juju run temporal-admin-k8s/0 tctl args="adm cl d"`, you should see the
 following:
 
