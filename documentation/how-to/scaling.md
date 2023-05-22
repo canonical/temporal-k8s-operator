@@ -28,9 +28,9 @@ application as follows:
 
 ```bash
 juju deploy temporal-k8s --config services="frontend"
-juju deploy temporal-k8s-matching --config services="matching"
-juju deploy temporal-k8s-history --config services="history"
-juju deploy temporal-k8s-worker --config services="worker"
+juju deploy temporal-k8s --config services="matching" temporal-k8s-matching
+juju deploy temporal-k8s --config services="history" temporal-k8s-history
+juju deploy temporal-k8s --config services="worker" temporal-k8s-worker
 
 # Deploy database charm and relate to the frontend service
 juju deploy postgresql-k8s --channel 14/stable --trust
