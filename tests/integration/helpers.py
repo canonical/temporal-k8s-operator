@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
@@ -19,6 +20,29 @@ APP_NAME = METADATA["name"]
 APP_NAME_ADMIN = "temporal-admin-k8s"
 
 
+async def scale(ops_test: OpsTest, app, units):
+    """Scale the application to the provided number and wait for idle.
+
+    Args:
+        ops_test: PyTest object.
+        app: Application to be scaled.
+        units: Number of units required.
+    """
+    await ops_test.model.applications[app].scale(scale=units)
+
+    # Wait for model to settle
+    await ops_test.model.wait_for_idle(
+        apps=[app],
+        status="active",
+        idle_period=30,
+        raise_on_blocked=True,
+        timeout=300,
+        wait_for_exact_units=units,
+    )
+
+    assert len(ops_test.model.applications[app].units) == units
+
+
 async def run_sample_workflow(ops_test: OpsTest):
     """Connects a client and runs a basic Temporal workflow.
 
@@ -35,6 +59,24 @@ async def run_sample_workflow(ops_test: OpsTest):
     logger.info("temporal worker running")
     name = "Jean-luc"
     result = await trigger_workflow(url, name)
+    logger.info(f"result: {result}")
     p.terminate()
 
     assert result == f"Hello, {name}!"
+
+
+async def create_default_namespace(ops_test: OpsTest):
+    """Creates default namespace on Temporal server using tctl.
+
+    Args:
+        ops_test: PyTest object.
+    """
+    # Register default namespace from admin charm.
+    action = (
+        await ops_test.model.applications[APP_NAME_ADMIN]
+        .units[0]
+        .run_action("tctl", args="--ns default namespace register -rd 3")
+    )
+    result = (await action.wait()).results
+    logger.info(f"tctl result: {result}")
+    assert "result" in result and result["result"] == "command succeeded"

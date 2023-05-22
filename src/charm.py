@@ -33,7 +33,14 @@ VISIBILITY_DB_NAME = "temporal-k8s_visibility"
 
 logger = logging.getLogger(__name__)
 
-SERVER_PORT = 7233
+FRONTEND_PORT_GRPC = 7233
+FRONTEND_PORT_HTTP = 6933
+MATCHING_PORT_GRPC = 7235
+MATCHING_PORT_HTTP = 6935
+HISTORY_PORT_GRPC = 7234
+HISTORY_PORT_HTTP = 6934
+WORKER_PORT_GRPC = 7239
+WORKER_PORT_HTTP = 6939
 PROMETHEUS_PORT = 9090
 
 
@@ -98,10 +105,6 @@ class TemporalK8SCharm(CharmBase):
         self.ui = relations.UI(self)
         self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
 
-        if self.unit.is_leader():
-            # Open server port
-            self.model.unit.open_port(protocol="tcp", port=SERVER_PORT)
-
         # Handle Ingress
         self._require_nginx_route()
 
@@ -125,7 +128,7 @@ class TemporalK8SCharm(CharmBase):
             charm=self,
             service_hostname=self.external_hostname,
             service_name=self.app.name,
-            service_port=SERVER_PORT,
+            service_port=FRONTEND_PORT_GRPC,
             tls_secret_name=self.config["tls-secret-name"],
             backend_protocol="GRPC",
         )
@@ -308,6 +311,38 @@ class TemporalK8SCharm(CharmBase):
         if not self._state.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
 
+    def _open_service_ports(self):
+        """Open the respective ports based on Temporal service."""
+        services = self.config["services"]
+
+        if "matching" in services:
+            self.model.unit.open_port(protocol="tcp", port=MATCHING_PORT_GRPC)
+            self.model.unit.open_port(protocol="tcp", port=MATCHING_PORT_HTTP)
+        else:
+            self.model.unit.close_port(protocol="tcp", port=MATCHING_PORT_GRPC)
+            self.model.unit.close_port(protocol="tcp", port=MATCHING_PORT_HTTP)
+
+        if "frontend" in services:
+            self.model.unit.open_port(protocol="tcp", port=FRONTEND_PORT_GRPC)
+            self.model.unit.open_port(protocol="tcp", port=FRONTEND_PORT_HTTP)
+        else:
+            self.model.unit.close_port(protocol="tcp", port=FRONTEND_PORT_GRPC)
+            self.model.unit.close_port(protocol="tcp", port=FRONTEND_PORT_HTTP)
+
+        if "history" in services:
+            self.model.unit.open_port(protocol="tcp", port=HISTORY_PORT_GRPC)
+            self.model.unit.open_port(protocol="tcp", port=HISTORY_PORT_HTTP)
+        else:
+            self.model.unit.close_port(protocol="tcp", port=HISTORY_PORT_GRPC)
+            self.model.unit.close_port(protocol="tcp", port=HISTORY_PORT_HTTP)
+
+        if "worker" in services:
+            self.model.unit.open_port(protocol="tcp", port=WORKER_PORT_GRPC)
+            self.model.unit.open_port(protocol="tcp", port=WORKER_PORT_HTTP)
+        else:
+            self.model.unit.close_port(protocol="tcp", port=WORKER_PORT_GRPC)
+            self.model.unit.close_port(protocol="tcp", port=WORKER_PORT_HTTP)
+
     def _update(self, event):
         """Update the Temporal server configuration and replan its execution.
 
@@ -319,6 +354,9 @@ class TemporalK8SCharm(CharmBase):
         except ValueError as err:
             self.unit.status = BlockedStatus(str(err))
             return
+
+        if self.unit.is_leader():
+            self._open_service_ports()
 
         container = self.unit.get_container(self.name)
         if not container.can_connect():
@@ -344,6 +382,9 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_PORT": visibility_conn["port"],
                 "VISIBILITY_USER": visibility_conn["user"],
                 "VISIBILITY_PSWD": visibility_conn["password"],
+                "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.bind_address),
+                # TODO(kelkawi-a): do not assume the app is always deployed with this name.
+                "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
             }
         )
 

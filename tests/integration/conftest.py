@@ -7,7 +7,7 @@ import logging
 
 import pytest
 import pytest_asyncio
-from helpers import APP_NAME, APP_NAME_ADMIN, METADATA
+from helpers import APP_NAME, APP_NAME_ADMIN, METADATA, create_default_namespace
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -39,15 +39,7 @@ async def deploy(ops_test: OpsTest):
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
 
-        # Register default namespace from admin charm.
-        action = (
-            await ops_test.model.applications[APP_NAME_ADMIN]
-            .units[0]
-            .run_action("tctl", args="--ns default namespace register -rd 3")
-        )
-        result = (await action.wait()).results
-        logger.info(f"tctl result: {result}")
-        assert "result" in result and result["result"] == "command succeeded"
+        await create_default_namespace(ops_test)
 
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=300)
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
