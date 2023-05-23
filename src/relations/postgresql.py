@@ -28,7 +28,6 @@ class Postgresql(framework.Object):
 
         # Handle db:pgsql and visibility:pgsql relations. The "db" and
         # "visibility" strings in this code block reflect the relation names.
-        # charm.db = DatabaseRequires(charm, relation_name=relation_name, database_name=db_name)
         charm.framework.observe(charm.db.on.database_created, self._on_database_changed)
         charm.framework.observe(charm.db.on.endpoints_changed, self._on_database_changed)
         charm.framework.observe(charm.on.db_relation_broken, self._on_database_relation_broken)
