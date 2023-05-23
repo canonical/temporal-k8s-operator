@@ -14,7 +14,11 @@ on:
       - track/**
 
 jobs:
+  integration-tests:
+    uses: ./.github/workflows/integration_test.yaml
+    secrets: inherit
   publish-to-edge:
+    needs: [integration-tests]
     uses: canonical/operator-workflows/.github/workflows/test_and_publish_charm.yaml@main
     secrets: inherit
     with:
@@ -22,3 +26,4 @@ jobs:
       integration-test-provider: microk8s
       integration-test-provider-channel: 1.25-strict/stable
       integration-test-juju-channel: 3.1/stable
+      integration-test-modules: '["test_charm"]'
