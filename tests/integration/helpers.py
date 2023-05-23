@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 APP_NAME_ADMIN = "temporal-admin-k8s"
+APP_NAME_UI = "temporal-ui-k8s"
 
 
 async def scale(ops_test: OpsTest, app, units):

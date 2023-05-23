@@ -7,8 +7,9 @@
 import logging
 
 import pytest
+import requests
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
-from helpers import run_sample_workflow
+from helpers import APP_NAME_UI, run_sample_workflow
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,16 @@ logger = logging.getLogger(__name__)
 @pytest.mark.usefixtures("deploy")
 class TestDeployment:
     """Integration tests for Temporal charm."""
+
+    async def test_ui_relation(self, ops_test: OpsTest):
+        """Perform GET request on the Temporal UI host."""
+        status = await ops_test.model.get_status()  # noqa: F821
+        address = status["applications"][APP_NAME_UI]["units"][f"{APP_NAME_UI}/0"]["address"]
+        url = f"http://{address}:8080"
+        logger.info("curling app address: %s", url)
+
+        response = requests.get(url, timeout=300)
+        assert response.status_code == 200
 
     async def test_basic_client(self, ops_test: OpsTest):
         """Connects a client and runs a basic Temporal workflow."""
