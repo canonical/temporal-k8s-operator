@@ -47,10 +47,12 @@ class Postgresql(framework.Object):
             event.defer()
             return
 
-        if self.charm.unit.is_leader():
-            self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
-            self.charm._update_db_connections(event)
-            self.charm._update(event)
+        if not self.charm.unit.is_leader():
+            return
+
+        self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
+        self.charm._update_db_connections(event)
+        self.charm._update(event)
 
     @log_event_handler(logger)
     def _on_database_relation_broken(self, event: DatabaseEvent) -> None:
