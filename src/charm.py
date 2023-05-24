@@ -86,7 +86,7 @@ class TemporalK8SCharm(CharmBase):
         # Handle postgresql relation.
         self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME)
         self.visibility = DatabaseRequires(self, relation_name="visibility", database_name=VISIBILITY_DB_NAME)
-        self.postgres_actions = Postgresql(self)
+        self.postgresql = Postgresql(self)
 
         # Handle admin and ui relations.
         self.admin = Admin(self)
@@ -190,29 +190,6 @@ class TemporalK8SCharm(CharmBase):
         """
         self.unit.status = WaitingStatus("configuring temporal")
         self._update(event)
-
-    def _update_db_connections(self, event):
-        """Assign nested value in peer relation.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if self._state.database_connections is None:
-            self._state.database_connections = {"db": None, "visibility": None}
-        host, port = event.endpoints.split(",", 1)[0].split(":")
-        name = event.relation.name
-
-        db_conn = {
-            "dbname": DB_NAME if name == "db" else VISIBILITY_DB_NAME,
-            "host": host,
-            "port": port,
-            "password": event.password,
-            "user": event.username,
-        }
-
-        database_connections = self._state.database_connections
-        database_connections[name] = db_conn
-        self._state.database_connections = database_connections
 
     @log_event_handler(logger)
     def _on_restart_action(self, event):
