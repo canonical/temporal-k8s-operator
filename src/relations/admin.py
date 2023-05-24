@@ -1,14 +1,14 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Define the Temporal server relations."""
+"""Define the Temporal server admin relation."""
 
 import json
 import logging
 
 from ops import framework
 from ops.charm import RelationEvent
-from ops.model import ActiveStatus
+from ops.model import WaitingStatus
 
 from log import log_event_handler
 
@@ -61,7 +61,7 @@ class _AdminEvents(framework.ObjectEvents):
     """Definition for admin:temporal schema changed events.
 
     Attrs:
-        schema_changed: abc
+        schema_changed: schema changed event.
     """
 
     schema_changed = framework.EventSource(SchemaChangedEvent)
@@ -86,6 +86,8 @@ class Admin(framework.Object):
         self.charm = charm
         charm.framework.observe(charm.on.admin_relation_joined, self._on_admin_relation_joined)
         charm.framework.observe(charm.on.admin_relation_changed, self._on_admin_relation_changed)
+        charm.framework.observe(self.on.schema_changed, self._on_schema_changed)
+
         charm.framework.observe(charm.db.on.database_created, self._on_database_changed)
         charm.framework.observe(charm.visibility.on.database_created, self._on_database_changed)
         charm.framework.observe(charm.db.on.endpoints_changed, self._on_database_changed)
@@ -140,6 +142,21 @@ class Admin(framework.Object):
         logger.debug(f"admin:temporal: schema {'is ready' if schema_ready else 'is not ready'}")
         self.on.schema_changed.emit(relation=event.relation, app=event.app, unit=event.unit, schema_ready=schema_ready)
 
+    @log_event_handler(logger)
+    def _on_schema_changed(self, event):
+        """Handle schema becoming ready.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
+        if not self.charm._state.is_ready():
+            event.defer()
+            return
+
+        self.charm.unit.status = WaitingStatus("handling schema ready change")
+        self.charm._state.schema_ready = event.schema_ready
+        self.charm._update(event)
+
     def _provide_db_info(self):
         """Provide DB info to the admin charm."""
         charm = self.charm
@@ -157,43 +174,3 @@ class Admin(framework.Object):
         for relation in admin_relations:
             logger.debug(f"admin:temporal: providing database connections on relation {relation.id}")
             relation.data[charm.app].update({"database_connections": json.dumps(database_connections)})
-
-
-class UI(framework.Object):
-    """Client for ui:temporal relations."""
-
-    def __init__(self, charm):
-        """Construct.
-
-        Args:
-            charm: The charm to attach the hooks to.
-        """
-        super().__init__(charm, "ui")
-        self.charm = charm
-        charm.framework.observe(charm.on.ui_relation_joined, self._on_ui_relation_joined)
-        charm.framework.observe(charm.on.ui_relation_changed, self._on_ui_relation_joined)
-
-    @log_event_handler(logger)
-    def _on_ui_relation_joined(self, event):
-        """Handle new ui:temporal relations.
-
-        Attempt to provide server status to the ui unit.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if self.charm.unit.is_leader():
-            self._provide_server_status()
-
-    def _provide_server_status(self):
-        """Provide server status to the UI charm."""
-        charm = self.charm
-        server_status = charm.model.unit.status == ActiveStatus()
-
-        ui_relations = charm.model.relations["ui"]
-        if not ui_relations:
-            logger.debug("ui:temporal: not providing server status: ui not ready")
-            return
-        for relation in ui_relations:
-            logger.debug(f"ui:temporal: providing server status on relation {relation.id}")
-            relation.data[charm.app].update({"server_status": "ready" if server_status else "blocked"})

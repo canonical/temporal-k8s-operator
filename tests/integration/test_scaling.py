@@ -10,6 +10,7 @@ import pytest_asyncio
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
+    APP_NAME_UI,
     METADATA,
     create_default_namespace,
     run_sample_workflow,
@@ -38,11 +39,12 @@ async def deploy(ops_test: OpsTest):
         )
 
     await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
+    await ops_test.model.deploy(APP_NAME_UI, channel="edge")
     await ops_test.model.deploy("postgresql-k8s", channel="14", trust=True)
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME_ADMIN] + ALL_SERVICES, status="blocked", raise_on_blocked=False, timeout=1200
+            apps=[APP_NAME_ADMIN, APP_NAME_UI] + ALL_SERVICES, status="blocked", raise_on_blocked=False, timeout=1200
         )
         await ops_test.model.wait_for_idle(
             apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
@@ -64,6 +66,11 @@ async def deploy(ops_test: OpsTest):
                 await ops_test.model.integrate(f"{service}:admin", f"{APP_NAME_ADMIN}:admin")
 
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
+
+        await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=180
+        )
 
         await create_default_namespace(ops_test)
 

@@ -94,7 +94,7 @@ class TestCharm(TestCase):
 
         # Simulate db readiness.
         event = make_database_changed_event("db")
-        harness.charm._on_database_changed(event)
+        harness.charm.postgres_actions._on_database_changed(event)
 
         # No plans are set yet.
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
@@ -119,11 +119,11 @@ class TestCharm(TestCase):
 
         # Simulate db readiness.
         event = make_database_changed_event("db")
-        harness.charm._on_database_changed(event)
+        harness.charm.postgres_actions._on_database_changed(event)
 
         # Simulate visibility readiness.
         event = make_database_changed_event("visibility")
-        harness.charm._on_database_changed(event)
+        harness.charm.postgres_actions._on_database_changed(event)
 
         # No plans are set yet.
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
@@ -328,11 +328,11 @@ def simulate_lifecycle(harness):
 
     # Simulate db readiness.
     event = make_database_changed_event("db")
-    harness.charm._on_database_changed(event)
+    harness.charm.postgres_actions._on_database_changed(event)
 
     # Simulate visibility readiness.
     event = make_database_changed_event("visibility")
-    harness.charm._on_database_changed(event)
+    harness.charm.postgres_actions._on_database_changed(event)
 
     # Simulate schema readiness.
     app = type("App", (), {"name": "temporal-k8s"})()

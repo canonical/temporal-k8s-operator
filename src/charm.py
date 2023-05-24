@@ -6,13 +6,11 @@
 
 """Charm definition and helpers."""
 
+import functools
 import logging
 import os
 
-from charms.data_platform_libs.v0.database_requires import (
-    DatabaseEvent,
-    DatabaseRequires,
-)
+from charms.data_platform_libs.v0.database_requires import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
@@ -22,26 +20,23 @@ from ops import main
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
-import relations
+from literals import (
+    DB_NAME,
+    LOG_FILE,
+    PROMETHEUS_PORT,
+    SERVICE_PORTS,
+    VALID_LOG_LEVELS,
+    VISIBILITY_DB_NAME,
+)
 from log import log_event_handler
+
+# import relations
+from relations.admin import Admin
+from relations.postgresql import Postgresql
+from relations.ui import UI
 from state import State
 
-VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
-LOG_FILE = "/var/log/temporal"
-DB_NAME = "temporal-k8s_db"
-VISIBILITY_DB_NAME = "temporal-k8s_visibility"
-
 logger = logging.getLogger(__name__)
-
-FRONTEND_PORT_GRPC = 7233
-FRONTEND_PORT_HTTP = 6933
-MATCHING_PORT_GRPC = 7235
-MATCHING_PORT_HTTP = 6935
-HISTORY_PORT_GRPC = 7234
-HISTORY_PORT_HTTP = 6934
-WORKER_PORT_GRPC = 7239
-WORKER_PORT_HTTP = 6939
-PROMETHEUS_PORT = 9090
 
 
 def render(template_name, context):
@@ -88,22 +83,14 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.restart_action, self._on_restart_action)
 
-        # Handle db:pgsql and visibility:pgsql relations. The "db" and
-        # "visibility" strings in this code block reflect the relation names.
+        # Handle postgresql relation.
         self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME)
-        self.framework.observe(self.db.on.database_created, self._on_database_changed)
-        self.framework.observe(self.db.on.endpoints_changed, self._on_database_changed)
-        self.framework.observe(self.on.db_relation_broken, self._on_database_relation_broken)
-
         self.visibility = DatabaseRequires(self, relation_name="visibility", database_name=VISIBILITY_DB_NAME)
-        self.framework.observe(self.visibility.on.database_created, self._on_database_changed)
-        self.framework.observe(self.visibility.on.endpoints_changed, self._on_database_changed)
-        self.framework.observe(self.on.visibility_relation_broken, self._on_database_relation_broken)
+        self.postgres_actions = Postgresql(self)
 
-        # Handle admin:temporal relation.
-        self.admin = relations.Admin(self)
-        self.ui = relations.UI(self)
-        self.framework.observe(self.admin.on.schema_changed, self._on_schema_changed)
+        # Handle admin and ui relations.
+        self.admin = Admin(self)
+        self.ui = UI(self)
 
         # Handle Ingress
         self._require_nginx_route()
@@ -128,7 +115,7 @@ class TemporalK8SCharm(CharmBase):
             charm=self,
             service_hostname=self.external_hostname,
             service_name=self.app.name,
-            service_port=FRONTEND_PORT_GRPC,
+            service_port=SERVICE_PORTS["frontend"]["grpc"],
             tls_secret_name=self.config["tls-secret-name"],
             backend_protocol="GRPC",
         )
@@ -204,37 +191,6 @@ class TemporalK8SCharm(CharmBase):
         self.unit.status = WaitingStatus("configuring temporal")
         self._update(event)
 
-    @log_event_handler(logger)
-    def _on_database_changed(self, event: DatabaseEvent) -> None:
-        """Handle database creation/change events.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self._state.is_ready():
-            event.defer()
-            return
-
-        if self.unit.is_leader():
-            self.unit.status = WaitingStatus(f"handling {event.relation.name} change")
-            self._update_db_connections(event)
-            self._update(event)
-
-    @log_event_handler(logger)
-    def _on_database_relation_broken(self, event: DatabaseEvent) -> None:
-        """Handle broken relations with the database.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self._state.is_ready():
-            event.defer()
-            return
-
-        if self.unit.is_leader():
-            self._state.database_connections[event.relation.name] = None
-            self._update(event)
-
     def _update_db_connections(self, event):
         """Assign nested value in peer relation.
 
@@ -257,22 +213,6 @@ class TemporalK8SCharm(CharmBase):
         database_connections = self._state.database_connections
         database_connections[name] = db_conn
         self._state.database_connections = database_connections
-
-    @log_event_handler(logger)
-    def _on_schema_changed(self, event):
-        """Handle schema becoming ready.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self._state.is_ready():
-            event.defer()
-            return
-
-        if self.unit.is_leader():
-            self.unit.status = WaitingStatus("handling schema ready change")
-            self._state.schema_ready = event.schema_ready
-            self._update(event)
 
     @log_event_handler(logger)
     def _on_restart_action(self, event):
@@ -315,33 +255,16 @@ class TemporalK8SCharm(CharmBase):
         """Open the respective ports based on Temporal service."""
         services = self.config["services"]
 
-        if "matching" in services:
-            self.model.unit.open_port(protocol="tcp", port=MATCHING_PORT_GRPC)
-            self.model.unit.open_port(protocol="tcp", port=MATCHING_PORT_HTTP)
-        else:
-            self.model.unit.close_port(protocol="tcp", port=MATCHING_PORT_GRPC)
-            self.model.unit.close_port(protocol="tcp", port=MATCHING_PORT_HTTP)
+        open_port = functools.partial(self.model.unit.open_port, protocol="tcp")
+        close_port = functools.partial(self.model.unit.close_port, protocol="tcp")
 
-        if "frontend" in services:
-            self.model.unit.open_port(protocol="tcp", port=FRONTEND_PORT_GRPC)
-            self.model.unit.open_port(protocol="tcp", port=FRONTEND_PORT_HTTP)
-        else:
-            self.model.unit.close_port(protocol="tcp", port=FRONTEND_PORT_GRPC)
-            self.model.unit.close_port(protocol="tcp", port=FRONTEND_PORT_HTTP)
-
-        if "history" in services:
-            self.model.unit.open_port(protocol="tcp", port=HISTORY_PORT_GRPC)
-            self.model.unit.open_port(protocol="tcp", port=HISTORY_PORT_HTTP)
-        else:
-            self.model.unit.close_port(protocol="tcp", port=HISTORY_PORT_GRPC)
-            self.model.unit.close_port(protocol="tcp", port=HISTORY_PORT_HTTP)
-
-        if "worker" in services:
-            self.model.unit.open_port(protocol="tcp", port=WORKER_PORT_GRPC)
-            self.model.unit.open_port(protocol="tcp", port=WORKER_PORT_HTTP)
-        else:
-            self.model.unit.close_port(protocol="tcp", port=WORKER_PORT_GRPC)
-            self.model.unit.close_port(protocol="tcp", port=WORKER_PORT_HTTP)
+        for service, ports in SERVICE_PORTS.items():
+            if service in services:
+                open_port(port=ports["grpc"])
+                open_port(port=ports["http"])
+            else:
+                close_port(port=ports["grpc"])
+                close_port(port=ports["http"])
 
     def _update(self, event):
         """Update the Temporal server configuration and replan its execution.
