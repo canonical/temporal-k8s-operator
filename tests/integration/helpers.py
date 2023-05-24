@@ -5,13 +5,15 @@
 """Temporal charm integration test helpers."""
 
 import logging
-from multiprocessing import Process
+import time
 from pathlib import Path
 
 import yaml
 from pytest_operator.plugin import OpsTest
-from temporal_client.run_worker import sync_run_worker
-from temporal_client.trigger_workflow import trigger_workflow
+from temporal_client.activities import say_hello
+from temporal_client.workflows import GreetingWorkflow, SayHello
+from temporalio.client import Client
+from temporalio.worker import Worker
 
 logger = logging.getLogger(__name__)
 
@@ -50,20 +52,59 @@ async def run_sample_workflow(ops_test: OpsTest):
     Args:
         ops_test: PyTest object.
     """
-    status = await ops_test.model.get_status()  # noqa: F821
-    address = status["applications"][APP_NAME].public_address
-    url = f"{address}:7233"
+    url = await get_application_url(ops_test, application=APP_NAME, port=7233)
     logger.info("running workflow on app address: %s", url)
 
-    p = Process(target=sync_run_worker, args=[url])
-    p.start()
-    logger.info("temporal worker running")
-    name = "Jean-luc"
-    result = await trigger_workflow(url, name)
-    logger.info(f"result: {result}")
-    p.terminate()
+    client = await Client.connect(url)
 
-    assert result == f"Hello, {name}!"
+    # Run a worker for the workflow
+    async with Worker(client, task_queue="my-task-queue", workflows=[SayHello], activities=[say_hello]):
+        name = "Jean-luc"
+        result = await client.execute_workflow(SayHello.run, name, id="my-workflow-id", task_queue="my-task-queue")
+        logger.info(f"result: {result}")
+        assert result == f"Hello, {name}!"
+
+
+async def run_signal_workflow(ops_test: OpsTest):
+    """Connects a client and runs a basic Temporal workflow.
+
+    Args:
+        ops_test: PyTest object.
+    """
+    url = await get_application_url(ops_test, application=APP_NAME, port=7233)
+    logger.info("running workflow on app address: %s", url)
+
+    client = await Client.connect(url)
+    # While the worker is running, use the client to start the workflow.
+    # Note, in many production setups, the client would be in a completely
+    # separate process from the worker.
+    handle = await client.start_workflow(
+        GreetingWorkflow.run,
+        id="hello-signal-workflow-id",
+        task_queue="hello-signal-task-queue",
+    )
+
+    # Run a worker for the workflow
+    async with Worker(
+        client,
+        task_queue="hello-signal-task-queue",
+        workflows=[GreetingWorkflow],
+    ):
+
+        # Send a few signals for names, then signal it to exit
+        await handle.signal(GreetingWorkflow.submit_greeting, "user1")
+        await handle.signal(GreetingWorkflow.submit_greeting, "user2")
+        await handle.signal(GreetingWorkflow.submit_greeting, "user3")
+
+        await _simulate_db_relation_broken(ops_test)
+
+        await handle.signal(GreetingWorkflow.submit_greeting, "user4")
+        await handle.signal(GreetingWorkflow.exit)
+
+        # Show result
+        result = await handle.result()
+        logger.info(f"Signal Result: {result}")
+        assert result == ["Hello, user1", "Hello, user2", "Hello, user3", "Hello, user4"]
 
 
 async def create_default_namespace(ops_test: OpsTest):
@@ -81,3 +122,57 @@ async def create_default_namespace(ops_test: OpsTest):
     result = (await action.wait()).results
     logger.info(f"tctl result: {result}")
     assert "result" in result and result["result"] == "command succeeded"
+
+
+async def get_application_url(ops_test: OpsTest, application, port):
+    """Returns application URL from the model.
+
+    Args:
+        ops_test: PyTest object.
+        application: Name of the application.
+        port: Port number of the URL.
+
+    Returns:
+        Application URL of the form {address}:{port}
+    """
+    status = await ops_test.model.get_status()  # noqa: F821
+    address = status["applications"][application].public_address
+    return f"{address}:{port}"
+
+
+async def get_unit_url(ops_test: OpsTest, application, unit, port, protocol="http"):
+    """Returns unit URL from the model.
+
+    Args:
+        ops_test: PyTest object.
+        application: Name of the application.
+        unit: Number of the unit.
+        port: Port number of the URL.
+        protocol: Transfer protocol (default: http).
+
+    Returns:
+        Unit URL of the form {protocol}://{address}:{port}
+    """
+    status = await ops_test.model.get_status()  # noqa: F821
+    address = status["applications"][application]["units"][f"{APP_NAME_UI}/{unit}"]["address"]
+    return f"{protocol}://{address}:{port}"
+
+
+async def _simulate_db_relation_broken(ops_test: OpsTest):
+    """Simulates breaking the db and visibility relations and re-integrating them.
+
+    Args:
+        ops_test: PyTest object.
+    """
+    await ops_test.model.applications[APP_NAME].remove_relation(f"{APP_NAME}:db", "postgresql-k8s:database")
+    await ops_test.model.applications[APP_NAME].remove_relation(f"{APP_NAME}:visibility", "postgresql-k8s:database")
+    time.sleep(20)
+
+    async with ops_test.fast_forward():
+        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=180)
+
+        await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
+        await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
+        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
+
+        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"

@@ -9,7 +9,7 @@ import logging
 import pytest
 import requests
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
-from helpers import APP_NAME_UI, run_sample_workflow
+from helpers import APP_NAME_UI, get_unit_url, run_sample_workflow, run_signal_workflow
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -22,9 +22,7 @@ class TestDeployment:
 
     async def test_ui_relation(self, ops_test: OpsTest):
         """Perform GET request on the Temporal UI host."""
-        status = await ops_test.model.get_status()  # noqa: F821
-        address = status["applications"][APP_NAME_UI]["units"][f"{APP_NAME_UI}/0"]["address"]
-        url = f"http://{address}:8080"
+        url = await get_unit_url(ops_test, application=APP_NAME_UI, unit=0, port=8080)
         logger.info("curling app address: %s", url)
 
         response = requests.get(url, timeout=300)
@@ -33,3 +31,12 @@ class TestDeployment:
     async def test_basic_client(self, ops_test: OpsTest):
         """Connects a client and runs a basic Temporal workflow."""
         await run_sample_workflow(ops_test)
+
+    async def test_db_relation_broken(self, ops_test: OpsTest):
+        """Test backup and restore functionality.
+
+        This tests the charm's ability to continue workflow execution after simulating
+        a crash in the db relation. Essentially, it should prove that the charm is stateless
+        and relies only on the db to store its workflow execution status.
+        """
+        await run_signal_workflow(ops_test)

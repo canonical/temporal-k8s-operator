@@ -77,6 +77,8 @@ async def deploy(ops_test: OpsTest):
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=300)
         assert ops_test.model.applications["temporal-k8s"].units[0].workload_status == "active"
 
+        await run_sample_workflow(ops_test)
+
 
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("deploy")
