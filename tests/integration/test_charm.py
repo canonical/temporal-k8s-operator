@@ -32,11 +32,11 @@ class TestDeployment:
         """Connects a client and runs a basic Temporal workflow."""
         await run_sample_workflow(ops_test)
 
-    async def test_db_relation_broken(self, ops_test: OpsTest):
+    async def test_charm_crash(self, ops_test: OpsTest):
         """Test backup and restore functionality.
 
         This tests the charm's ability to continue workflow execution after simulating
-        a crash in the db relation. Essentially, it should prove that the charm is stateless
+        a crash in the charm. Essentially, it should prove that the charm is stateless
         and relies only on the db to store its workflow execution status.
         """
         await run_signal_workflow(ops_test)

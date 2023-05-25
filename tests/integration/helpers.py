@@ -71,7 +71,7 @@ async def run_signal_workflow(ops_test: OpsTest):
         ops_test: PyTest object.
     """
     url = await get_application_url(ops_test, application=APP_NAME, port=7233)
-    logger.info("running workflow on app address: %s", url)
+    logger.info("running signal workflow on app address: %s", url)
 
     client = await Client.connect(url)
 
@@ -96,19 +96,15 @@ async def run_signal_workflow(ops_test: OpsTest):
         await handle.signal(GreetingWorkflow.submit_greeting, "user2")
         await handle.signal(GreetingWorkflow.submit_greeting, "user3")
 
-        result = await handle.result()
-        logger.info(f"Signal Result: {result}")
-        assert result == ["Hello, user1", "Hello, user2", "Hello, user3"]
-
         await _simulate_charm_crash(ops_test)
 
         url = await get_application_url(ops_test, application=APP_NAME, port=7233)
 
-        client = await Client.connect(url)
-        handle = client.get_workflow_handle("hello-signal-workflow-id")
+        new_client = await Client.connect(url)
+        handle = new_client.get_workflow_handle("hello-signal-workflow-id")
 
         async with Worker(
-            client,
+            new_client,
             task_queue="hello-signal-task-queue",
             workflows=[GreetingWorkflow],
         ):
