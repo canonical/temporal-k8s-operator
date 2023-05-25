@@ -50,7 +50,7 @@ class Postgresql(framework.Object):
 
         if not self.charm.unit.is_leader():
             return
-        
+
         self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
         if self.charm._state.database_connections is None:
             self.charm._state.database_connections = {"db": None, "visibility": None}

@@ -5,7 +5,6 @@
 """Temporal charm integration test helpers."""
 
 import logging
-import time
 from pathlib import Path
 
 import yaml
@@ -75,14 +74,6 @@ async def run_signal_workflow(ops_test: OpsTest):
     logger.info("running workflow on app address: %s", url)
 
     client = await Client.connect(url)
-    # While the worker is running, use the client to start the workflow.
-    # Note, in many production setups, the client would be in a completely
-    # separate process from the worker.
-    handle = await client.start_workflow(
-        GreetingWorkflow.run,
-        id="hello-signal-workflow-id",
-        task_queue="hello-signal-task-queue",
-    )
 
     # Run a worker for the workflow
     async with Worker(
@@ -91,20 +82,43 @@ async def run_signal_workflow(ops_test: OpsTest):
         workflows=[GreetingWorkflow],
     ):
 
+        # While the worker is running, use the client to start the workflow.
+        # Note, in many production setups, the client would be in a completely
+        # separate process from the worker.
+        handle = await client.start_workflow(
+            GreetingWorkflow.run,
+            id="hello-signal-workflow-id",
+            task_queue="hello-signal-task-queue",
+        )
+
         # Send a few signals for names, then signal it to exit
         await handle.signal(GreetingWorkflow.submit_greeting, "user1")
         await handle.signal(GreetingWorkflow.submit_greeting, "user2")
         await handle.signal(GreetingWorkflow.submit_greeting, "user3")
 
-        await _simulate_db_relation_broken(ops_test)
-
-        await handle.signal(GreetingWorkflow.submit_greeting, "user4")
-        await handle.signal(GreetingWorkflow.exit)
-
-        # Show result
         result = await handle.result()
         logger.info(f"Signal Result: {result}")
-        assert result == ["Hello, user1", "Hello, user2", "Hello, user3", "Hello, user4"]
+        assert result == ["Hello, user1", "Hello, user2", "Hello, user3"]
+
+        await _simulate_charm_crash(ops_test)
+
+        url = await get_application_url(ops_test, application=APP_NAME, port=7233)
+
+        client = await Client.connect(url)
+        handle = client.get_workflow_handle("hello-signal-workflow-id")
+
+        async with Worker(
+            client,
+            task_queue="hello-signal-task-queue",
+            workflows=[GreetingWorkflow],
+        ):
+            await handle.signal(GreetingWorkflow.submit_greeting, "user4")
+            await handle.signal(GreetingWorkflow.exit)
+
+            # Show result
+            result = await handle.result()
+            logger.info(f"Signal Result: {result}")
+            assert result == ["Hello, user1", "Hello, user2", "Hello, user3", "Hello, user4"]
 
 
 async def create_default_namespace(ops_test: OpsTest):
@@ -158,21 +172,40 @@ async def get_unit_url(ops_test: OpsTest, application, unit, port, protocol="htt
     return f"{protocol}://{address}:{port}"
 
 
-async def _simulate_db_relation_broken(ops_test: OpsTest):
-    """Simulates breaking the db and visibility relations and re-integrating them.
+async def _simulate_charm_crash(ops_test: OpsTest):
+    """Simulates the Temporal charm crashing and being re-deployed.
 
     Args:
         ops_test: PyTest object.
     """
-    await ops_test.model.applications[APP_NAME].remove_relation(f"{APP_NAME}:db", "postgresql-k8s:database")
-    await ops_test.model.applications[APP_NAME].remove_relation(f"{APP_NAME}:visibility", "postgresql-k8s:database")
-    time.sleep(20)
+    await ops_test.model.applications[APP_NAME].destroy(force=True)
+    await ops_test.model.block_until(lambda: APP_NAME not in ops_test.model.applications)
+
+    charm = await ops_test.build_charm(".")
+    resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
+
+    # Deploy temporal server, temporal admin and postgresql charms.
+    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME, num_units=1)
 
     async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=180)
+        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=600)
 
-        await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
-        await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
+        await perform_temporal_integrations(ops_test)
 
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+
+async def perform_temporal_integrations(ops_test: OpsTest):
+    """Integrate Temporal charm with postgresql, admin and ui charms.
+
+    Args:
+        ops_test: PyTest object.
+    """
+    await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
+    await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
+    await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
+    await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
+    await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=180
+    )
+
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
