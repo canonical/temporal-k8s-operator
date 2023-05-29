@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 from pytest_operator.plugin import OpsTest
 from temporal_client.activities import say_hello
-from temporal_client.workflows import GreetingWorkflow, SayHello
+from temporal_client.workflows import SayHello
 from temporalio.client import Client
 from temporalio.worker import Worker
 
@@ -64,59 +64,6 @@ async def run_sample_workflow(ops_test: OpsTest):
         assert result == f"Hello, {name}!"
 
 
-async def run_signal_workflow(ops_test: OpsTest):
-    """Connects a client and runs a basic Temporal workflow.
-
-    Args:
-        ops_test: PyTest object.
-    """
-    url = await get_application_url(ops_test, application=APP_NAME, port=7233)
-    logger.info("running signal workflow on app address: %s", url)
-
-    client = await Client.connect(url)
-
-    # Run a worker for the workflow
-    async with Worker(
-        client,
-        task_queue="hello-signal-task-queue",
-        workflows=[GreetingWorkflow],
-    ):
-
-        # While the worker is running, use the client to start the workflow.
-        # Note, in many production setups, the client would be in a completely
-        # separate process from the worker.
-        handle = await client.start_workflow(
-            GreetingWorkflow.run,
-            id="hello-signal-workflow-id",
-            task_queue="hello-signal-task-queue",
-        )
-
-        # Send a few signals for names, then signal it to exit
-        await handle.signal(GreetingWorkflow.submit_greeting, "user1")
-        await handle.signal(GreetingWorkflow.submit_greeting, "user2")
-        await handle.signal(GreetingWorkflow.submit_greeting, "user3")
-
-        await _simulate_charm_crash(ops_test)
-
-        url = await get_application_url(ops_test, application=APP_NAME, port=7233)
-
-        new_client = await Client.connect(url)
-        handle = new_client.get_workflow_handle("hello-signal-workflow-id")
-
-        async with Worker(
-            new_client,
-            task_queue="hello-signal-task-queue",
-            workflows=[GreetingWorkflow],
-        ):
-            await handle.signal(GreetingWorkflow.submit_greeting, "user4")
-            await handle.signal(GreetingWorkflow.exit)
-
-            # Show result
-            result = await handle.result()
-            logger.info(f"Signal Result: {result}")
-            assert result == ["Hello, user1", "Hello, user2", "Hello, user3", "Hello, user4"]
-
-
 async def create_default_namespace(ops_test: OpsTest):
     """Creates default namespace on Temporal server using tctl.
 
@@ -168,7 +115,7 @@ async def get_unit_url(ops_test: OpsTest, application, unit, port, protocol="htt
     return f"{protocol}://{address}:{port}"
 
 
-async def _simulate_charm_crash(ops_test: OpsTest):
+async def simulate_charm_crash(ops_test: OpsTest):
     """Simulates the Temporal charm crashing and being re-deployed.
 
     Args:
