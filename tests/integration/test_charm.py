@@ -49,7 +49,6 @@ class TestDeployment:
         a crash in the charm. Essentially, it should prove that the charm is stateless
         and relies only on the db to store its workflow execution status.
         """
-        # await run_signal_workflow(ops_test)
         url = await get_application_url(ops_test, application=APP_NAME, port=7233)
         logger.info("running signal workflow on app address: %s", url)
 
