@@ -13,6 +13,7 @@ from helpers import (
     APP_NAME_UI,
     METADATA,
     create_default_namespace,
+    perform_temporal_integrations,
 )
 from pytest_operator.plugin import OpsTest
 
@@ -40,15 +41,7 @@ async def deploy(ops_test: OpsTest):
             apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
         )
 
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
-        await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
-        await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
-        await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
-        await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=180
-        )
+        await perform_temporal_integrations(ops_test)
 
         await create_default_namespace(ops_test)
 

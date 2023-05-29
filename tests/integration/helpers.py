@@ -5,13 +5,14 @@
 """Temporal charm integration test helpers."""
 
 import logging
-from multiprocessing import Process
 from pathlib import Path
 
 import yaml
 from pytest_operator.plugin import OpsTest
-from temporal_client.run_worker import sync_run_worker
-from temporal_client.trigger_workflow import trigger_workflow
+from temporal_client.activities import say_hello
+from temporal_client.workflows import SayHello
+from temporalio.client import Client
+from temporalio.worker import Worker
 
 logger = logging.getLogger(__name__)
 
@@ -50,20 +51,17 @@ async def run_sample_workflow(ops_test: OpsTest):
     Args:
         ops_test: PyTest object.
     """
-    status = await ops_test.model.get_status()  # noqa: F821
-    address = status["applications"][APP_NAME].public_address
-    url = f"{address}:7233"
+    url = await get_application_url(ops_test, application=APP_NAME, port=7233)
     logger.info("running workflow on app address: %s", url)
 
-    p = Process(target=sync_run_worker, args=[url])
-    p.start()
-    logger.info("temporal worker running")
-    name = "Jean-luc"
-    result = await trigger_workflow(url, name)
-    logger.info(f"result: {result}")
-    p.terminate()
+    client = await Client.connect(url)
 
-    assert result == f"Hello, {name}!"
+    # Run a worker for the workflow
+    async with Worker(client, task_queue="my-task-queue", workflows=[SayHello], activities=[say_hello]):
+        name = "Jean-luc"
+        result = await client.execute_workflow(SayHello.run, name, id="my-workflow-id", task_queue="my-task-queue")
+        logger.info(f"result: {result}")
+        assert result == f"Hello, {name}!"
 
 
 async def create_default_namespace(ops_test: OpsTest):
@@ -81,3 +79,76 @@ async def create_default_namespace(ops_test: OpsTest):
     result = (await action.wait()).results
     logger.info(f"tctl result: {result}")
     assert "result" in result and result["result"] == "command succeeded"
+
+
+async def get_application_url(ops_test: OpsTest, application, port):
+    """Returns application URL from the model.
+
+    Args:
+        ops_test: PyTest object.
+        application: Name of the application.
+        port: Port number of the URL.
+
+    Returns:
+        Application URL of the form {address}:{port}
+    """
+    status = await ops_test.model.get_status()  # noqa: F821
+    address = status["applications"][application].public_address
+    return f"{address}:{port}"
+
+
+async def get_unit_url(ops_test: OpsTest, application, unit, port, protocol="http"):
+    """Returns unit URL from the model.
+
+    Args:
+        ops_test: PyTest object.
+        application: Name of the application.
+        unit: Number of the unit.
+        port: Port number of the URL.
+        protocol: Transfer protocol (default: http).
+
+    Returns:
+        Unit URL of the form {protocol}://{address}:{port}
+    """
+    status = await ops_test.model.get_status()  # noqa: F821
+    address = status["applications"][application]["units"][f"{APP_NAME_UI}/{unit}"]["address"]
+    return f"{protocol}://{address}:{port}"
+
+
+async def simulate_charm_crash(ops_test: OpsTest):
+    """Simulates the Temporal charm crashing and being re-deployed.
+
+    Args:
+        ops_test: PyTest object.
+    """
+    await ops_test.model.applications[APP_NAME].destroy(force=True)
+    await ops_test.model.block_until(lambda: APP_NAME not in ops_test.model.applications)
+
+    charm = await ops_test.build_charm(".")
+    resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
+
+    # Deploy temporal server, temporal admin and postgresql charms.
+    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME, num_units=1)
+
+    async with ops_test.fast_forward():
+        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=600)
+
+        await perform_temporal_integrations(ops_test)
+
+
+async def perform_temporal_integrations(ops_test: OpsTest):
+    """Integrate Temporal charm with postgresql, admin and ui charms.
+
+    Args:
+        ops_test: PyTest object.
+    """
+    await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
+    await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
+    await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
+    await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
+    await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=180
+    )
+
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"

@@ -9,6 +9,7 @@ from charms.data_platform_libs.v0.database_requires import DatabaseEvent
 from ops import framework
 from ops.model import WaitingStatus
 
+from literals import DB_NAME, VISIBILITY_DB_NAME
 from log import log_event_handler
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,21 @@ class Postgresql(framework.Object):
             return
 
         self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
-        self.charm._update_db_connections(event)
+        if self.charm._state.database_connections is None:
+            self.charm._state.database_connections = {"db": None, "visibility": None}
+        host, port = event.endpoints.split(",", 1)[0].split(":")
+        rel_name = event.relation.name
+
+        db_conn = {
+            "dbname": DB_NAME if rel_name == "db" else VISIBILITY_DB_NAME,
+            "host": host,
+            "port": port,
+            "password": event.password,
+            "user": event.username,
+        }
+
+        self._update_db_connections(rel_name, db_conn)
+
         self.charm._update(event)
 
     @log_event_handler(logger)
@@ -66,5 +81,16 @@ class Postgresql(framework.Object):
             return
 
         if self.charm.unit.is_leader():
-            self.charm._state.database_connections[event.relation.name] = None
+            self._update_db_connections(event.relation.name, None)
             self.charm._update(event)
+
+    def _update_db_connections(self, rel_name, db_conn):
+        """Assign nested value in peer relation.
+
+        Args:
+            rel_name: Name of the relation to update.
+            db_conn: Database connection dict.
+        """
+        database_connections = self.charm._state.database_connections
+        database_connections[rel_name] = db_conn
+        self.charm._state.database_connections = database_connections

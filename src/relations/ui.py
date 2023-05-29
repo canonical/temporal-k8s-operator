@@ -42,7 +42,7 @@ class UI(framework.Object):
     def _provide_server_status(self):
         """Provide server status to the UI charm."""
         charm = self.charm
-        server_status = charm.model.unit.status == ActiveStatus()
+        is_active = charm.model.unit.status == ActiveStatus()
 
         ui_relations = charm.model.relations["ui"]
         if not ui_relations:
@@ -50,4 +50,4 @@ class UI(framework.Object):
             return
         for relation in ui_relations:
             logger.debug(f"ui:temporal: providing server status on relation {relation.id}")
-            relation.data[charm.app].update({"server_status": "ready" if server_status else "blocked"})
+            relation.data[charm.app].update({"server_status": "ready" if is_active else "blocked"})
