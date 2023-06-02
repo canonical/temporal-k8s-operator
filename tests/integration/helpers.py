@@ -111,7 +111,7 @@ async def get_unit_url(ops_test: OpsTest, application, unit, port, protocol="htt
         Unit URL of the form {protocol}://{address}:{port}
     """
     status = await ops_test.model.get_status()  # noqa: F821
-    address = status["applications"][application]["units"][f"{APP_NAME_UI}/{unit}"]["address"]
+    address = status["applications"][application]["units"][f"{application}/{unit}"]["address"]
     return f"{protocol}://{address}:{port}"
 
 

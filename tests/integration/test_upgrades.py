@@ -19,6 +19,7 @@ from helpers import (
     perform_temporal_integrations,
     run_sample_workflow,
 )
+from juju.errors import JujuAPIError
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -65,12 +66,18 @@ class TestUpgrade:
 
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
-        await ops_test.model.applications[APP_NAME].refresh(path=str(charm), resources=resources)
+        # This is to accmmodate for a self-resolving error which sometimes appears when Temporal
+        # services attempt to connect to the cluster before the application is ready.
+        try:
+            await ops_test.model.applications[APP_NAME].refresh(path=str(charm), resources=resources)
+            await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
+        except JujuAPIError:
+            await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
         async with ops_test.fast_forward():
-            time.sleep(10)  # time for application to settle
-            await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
-            await ops_test.model.wait_for_idle(status="active")
+            # Delay time for application to settle. This is to accommodate for unit
+            # becoming active while application is still waiting.
+            time.sleep(10)
             assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
             await run_sample_workflow(ops_test)
