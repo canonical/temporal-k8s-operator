@@ -3,7 +3,7 @@
 This is part of the [Charmed Temporal Tutorial](./00-introduction.md). Please
 refer to this page for more information and the overview of the content.
 
-For Temporal [persistance](https://docs.temporal.io/clusters#persistence) and
+For Temporal [persistence](https://docs.temporal.io/clusters#persistence) and
 [visibility](https://docs.temporal.io/clusters#visibility), we use the
 [PostgreSQL K8s](https://charmhub.io/postgresql-k8s) charmed operator. The
 PostgreSQL K8s charm can be deployed and related to the Temporal server.

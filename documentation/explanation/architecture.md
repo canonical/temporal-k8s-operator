@@ -7,7 +7,7 @@ the different charms and their relations. The charmed components are as follows:
 - **Temporal Server**: The
   [Temporal server](https://docs.temporal.io/clusters#temporal-server) is a
   group of four independently scalable services (frontend, history, matching and
-  worker). It is reponsible for state management and task synchronization among
+  worker). It is responsible for state management and task synchronization among
   other functionalities.
 
 - Temporal Admin: The Temporal Admin Tools are a set of command-line utilities
@@ -17,7 +17,7 @@ the different charms and their relations. The charmed components are as follows:
   monitor Temporal workflows and activities.
 
 - PostgreSQL K8s: For Temporal
-  [persistance](https://docs.temporal.io/clusters#persistence) and
+  [persistence](https://docs.temporal.io/clusters#persistence) and
   [visibility](https://docs.temporal.io/clusters#visibility), we use the
   [PostgreSQL K8s](https://charmhub.io/postgresql-k8s) charmed operator. The
   PostgreSQL K8s charm can be deployed and related to the Temporal server.

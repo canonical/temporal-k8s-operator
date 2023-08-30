@@ -5,7 +5,7 @@ refer to this page for more information and the overview of the content.
 
 The [Temporal server](https://docs.temporal.io/clusters#temporal-server) is a
 group of four independently scalable services (frontend, history, matching and
-worker). It is reponsible for state management and task synchronization among
+worker). It is responsible for state management and task synchronization among
 other functionalities.
 
 ## Deploy
