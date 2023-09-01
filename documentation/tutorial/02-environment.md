@@ -1,15 +1,22 @@
 # Environment Setup
 
-This is part of the [Charmed Temporal Tutorial](./00-introduction.md). Please
+This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
 refer to this page for more information and the overview of the content.
 
 ## Minimum Requirements
 
 Before we start, make sure your machine meets the following requirements:
 
-- A laptop or desktop running Ubuntu 22.04 (Jammy) or later. Machines running
-  other operating systems may opt for the use of
-  [Multipass](https://multipass.run/docs).
+- A machine running Ubuntu 22.04 (Jammy) or later. Machines running other
+  operating systems may opt for the use of
+  [Multipass](https://multipass.run/docs). A simple set of instructions to set
+  up Multipass can be found
+  [here](https://juju.is/docs/sdk/set-up-your-development-environment#heading--set-up-an-ubuntu-vm-with-multipass).
+  Please keep in mind that the instructions in this tutorial have not been
+  tested with Multipass.
+- 8GB of RAM.
+- 2 CPU threads.
+- At least 20GB of available storage.
 - Access to the internet for downloading the required snaps and charms.
 
 ## Install MicroK8s

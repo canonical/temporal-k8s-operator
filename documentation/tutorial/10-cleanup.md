@@ -1,6 +1,6 @@
 # Cleanup and Extra Info
 
-This is part of the [Charmed Temporal Tutorial](./00-introduction.md). Please
+This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
 refer to this page for more information and the overview of the content.
 
 In this tutorial we’ve successfully deployed the Temporal Server, Temporal

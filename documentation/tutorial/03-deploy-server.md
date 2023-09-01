@@ -1,6 +1,6 @@
 # Deploy Temporal Server
 
-This is part of the [Charmed Temporal Tutorial](./00-introduction.md). Please
+This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
 refer to this page for more information and the overview of the content.
 
 The [Temporal server](https://docs.temporal.io/clusters#temporal-server) is a

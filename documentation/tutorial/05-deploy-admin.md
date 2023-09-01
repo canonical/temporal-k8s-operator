@@ -1,6 +1,6 @@
 # Deploy Temporal Admin
 
-This is part of the [Charmed Temporal Tutorial](./00-introduction.md). Please
+This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
 refer to this page for more information and the overview of the content.
 
 The Temporal Admin Tools are a set of command-line utilities used to configure
@@ -42,7 +42,7 @@ juju relate temporal-k8s:admin temporal-admin-k8s:admin
 ```
 
 Wait until the two charms have been related and settled - when ready,
-`juju status` will show:
+`juju status --relations` will show:
 
 ```
 Model           Controller           Cloud/Region        Version  SLA          Timestamp
@@ -57,6 +57,14 @@ Unit                   Workload  Agent  Address      Ports  Message
 postgresql-k8s/0*      active    idle   10.1.232.66         Primary
 temporal-admin-k8s/0*  active    idle   10.1.232.71
 temporal-k8s/0*        active    idle   10.1.232.64
+
+Relation provider                 Requirer                       Interface          Type     Message
+postgresql-k8s:database           temporal-k8s:db                postgresql_client  regular
+postgresql-k8s:database           temporal-k8s:visibility        postgresql_client  regular
+postgresql-k8s:database-peers     postgresql-k8s:database-peers  postgresql_peers   peer
+postgresql-k8s:restart            postgresql-k8s:restart         rolling_op         peer
+temporal-admin-k8s:admin          temporal-k8s:admin             temporal           regular
+temporal-k8s:peer                 temporal-k8s:peer              temporal           peer
 ```
 
 You can run the following command to create the initial Temporal namespace:

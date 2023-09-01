@@ -1,19 +1,20 @@
 # Deploy Nginx Ingress Integrator
 
-This is part of the [Charmed Temporal Tutorial](./00-introduction.md). Please
+This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
 refer to this page for more information and the overview of the content.
 
 The Charmed Temporal K8s operator exposes its service ports using the
 [Nginx Ingress Integrator](https://charmhub.io/nginx-ingress-integrator)
-operator. You must first make sure to have an
-[Nginx Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/)
-deployed.
+operator, which requires us to deploy an
+[Nginx Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) as
+described below.
 
 ## Enable TLS
 
 To enable TLS connections, you must have a TLS certificate stored as a k8s
-secret (default name is "temporal-tls"). A self-signed certificate for
-development purposes can be created as follows:
+secret (default name is "temporal-tls"). The secret name can be configured using
+the `tls-secret-name` config property in the charm. A self-signed certificate
+for development purposes can be created as follows:
 
 ```bash
 # Generate private key
@@ -26,7 +27,7 @@ openssl req -new -key server.key -out server.csr -subj "/CN=temporal-k8s"
 openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt -extfile <(printf "subjectAltName=DNS:temporal-k8s")
 
 # Create a k8s secret
-kubectl create secret tls temporal-tls --cert=server.crt --key=server.key
+kubectl -n temporal-model create secret tls temporal-tls --cert=server.crt --key=server.key
 ```
 
 ## Deploy
@@ -94,6 +95,17 @@ temporal-admin-k8s/0*        active    idle   10.1.232.71
 temporal-k8s/0*              active    idle   10.1.232.64
 temporal-ui-k8s/0*           active    idle   10.1.232.72
 
+Relation provider                     Requirer                       Interface          Type     Message
+nginx-ingress-integrator:nginx-route  temporal-k8s:nginx-route       nginx-route        regular
+nginx-ingress-integrator:nginx-route  temporal-ui-k8s:nginx-route    nginx-route        regular
+postgresql-k8s:database               temporal-k8s:db                postgresql_client  regular
+postgresql-k8s:database               temporal-k8s:visibility        postgresql_client  regular
+postgresql-k8s:database-peers         postgresql-k8s:database-peers  postgresql_peers   peer
+postgresql-k8s:restart                postgresql-k8s:restart         rolling_op         peer
+temporal-admin-k8s:admin              temporal-k8s:admin             temporal           regular
+temporal-k8s:peer                     temporal-k8s:peer              temporal           peer
+temporal-ui-k8s:peer                  temporal-ui-k8s:peer           temporal           peer
+temporal-ui-k8s:ui                    temporal-k8s:ui                temporal           regular
 ```
 
 ## Verify Ingress Resource
@@ -160,18 +172,20 @@ following command:
 kubectl get pods -n ingress -o wide
 ```
 
-You should see the following output:
+You should see something similar to the following output:
 
 ```
 NAME                                      READY   STATUS    RESTARTS          AGE    IP           NODE      NOMINATED NODE   READINESS GATES
 nginx-ingress-microk8s-controller-mfmtx   1/1     Running   512 (3h15m ago)   145d   10.1.232.8   ubuntu   <none>           <none>
 ```
 
-and add the IP-to-hostname mapping in your /etc/hosts file as follows:
+Take note of the ingress controller IP address and add the IP-to-hostname
+mapping in your `/etc/hosts` file as follows:
 
 ```bash
 sudo nano /etc/hosts
 
+# Add the following entries
 10.1.232.8     temporal-k8s
 10.1.232.8     temporal-ui-k8s
 ```

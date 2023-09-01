@@ -1,6 +1,6 @@
 # Deploy Temporal Worker
 
-This is part of the [Charmed Temporal Tutorial](./00-introduction.md). Please
+This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
 refer to this page for more information and the overview of the content.
 
 The [Temporal Worker](https://docs.temporal.io/workers) is the entity which
@@ -40,10 +40,14 @@ temporal-worker-k8s/0*  blocked   idle   10.1.232.75         Invalid config: whe
 
 In order to test our Temporal worker, we will use a
 [sample resource](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample)
-which contains one workflow and one activity. Once downloaded, you can run the
-following command to build it and attach it to the worker charm:
+which contains one workflow and one activity. You can run the following commands
+to clone the repository, build the necessary wheel file and attach it to the
+worker charm:
 
 ```bash
+git clone https://github.com/canonical/temporal-worker-k8s-operator.git
+cd temporal-worker-k8s-operator/resource_sample
+
 poetry build -f wheel # Take note of the generated file's name
 ```
 
@@ -61,10 +65,17 @@ temporal-worker-k8s:
   supported-activities: "all"
 ```
 
+Note: To get the Temporal Server unit IP address, you need to switch to the
+previously created model using `juju switch temporal-model` before switching
+back to this model using `juju switch temporal-worker`.
+
 Run the following command to configure your charm:
 
 ```bash
 juju config temporal-worker-k8s --file=path/to/config.yaml
+
+# Verify that the charm has been configured with the correct value
+juju config temporal-worker-k8s host
 ```
 
 And then run the following command to attach the workflows file to the worker:
@@ -87,10 +98,10 @@ temporal-worker-k8s/0*  active    idle   10.1.232.78         worker listening to
 ```
 
 To further verify that the worker is functioning correctly, observe the output
-of the following command:
+of the following command to ensure the absence of errors:
 
 ```bash
-juju ssh --container temporal-worker temporal-worker-k8s/0 /charm/bin/pebble logs temporal-worker -f
+kubectl -n temporal-model logs temporal-worker-k8s-0 -c temporal-worker -f
 ```
 
 At this point, we have a Temporal worker connected to our Temporal server on the

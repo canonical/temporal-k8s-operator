@@ -6,7 +6,7 @@ in order to collect logs and telemetry.
 
 Enabling monitoring requires that you:
 
-- Have an active [Charmed Temporal K8s operator](../tutorial/00-introduction.md)
+- Have an active [Charmed Temporal K8s operator](../tutorial/01-introduction.md)
   deployed.
 
 ## Deploy COS Lite Bundle
@@ -75,7 +75,7 @@ juju relate temporal-k8s admin/cos.loki
 juju relate temporal-k8s admin/cos.prometheus
 ```
 
-Once done, the output of `juju status` should be as follows:
+Once done, the output of `juju status --relations` should be as follows:
 
 ```
 Model           Controller           Cloud/Region        Version  SLA          Timestamp
@@ -97,6 +97,18 @@ postgresql-k8s/0*      active    idle   10.1.232.66          Primary
 temporal-admin-k8s/0*  active    idle   10.1.232.71
 temporal-k8s/0*        error     idle   10.1.232.64          "log-proxy-relation-changed"
 temporal-ui-k8s/0*     active    idle   10.1.232.72
+
+Relation provider                     Requirer                       Interface          Type     Message
+nginx-ingress-integrator:nginx-route  temporal-k8s:nginx-route       nginx-route        regular
+nginx-ingress-integrator:nginx-route  temporal-ui-k8s:nginx-route    nginx-route        regular
+postgresql-k8s:database               temporal-k8s:db                postgresql_client  regular
+postgresql-k8s:database               temporal-k8s:visibility        postgresql_client  regular
+postgresql-k8s:database-peers         postgresql-k8s:database-peers  postgresql_peers   peer
+postgresql-k8s:restart                postgresql-k8s:restart         rolling_op         peer
+temporal-admin-k8s:admin              temporal-k8s:admin             temporal           regular
+temporal-k8s:peer                     temporal-k8s:peer              temporal           peer
+temporal-ui-k8s:peer                  temporal-ui-k8s:peer           temporal           peer
+temporal-ui-k8s:ui                    temporal-k8s:ui                temporal           regular
 ```
 
 After relating the Charmed Temporal K8s operator to cos-lite services, it will

@@ -17,7 +17,7 @@ This tutorial will cover the following:
 
 This tutorial assumes a basic understanding of the following:
 
-- Basic linux commands.
+- Linux commands.
 - Temporal concepts such as workflows, activities and workers. To learn more
   about these concepts, visit the
   [Temporal Documentation](https://docs.temporal.io/concepts).

@@ -1,6 +1,6 @@
 # Deploy PostgreSQL Database
 
-This is part of the [Charmed Temporal Tutorial](./00-introduction.md). Please
+This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
 refer to this page for more information and the overview of the content.
 
 For Temporal [persistence](https://docs.temporal.io/clusters#persistence) and
@@ -43,7 +43,7 @@ juju relate temporal-k8s:visibility postgresql-k8s:database
 ```
 
 Wait until the two charms have been related and settled - when ready,
-`juju status` will show:
+`juju status --relations` will show:
 
 ```
 Model           Controller           Cloud/Region        Version  SLA          Timestamp
@@ -56,6 +56,13 @@ temporal-k8s             waiting      1  temporal-k8s    stable       9  10.152.
 Unit               Workload  Agent  Address      Ports  Message
 postgresql-k8s/0*  active    idle   10.1.232.66         Primary
 temporal-k8s/0*    blocked   idle   10.1.232.64         admin:temporal relation: schema is not ready
+
+Relation provider                 Requirer                       Interface          Type     Message
+postgresql-k8s:database           temporal-k8s:db                postgresql_client  regular
+postgresql-k8s:database           temporal-k8s:visibility        postgresql_client  regular
+postgresql-k8s:database-peers     postgresql-k8s:database-peers  postgresql_peers   peer
+postgresql-k8s:restart            postgresql-k8s:restart         rolling_op         peer
+temporal-k8s:peer                 temporal-k8s:peer              temporal           peer
 ```
 
 > **See next: [Deploy Temporal Admin](./04-deploying-admin.md)**

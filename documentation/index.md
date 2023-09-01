@@ -5,7 +5,7 @@ end-to-end, production-ready workflow engine on top of [Juju](https://juju.is/).
 Temporal is a developer-first, open source platform that ensures the successful
 execution of services and applications (using workflows). Use Workflow as Code
 (TM) to build and operate resilient applications. Leverage developer friendly
-primitives and avoid fighting your infrastructure
+primitives and avoid fighting your infrastructure.
 
 This operator provides a Temporal server, and consists of Python scripts which
 wraps the versions distributed by
@@ -18,7 +18,7 @@ allowing the user flexibility in configuration. It streamlines the process of
 deploying, scaling, configuring and overseeing Temporal at scale in a dependable
 manner for production purposes.
 
-## Project and community
+## Project and Community
 
 Temporal Server Charm is a member of the Ubuntu family. It’s an open source
 project that warmly welcomes community projects, contributions, suggestions,
@@ -28,11 +28,11 @@ fixes and constructive feedback.
 - [Join the Discourse forum](https://discourse.charmhub.io/tag/temporal)
 - [Contribute and report bugs](https://github.com/canonical/temporal-k8s-operator)
 
-## In this documentation
+## In This Documentation
 
 |                                                                                                                                                  |                                                                                               |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [Tutorial](./tutorial/00-introduction.md) </br> Get started - a hands-on introduction to using Charmed Temporal K8s operator for new users </br> | [How-to guides](./how-to/) </br> Step-by-step guides covering key operations and common tasks |
+| [Tutorial](./tutorial/01-introduction.md) </br> Get started - a hands-on introduction to using Charmed Temporal K8s operator for new users </br> | [How-to guides](./how-to/) </br> Step-by-step guides covering key operations and common tasks |
 | [Reference](https://charmhub.io/temporal-k8s/actions) </br> Technical information - specifications, APIs, architecture                           | [Explanation](./explanation/) </br> Concepts - discussion and clarification of key topics     |
 
 # Navigation

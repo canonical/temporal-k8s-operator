@@ -1,6 +1,6 @@
 # Run Your First Workflow
 
-This is part of the [Charmed Temporal Tutorial](./00-introduction.md). Please
+This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
 refer to this page for more information and the overview of the content.
 
 Now that we have a Temporal Server up and running with a Temporal Worker
@@ -16,7 +16,7 @@ import asyncio
 
 async def main():
     client_opt = Options(
-        host="10.1.232.64:7233", # Temporal Server unit IP address
+        host="10.1.232.64:7233", # Replace with your Temporal Server unit IP address
         queue="test-queue",
         namespace="default",
     )
@@ -39,9 +39,11 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Run the script above using:
+Install the necessary packages and run the script above using:
 
 ```bash
+pip install temporal-lib-py
+
 python workflow.py
 
 # Output:
