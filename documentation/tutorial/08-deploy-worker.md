@@ -1,7 +1,8 @@
 # Deploy Temporal Worker
 
-This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
-refer to this page for more information and the overview of the content.
+This is part of the
+[Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
+Please refer to this page for more information and the overview of the content.
 
 The [Temporal Worker](https://docs.temporal.io/workers) is the entity which
 listens and polls on specific task queue, and executes code in response to the
@@ -107,4 +108,5 @@ kubectl -n temporal-model logs temporal-worker-k8s-0 -c temporal-worker -f
 At this point, we have a Temporal worker connected to our Temporal server on the
 `default` namespace listening for tasks on the `test-queue` task queue.
 
-> **See next: [Run Your First Workflow](./09-run-workflow.md)**
+> **See next:
+> [Run Your First Workflow](/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)**

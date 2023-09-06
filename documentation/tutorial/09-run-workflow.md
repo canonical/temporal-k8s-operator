@@ -1,7 +1,8 @@
 # Run Your First Workflow
 
-This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
-refer to this page for more information and the overview of the content.
+This is part of the
+[Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
+Please refer to this page for more information and the overview of the content.
 
 Now that we have a Temporal Server up and running with a Temporal Worker
 connected to it, we can trigger a workflow execution and observe its result in
@@ -61,4 +62,5 @@ generated in the ingress step of this tutorial as part of your
 [TLSConfig](https://python.temporal.io/temporalio.service.TLSConfig.html) when
 making requests to the Temporal server.
 
-> **See next: [Cleanup your environment](./10-cleanup.md)**
+> **See next:
+> [Cleanup your environment](/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)**

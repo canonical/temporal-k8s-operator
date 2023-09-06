@@ -1,7 +1,8 @@
 # Deploy PostgreSQL Database
 
-This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
-refer to this page for more information and the overview of the content.
+This is part of the
+[Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
+Please refer to this page for more information and the overview of the content.
 
 For Temporal [persistence](https://docs.temporal.io/clusters#persistence) and
 [visibility](https://docs.temporal.io/clusters#visibility), we use the
@@ -65,4 +66,5 @@ postgresql-k8s:restart            postgresql-k8s:restart         rolling_op     
 temporal-k8s:peer                 temporal-k8s:peer              temporal           peer
 ```
 
-> **See next: [Deploy Temporal Admin](./04-deploying-admin.md)**
+> **See next:
+> [Deploy Temporal Admin](/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)**

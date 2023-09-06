@@ -1,7 +1,8 @@
 # Deploy Nginx Ingress Integrator
 
-This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
-refer to this page for more information and the overview of the content.
+This is part of the
+[Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
+Please refer to this page for more information and the overview of the content.
 
 The Charmed Temporal K8s operator exposes its service ports using the
 [Nginx Ingress Integrator](https://charmhub.io/nginx-ingress-integrator)
@@ -194,4 +195,5 @@ By default, the hostname will be set to the respective application names
 `temporal-k8s` and `temporal-ui-k8s`. You can then connect a Temporal client
 through this hostname i.e. `Client.connect("temporal-k8s")`.
 
-> **See next: [Deploy Temporal Worker](./08-deploying-worker.md)**
+> **See next:
+> [Deploy Temporal Worker](/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)**

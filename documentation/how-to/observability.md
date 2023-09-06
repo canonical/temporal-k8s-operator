@@ -1,13 +1,12 @@
 # How to enable monitoring
 
-The Temporal server charm can be related to the
+The Charmed Temporal K8s Operator can be related to the
 [Canonical Observability Stack](https://charmhub.io/topics/canonical-observability-stack)
 in order to collect logs and telemetry.
 
-Enabling monitoring requires that you:
-
-- Have an active [Charmed Temporal K8s operator](../tutorial/01-introduction.md)
-  deployed.
+Enabling monitoring requires that you have an active
+[Charmed Temporal K8s Operator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777)
+deployed.
 
 ## Deploy COS Lite Bundle
 

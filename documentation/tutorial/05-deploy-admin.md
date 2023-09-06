@@ -1,7 +1,8 @@
 # Deploy Temporal Admin
 
-This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
-refer to this page for more information and the overview of the content.
+This is part of the
+[Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
+Please refer to this page for more information and the overview of the content.
 
 The Temporal Admin Tools are a set of command-line utilities used to configure
 and support the Temporal server.
@@ -85,4 +86,5 @@ output: |
 result: command succeeded
 ```
 
-> **See next: [Deploy Temporal Web UI](./06-deploying-ui.md)**
+> **See next:
+> [Deploy Temporal Web UI](/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)**

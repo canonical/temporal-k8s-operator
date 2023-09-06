@@ -1,7 +1,8 @@
 # Deploy Temporal Web UI
 
-This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
-refer to this page for more information and the overview of the content.
+This is part of the
+[Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
+Please refer to this page for more information and the overview of the content.
 
 The Temporal Web UI is a user interface used to interact with and monitor
 Temporal workflows and activities.
@@ -81,4 +82,5 @@ Workflows Found" as seen below.
 
 ![Temporal Web UI](../media/temporal-web-ui.png)
 
-> **See next: [Deploy Temporal Web UI](./07-deploying-ingress.md)**
+> **See next:
+> [Deploy Nginx Ingress Integrator](/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783)**

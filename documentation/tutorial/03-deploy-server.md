@@ -1,7 +1,8 @@
 # Deploy Temporal Server
 
-This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
-refer to this page for more information and the overview of the content.
+This is part of the
+[Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
+Please refer to this page for more information and the overview of the content.
 
 The [Temporal server](https://docs.temporal.io/clusters#temporal-server) is a
 group of four independently scalable services (frontend, history, matching and
@@ -53,4 +54,5 @@ To exit the screen with `juju status --watch 1s`, enter `Ctrl+c`. If you want to
 further inspect juju logs, can watch for logs with `juju debug-log`. More info
 on logging at [juju logs](https://juju.is/docs/olm/juju-logs).
 
-> **See next: [Deploy PostgreSQL Database](./04-deploying-db.md)**
+> **See next:
+> [Deploy PostgreSQL Database](/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)**

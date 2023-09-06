@@ -5,15 +5,15 @@ day 0 to day 2 on [Temporal](https://temporal.io/). It is an open source,
 end-to-end, production-ready workflow engine on top of [Juju](https://juju.is/).
 This tutorial will cover the following:
 
-- [Environment Setup](./02-environment.md)
-- [Deploy Temporal Server](./03-deploy-server.md)
-- [Deploy PostgreSQL Database](./04-deploy-db.md)
-- [Deploy Temporal Admin](./05-deploy-admin.md)
-- [Deploy Temporal Web UI](./06-deploy-ui.md)
-- [Deploy Nginx Ingress Integrator](./07-deploy-ingress.md)
-- [Deploy Temporal Worker](./08-deploy-worker.md)
-- [Run Your First Workflow](./09-run-workflow.md)
-- [Cleanup and Extra Info](./10-cleanup.md)
+- [Environment Setup](/t/charmed-temporal-k8s-tutorial-environment-setup/11778)
+- [Deploy Temporal Server](/t/charmed-temporal-k8s-tutorial-deploy-temporal-server/11779)
+- [Deploy PostgreSQL Database](/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)
+- [Deploy Temporal Admin](/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)
+- [Deploy Temporal Web UI](/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)
+- [Deploy Nginx Ingress Integrator](/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783)
+- [Deploy Temporal Worker](/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)
+- [Run Your First Workflow](/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)
+- [Cleanup and Extra Info](/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)
 
 This tutorial assumes a basic understanding of the following:
 

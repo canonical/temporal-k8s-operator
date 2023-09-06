@@ -1,7 +1,8 @@
 # Environment Setup
 
-This is part of the [Charmed Temporal Tutorial](./01-introduction.md). Please
-refer to this page for more information and the overview of the content.
+This is part of the
+[Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
+Please refer to this page for more information and the overview of the content.
 
 ## Minimum Requirements
 
@@ -84,4 +85,5 @@ juju status
 # >>> Model "admin/temporal-model" is empty.
 ```
 
-> **See next: [Deploying Temporal Server](./03-deploying-server)**
+> **See next:
+> [Deploying Temporal Server](/t/charmed-temporal-k8s-tutorial-deploy-temporal-server/11779)**
