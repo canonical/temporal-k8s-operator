@@ -180,18 +180,6 @@ mapping in your /etc/hosts file. By default, the hostname will be set to
 `temporal-k8s`. You can then connect a Temporal client through this hostname
 i.e. `Client.connect("temporal-k8s")`.
 
-You will need to modify the ingress resource to accept gRPC traffic. This can be
-done as follows:
-
-```bash
-# Edit the ingress resource
-kubectl edit ingress -n <MODEL_NAME>
-
-## Add the following line under annotations
-nginx.ingress.kubernetes.io/backend-protocol: GRPC
-
-```
-
 ### ui:temporal
 
 In order to access the Temporal Web UI, the Temporal UI charm must be deployed.

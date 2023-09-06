@@ -17,3 +17,5 @@ parts:
     # Fixes jinja install during pack.
     # See <https://github.com/canonical/charmcraft/issues/551>.
     charm-python-packages: [setuptools, pip]
+    charm-binary-python-packages:
+      - cosl

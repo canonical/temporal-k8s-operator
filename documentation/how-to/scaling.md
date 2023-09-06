@@ -1,3 +1,5 @@
+# Horizontal Scaling
+
 Excerpt from
 [Temporal's documentation](https://docs.temporal.io/clusters#temporal-server):
 
@@ -19,9 +21,10 @@ Excerpt from
 > horizontally within a Cluster. The Frontend Service scales differently than
 > the others because it has no sharding or partitioning; it is just stateless.
 
-The Temporal server charm is designed such that each service can be deployed as
-a separate application which can then be connected together by integrating with
-the same database. These services can then be scaled according to your needs.
+The Charmed Temporal K8s operator is designed such that each service can be
+deployed as a separate application which can then be connected together by
+integrating with the same database. These services can then be scaled according
+to your needs.
 
 To deploy the services separately in a scalable way, you must deploy the
 application as follows:
@@ -58,12 +61,6 @@ juju relate temporal-k8s-worker:db postgresql-k8s:database
 juju relate temporal-k8s-worker:visibility postgresql-k8s:database
 juju relate temporal-k8s-worker:admin temporal-admin-k8s:admin
 ```
-
-Note: The
-[nginx-ingress-integrator](https://charmhub.io/nginx-ingress-integrator) and
-[temporal-ui-k8s](https://charmhub.io/temporal-ui-k8s) charms should be deployed
-and integrated with the `temporal-k8s` charm as outlined in
-[here](../../README.md).
 
 Once deployed, you can run `juju status --watch 1s` to watch the status of your
 applications. It may take a few minutes to see the following output where all
@@ -173,17 +170,17 @@ result: command succeeded
 To add more replicas you can use the juju scale-application functionality i.e.
 
 ```
-juju scale-application temporal-k8s -n <num_of_replicas_required_replicas>
+juju scale-application temporal-k8s <num_of_replicas_required_replicas>
 ```
 
 To scale all four services to two units each, you can run the following
 commands:
 
 ```
-juju scale-application temporal-k8s -n 2
-juju scale-application temporal-k8s-history -n 2
-juju scale-application temporal-k8s-matching -n 2
-juju scale-application temporal-k8s-worker -n 2
+juju scale-application temporal-k8s 2
+juju scale-application temporal-k8s-history 2
+juju scale-application temporal-k8s-matching 2
+juju scale-application temporal-k8s-worker 2
 ```
 
 You can then run `juju status --watch 1s` to watch the status of your
@@ -314,17 +311,17 @@ To scale down the number of replicas, you can again use the juju
 scale-application functionality i.e.
 
 ```
-juju scale-application temporal-k8s -n <num_of_replicas_required_replicas>
+juju scale-application temporal-k8s <num_of_replicas_required_replicas>
 ```
 
 To scale all four services back down to one unit each, you can run the following
 commands:
 
 ```
-juju scale-application temporal-k8s -n 1
-juju scale-application temporal-k8s-history -n 1
-juju scale-application temporal-k8s-matching -n 1
-juju scale-application temporal-k8s-worker -n 1
+juju scale-application temporal-k8s 1
+juju scale-application temporal-k8s-history 1
+juju scale-application temporal-k8s-matching 1
+juju scale-application temporal-k8s-worker 1
 ```
 
 You can then run `juju status --watch 1s` to watch the status of your
