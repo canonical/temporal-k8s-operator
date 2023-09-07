@@ -14,6 +14,7 @@ from charms.data_platform_libs.v0.database_requires import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
+from charms.openfga_k8s.v0.openfga import OpenFGARequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from ops import main
@@ -32,6 +33,7 @@ from log import log_event_handler
 
 # import relations
 from relations.admin import Admin
+from relations.openfga import OpenFGA
 from relations.postgresql import Postgresql
 from relations.ui import UI
 from state import State
@@ -91,6 +93,10 @@ class TemporalK8SCharm(CharmBase):
         # Handle admin and ui relations.
         self.admin = Admin(self)
         self.ui = UI(self)
+
+        # Handle openfga relation
+        self.openfga = OpenFGARequires(self, self.name)
+        self.openfga_relation = OpenFGA(self)
 
         # Handle Ingress
         self._require_nginx_route()
@@ -205,6 +211,20 @@ class TemporalK8SCharm(CharmBase):
         container.restart(self.name)
         self.unit.status = ActiveStatus()
 
+    def _check_missing_openfga_params(self):
+        """Validate that all OpenFGA required properties were extracted.
+
+        Returns:
+            list: List of OpenFGA parameters that are not set in state.
+
+        """
+        missing_params = []
+        required_openfga_keys = ["store_id", "address", "port", "scheme", "token"]
+        for key in required_openfga_keys:
+            if self._state.openfga.get(key) is None:
+                missing_params.append(key)
+        return missing_params
+
     def _validate(self):
         """Validate that configuration and relations are valid and ready.
 
@@ -227,6 +247,15 @@ class TemporalK8SCharm(CharmBase):
         self.database_connections()
         if not self._state.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
+
+        if self.config["auth-enabled"]:
+            if not self._state.openfga:
+                raise ValueError("openfga:temporal relation not ready")
+            missing_params = self._check_missing_openfga_params()
+            if len(missing_params) > 0:
+                raise ValueError(f"openfga:missing parameters {missing_params!r}")
+            if not self._state.openfga["auth_model_id"]:
+                raise ValueError("missing openfga authorization model")
 
     def _open_service_ports(self):
         """Open the respective ports based on Temporal service."""
@@ -287,6 +316,19 @@ class TemporalK8SCharm(CharmBase):
                 "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
             }
         )
+
+        if self.config["auth-enabled"]:
+            openfga = self._state.openfga
+            context.update(
+                {
+                    "CANCON_FGA_STORE_ID": openfga["store_id"],
+                    "CANCON_FGA_AUTH_MODEL_ID": openfga["auth_model_id"],
+                    "CANCON_FGA_API_HOST": openfga["address"],
+                    "CANCON_FGA_API_SCHEME": openfga["scheme"],
+                    "CANCON_SECRETS_FGA_BEARER_TOKEN": openfga["token"],
+                    "CANCON_FGA_API_PORT": openfga["port"],
+                }
+            )
 
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)

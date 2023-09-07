@@ -24,3 +24,8 @@ options:
         Name of the k8s secret which contains the TLS certificate to be used by ingress.
     default: "temporal-tls"
     type: string
+  auth-enabled:
+    description: |
+        Specifies whether authorization should be enabled through OpenFGA.
+    default: false
+    type: boolean

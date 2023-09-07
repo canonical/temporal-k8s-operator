@@ -50,6 +50,9 @@ requires:
     interface: loki_push_api
     optional: true
     limit: 1
+  openfga:
+    interface: openfga
+    limit: 1
 
 provides:
   metrics-endpoint:
