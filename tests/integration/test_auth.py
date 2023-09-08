@@ -23,7 +23,7 @@ class TestAuth:
     """Integration tests for Temporal charm."""
 
     async def test_openfga_relation(self, ops_test: OpsTest):
-        """Perform GET request on the Temporal UI host."""
+        """Add OpenFGA relation and authorization model."""
         await ops_test.model.applications[APP_NAME].set_config({"auth-enabled": "true"})
         await ops_test.model.deploy("openfga-k8s", channel="latest/edge")
         await ops_test.model.wait_for_idle(
@@ -100,3 +100,16 @@ class TestAuth:
         assert ops_test.model.applications[APP_NAME].status == "active"
 
         await run_sample_workflow(ops_test)
+
+    async def test_openfga_relation_removed(self, ops_test: OpsTest):
+        """Remove OpenFGA relation."""
+        await ops_test.model.applications[APP_NAME].remove_relation(f"{APP_NAME}:openfga", "openfga-k8s:openfga")
+
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME],
+            status="blocked",
+            raise_on_blocked=False,
+            timeout=600,
+        )
+
+        assert ops_test.model.applications[APP_NAME].status == "blocked"
