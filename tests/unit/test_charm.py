@@ -364,6 +364,10 @@ class TestCharm(TestCase):
                     "startup": "enabled",
                     "override": "replace",
                     "environment": {
+                        "AUTH_ENABLED": True,
+                        "AUTH_GOOGLE_CLIENT_ID": "",
+                        "AUTH_OPEN_ACCESS_NAMESPACES": "",
+                        "AUTH_ADMIN_GROUPS": "",
                         "DB_HOST": "myhost",
                         "DB_NAME": "temporal-k8s_db",
                         "DB_PORT": "5432",
@@ -379,12 +383,12 @@ class TestCharm(TestCase):
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
                         "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
-                        "CANCON_FGA_STORE_ID": harness.charm._state.openfga["store_id"],
-                        "CANCON_FGA_AUTH_MODEL_ID": harness.charm._state.openfga["auth_model_id"],
-                        "CANCON_FGA_API_HOST": harness.charm._state.openfga["address"],
-                        "CANCON_FGA_API_SCHEME": harness.charm._state.openfga["scheme"],
-                        "CANCON_SECRETS_FGA_BEARER_TOKEN": harness.charm._state.openfga["token"],
-                        "CANCON_FGA_API_PORT": harness.charm._state.openfga["port"],
+                        "OFGA_STORE_ID": harness.charm._state.openfga["store_id"],
+                        "OFGA_AUTH_MODEL_ID": harness.charm._state.openfga["auth_model_id"],
+                        "OFGA_API_HOST": harness.charm._state.openfga["address"],
+                        "OFGA_API_SCHEME": harness.charm._state.openfga["scheme"],
+                        "OFGA_SECRETS_BEARER_TOKEN": harness.charm._state.openfga["token"],
+                        "OFGA_API_PORT": harness.charm._state.openfga["port"],
                     },
                 }
             },
@@ -392,8 +396,7 @@ class TestCharm(TestCase):
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
         self.assertEqual(got_plan, want_plan)
 
-        # database relation ready but no openfga store set up
-        self.assertEqual(harness.model.unit.status, ActiveStatus())
+        self.assertEqual(harness.model.unit.status, ActiveStatus("auth enabled"))
 
 
 def simulate_lifecycle(harness):

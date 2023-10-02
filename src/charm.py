@@ -321,12 +321,16 @@ class TemporalK8SCharm(CharmBase):
             openfga = self._state.openfga
             context.update(
                 {
-                    "CANCON_FGA_STORE_ID": openfga["store_id"],
-                    "CANCON_FGA_AUTH_MODEL_ID": openfga["auth_model_id"],
-                    "CANCON_FGA_API_HOST": openfga["address"],
-                    "CANCON_FGA_API_SCHEME": openfga["scheme"],
-                    "CANCON_SECRETS_FGA_BEARER_TOKEN": openfga["token"],
-                    "CANCON_FGA_API_PORT": openfga["port"],
+                    "AUTH_ENABLED": True,
+                    "OFGA_STORE_ID": openfga["store_id"],
+                    "OFGA_AUTH_MODEL_ID": openfga["auth_model_id"],
+                    "OFGA_API_HOST": openfga["address"],
+                    "OFGA_API_SCHEME": openfga["scheme"],
+                    "OFGA_SECRETS_BEARER_TOKEN": openfga["token"],
+                    "OFGA_API_PORT": openfga["port"],
+                    "AUTH_ADMIN_GROUPS": self.config["auth-admin-groups"],
+                    "AUTH_OPEN_ACCESS_NAMESPACES": self.config["auth-open-access-namespaces"],
+                    "AUTH_GOOGLE_CLIENT_ID": self.config["auth-google-client-id"],
                 }
             )
 
@@ -353,7 +357,8 @@ class TemporalK8SCharm(CharmBase):
         container.add_layer(self.name, pebble_layer, combine=True)
         container.replan()
 
-        self.unit.status = ActiveStatus()
+        message = "auth enabled" if self.config["auth-enabled"] else ""
+        self.unit.status = ActiveStatus(message)
 
 
 if __name__ == "__main__":

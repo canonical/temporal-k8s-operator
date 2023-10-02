@@ -83,10 +83,10 @@ class OpenFGA(framework.Object):
 
     @log_event_handler(logger)
     def _on_create_authorization_model_action(self, event):
-        """Handle OpenFGA relation created event.
+        """Handle OpenFGA create authorization model action.
 
         Args:
-            event: The event triggered when the relation is created.
+            event: The event triggered when the action is performed.
         """
         model = event.params["model"]
         if not model:
