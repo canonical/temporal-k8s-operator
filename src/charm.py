@@ -216,7 +216,6 @@ class TemporalK8SCharm(CharmBase):
 
         Returns:
             list: List of OpenFGA parameters that are not set in state.
-
         """
         missing_params = []
         required_openfga_keys = ["store_id", "address", "port", "scheme", "token"]

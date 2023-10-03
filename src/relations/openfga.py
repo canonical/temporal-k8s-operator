@@ -9,6 +9,7 @@ import logging
 import requests
 from charms.openfga_k8s.v0.openfga import OpenFGAStoreCreateEvent
 from ops import framework
+from requests.exceptions import RequestException
 
 from log import log_event_handler
 
@@ -92,51 +93,133 @@ class OpenFGA(framework.Object):
         if not model:
             event.fail("authorization model not specified")
             return
-        try:
-            model_json = json.loads(model)
-        except json.decoder.JSONDecodeError as error:
-            event.fail(f"error occurred: {error}")
+
+        model_json = _parse_model_json(model, event)
+        if model_json is None:
+            event.fail("failed to parse model json")
             return
 
-        if not self.charm._state.openfga:
-            event.fail("missing openfga relation")
-            return
-        openfga_store_id = self.charm._state.openfga["store_id"]
-        openfga_token = self.charm._state.openfga["token"]
-        openfga_address = self.charm._state.openfga["address"]
-        openfga_port = self.charm._state.openfga["port"]
-        openfga_scheme = self.charm._state.openfga["scheme"]
-        url = f"{openfga_scheme}://{openfga_address}:{openfga_port}/stores/{openfga_store_id}/authorization-models"
-        headers = {"Content-Type": "application/json"}
-        if openfga_token:
-            headers["Authorization"] = f"Bearer {openfga_token}"
-
-        # do the post request
-        logger.info(f"posting to {url}, with headers {headers}")
-        try:
-            response = requests.post(url, json=model_json, headers=headers, timeout=10)
-        except requests.HTTPError as error:
-            logger.info(f"error occurred in: {error}")
-            event.fail(f"error occurred in: {error}")
+        if not _check_openfga_relation(self.charm._state, event):
             return
 
-        if not response.ok:
-            logger.info(f"failed to create authorization model: {response.text}")
-            event.fail(
-                f"failed to create the authorization model: {response.text}",
-            )
+        openfga_data = self.charm._state.openfga
+        url = f"{openfga_data['scheme']}://{openfga_data['address']}:{openfga_data['port']}/stores/{openfga_data['store_id']}/authorization-models"
+        headers = _build_headers(openfga_data)
+
+        response = _post_authorization_model(url, model_json, headers, event)
+        if response is None:
             return
 
-        data = response.json()
-        authorization_model_id = data.get("authorization_model_id", "")
+        authorization_model_id = _extract_authorization_model_id(response, event)
         if not authorization_model_id:
-            logger.info(f"response does not contain authorization model id: {response.text}")
-            event.fail(f"response does not contain authorization model id: {response.text}")
             return
-        logger.info(f"auth model id is {authorization_model_id}")
+
         # Replacing the whole openfga dict to include the auth model id.
         self.charm._state.openfga = {
             **self.charm._state.openfga,
             "auth_model_id": authorization_model_id,
         }
         self.charm._update(event)
+
+
+def _parse_model_json(model, event):
+    """Parse OpenFGA authorization model.
+
+    Args:
+        model: Model provided through the action.
+        event: The event triggered when the action is performed.
+
+    Returns:
+        Parsed model.
+    """
+    try:
+        return json.loads(model)
+    except json.decoder.JSONDecodeError as error:
+        error_msg = f"error occurred: {error}"
+        event.fail(error_msg)
+        logger.info(error_msg)
+        return None
+
+
+def _check_openfga_relation(state, event):
+    """Check for presence of OpenFGA relation.
+
+    Args:
+        state: Model provided through the action.
+        event: The event triggered when the action is performed.
+
+    Returns:
+        Whether or not the OpenFGA relation exists.
+    """
+    if not state.openfga:
+        event.fail("missing openfga relation")
+        logger.info("missing openfga relation")
+        return False
+    return True
+
+
+def _build_headers(openfga_data):
+    """Build Authorization header for OpenFGA store requests.
+
+    Args:
+        openfga_data: OpenFGA store information.
+
+    Returns:
+        Request headers.
+    """
+    headers = {"Content-Type": "application/json"}
+    if openfga_data["token"]:
+        headers["Authorization"] = f"Bearer {openfga_data['token']}"
+    return headers
+
+
+def _post_authorization_model(url, model_json, headers, event):
+    """Create authorization model in OpenFGA store.
+
+    Args:
+        url: OpenFGA store authorization models URL.
+        model_json: JSON representation of the provided authorization model.
+        headers: Request headers.
+        event: The event triggered when the action is performed.
+
+    Returns:
+        HTTP Response after creating the OpenFGA authorization model.
+    """
+    logger.info(f"posting to {url}, with headers {headers}")
+    try:
+        response = requests.post(url, json=model_json, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response
+    except RequestException as error:
+        error_msg = f"error occurred in: {error}"
+        event.fail(error_msg)
+        logger.info(error_msg)
+        return None
+
+
+def _extract_authorization_model_id(response, event):
+    """Extract authorization model ID from response.
+
+    Args:
+        response: Response from the creation request.
+        event: The event triggered when the action is performed.
+
+    Returns:
+        OpenFGA authorization model ID.
+    """
+    if not response.ok:
+        error_msg = f"failed to create authorization model: {response.text}"
+        event.fail(error_msg)
+        logger.info(error_msg)
+        return None
+
+    data = response.json()
+    authorization_model_id = data.get("authorization_model_id", "")
+    if not authorization_model_id:
+        error_msg = f"response does not contain authorization model id: {response.text}"
+        event.fail(error_msg)
+        logger.info(error_msg)
+        return None
+
+    logger.info(f"auth model id is {authorization_model_id}")
+    return authorization_model_id
