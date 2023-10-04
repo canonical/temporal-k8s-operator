@@ -50,9 +50,9 @@ Model           Controller           Cloud/Region        Version  SLA          T
 temporal-model  temporal-controller  microk8s/localhost  3.1.5    unsupported  12:35:24+03:00
 
 App                 Version   Status   Scale  Charm                Channel    Rev  Address         Exposed  Message
-postgresql-k8s      14.7      active       1  postgresql-k8s       14/stable   73  10.152.183.250  no       Primary
-temporal-admin-k8s            waiting      1  temporal-admin-k8s   stable       4  10.152.183.21   no       installing agent
-temporal-k8s                  waiting      1  temporal-k8s         stable       9  10.152.183.191  no       installing agent
+postgresql-k8s      14.7      active      1   postgresql-k8s       14/stable   73  10.152.183.250  no       Primary
+temporal-admin-k8s            active      1   temporal-admin-k8s   stable       4  10.152.183.21   no
+temporal-k8s                  active      1   temporal-k8s         stable       9  10.152.183.191  no
 
 Unit                   Workload  Agent  Address      Ports  Message
 postgresql-k8s/0*      active    idle   10.1.232.66         Primary
