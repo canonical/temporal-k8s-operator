@@ -5,7 +5,7 @@ options:
   services:
     default: frontend,history,matching,worker
     description: |
-      A comma separated list of Temporal services to run. Temporal components
+      A comma-separated list of Temporal services to run. Temporal components
       can be either run in a single container or spread across multiple
       containers, which allows to independently scale each component.
     type: string
@@ -23,4 +23,30 @@ options:
     description: |
         Name of the k8s secret which contains the TLS certificate to be used by ingress.
     default: "temporal-tls"
+    type: string
+  auth-enabled:
+    description: |
+        Specifies whether authorization should be enabled through OpenFGA.
+    default: false
+    type: boolean
+  auth-google-client-id:
+    description: |
+        The client ID of the Google OAuth project used for authentication.
+        This will be used in authorization requests to verify the origin of the
+        OAuth2 token. While it is an optional field, it is recommended to set it
+        for added security.
+    default: ""
+    type: string
+  auth-admin-groups:
+    description: |
+        A comma-separated list of groups with read-access to all namespaces.
+        This group must be created in the OpenFGA store, and the corresponding
+        users added to it as members.
+    default: ""
+    type: string
+  auth-open-access-namespaces:
+    description: |
+        A comma-separated list of namespaces which will be visible to all 
+        authenticated users.
+    default: ""
     type: string

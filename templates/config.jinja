@@ -2,6 +2,19 @@ log:
     stdout: true
     level: {{ LOG_LEVEL | default("info") }}
 
+auth:
+  enabled: {{ AUTH_ENABLED | default("false") }}
+  adminGroups: {{ AUTH_ADMIN_GROUPS | default("") }}
+  openAccessNamespaces: {{ AUTH_OPEN_ACCESS_NAMESPACES | default("") }}
+  googleClientID: {{ AUTH_GOOGLE_CLIENT_ID | default("") }}
+  ofga:
+    apiScheme: {{ OFGA_API_SCHEME | default("http") }}
+    apiHost: "{{ OFGA_API_HOST }}"
+    apiPort: "{{ OFGA_API_PORT }}"
+    token: "{{ OFGA_SECRETS_BEARER_TOKEN }}"
+    storeID: "{{ OFGA_STORE_ID }}"
+    authModelID: "{{ OFGA_AUTH_MODEL_ID }}"
+
 persistence:
     numHistoryShards: {{ NUM_HISTORY_SHARDS | default(4) }}
     defaultStore: default
