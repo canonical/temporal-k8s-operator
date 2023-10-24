@@ -1,6 +1,6 @@
 # Authorization
 
-> **Note:** Functionality described on this page is not live yet.
+> **Note:** (TODO) Functionality described on this page is not live yet.
 
 Enabling authorization requires that you have an active
 [Charmed Temporal K8s Operator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777)
@@ -149,25 +149,6 @@ temporal-admin-k8s:admin          temporal-k8s:admin             temporal       
 temporal-k8s:peer                 temporal-k8s:peer              temporal           peer
 ```
 
-To view your OpenFGA store's information, you can run the command below. Make
-note of the store's information, as this will enable us to connect to it through
-a client to add the necessary tuples in the following section.
-
-```bash
-juju show-unit temporal-k8s/0
-
-# Output:
-temporal-k8s/0:
-  opened-ports: []
-  charm: local:jammy/temporal-k8s-6
-  leader: true
-  life: alive
-  relation-info:
-    ...
-      openfga: '{"store_id": "<store_id>", "token": "<token>",
-        "address": "10.152.183.144", "port": "8080", "scheme": "http", "auth_model_id": "<model_id>"}'
-```
-
 At this point, our Temporal Server is active again with authorization enabled.
 This means that any request made to the Temporal Server will need to be
 [authenticted](./authentication.md) using Google OAuth.
@@ -192,71 +173,74 @@ type namespace
   relations
     define admin: [group#member]
     define reader: [group#member] or writer
-    define writer: [group#member]
+    define writer: [group#member] or admin
 ```
 
 The above model is a simple way of relating users to groups to namespaces. A
 `user` can be related to a `group` as a `member`, and a `group` can be related
-to a `namespace` as either a `reader`, `writer` or `admin`.For example, If user
+to a `namespace` as either a `reader`, `writer` or `admin`. For example, if user
 `john` is a member of group `abc`, and group `abc` is related to namespace
 `example` as a `writer`, then user `john` will be assigned write access on
 namespace `example`.
 
-To add tuples to our OpenFGA store, we can use an
-[OFGA client](https://github.com/canonical/ofga) as follows:
+To add authorization rules to our OpenFGA store, we can use the available
+actions as follows:
 
-```go
-package main
+```bash
+# Add user to group:
+juju run temporal-k8s/0 add-auth-rule user="<your_email>" group="test_group"
 
-import (
-	"context"
-	"fmt"
+# Output:
+Running operation 19 with 1 task
+  - task 20 on unit-temporal-k8s-0
 
-	"github.com/canonical/ofga"
-)
+Waiting for task 20...
+output: 'operation type "create" for user "<your_email>" on group "test_group" successful'
+result: command succeeded
 
-func main() {
-	ctx := context.Background()
+# Assign group 'writer' role to namespace:
+juju run temporal-k8s/0 add-auth-rule group="test_group" namespace="default" role="writer"
 
-	// Create a new ofga client
-	client, err := ofga.NewClient(ctx, ofga.OpenFGAParams{
-		Scheme:      "http", // defaults to `https` if not specified.
-		Host:        "10.152.183.144",
-		Port:        "8080",
-		Token:       "<token>",
-		StoreID:     "<store_id>",
-		AuthModelID: "<model_id>",
-	})
-	if err != nil {
-		// Handle error
-		fmt.Printf("Error connecting to OpenFGA store: %v \n", err)
-	}
+# Output:
+Running operation 19 with 1 task
+  - task 20 on unit-temporal-k8s-0
 
-    // Add your email as a member of group 'test'
-	err = client.AddRelation(ctx, ofga.Tuple{
-		Object:   &ofga.Entity{Kind: "user", ID: "<your_email>"},
-		Relation: "member",
-		Target:   &ofga.Entity{Kind: "group", ID: "test"},
-	})
-	if err != nil {
-		// Handle error
-		fmt.Printf("Error adding relations: %v", err)
-	}
-
-    // Assign all members of group 'test' write access to the 'default' namespace in Temporal.
-	err = client.AddRelation(ctx, ofga.Tuple{
-		Object:   &ofga.Entity{Kind: "group", ID: "test#member"},
-		Relation: "writer",
-		Target:   &ofga.Entity{Kind: "namespace", ID: "default"},
-	})
-	if err != nil {
-		// Handle error
-		fmt.Printf("Error adding relations: %v", err)
-	}
-}
+Waiting for task 20...
+output: 'operation type "create" for group "test_group" and role "writer" on namespace "default" successful'
+result: command succeeded
 ```
 
-And you're done! If the above program ran successfully, you should be able to
+And you're done! If the above actions ran successfully, you should be able to
 access the `default` namespace in Temporal with the authenticated user
 identified by `<your_email>`, whether through web UI login or the use of a
 Google Cloud service account.
+
+The following actions may also be used for removing auth rules, checking access
+rules and for auditing purposes:
+
+```bash
+# Check auth rule
+juju run temporal-k8s/0 check-auth-rule user="<your_email>" namespace="default" role="writer"
+
+# Output:
+output: "True"
+result: command succeeded
+
+# List auth rules
+juju run temporal-k8s/0 list-auth-rule user="<your_email>"
+
+# Output:
+output: |
+  admin: '[]'
+  member: '[''group:test_group'']'
+  reader: '[''namespace:default'']'
+  writer: '[''namespace:default'']'
+result: command succeeded
+
+# Remove auth rule
+juju run temporal-k8s/0 remove-auth-rule user="<your_email>" group="test_group"
+
+# Output:
+output: 'operation type "delete" for user "<your_email>" on group "test_group" successful'
+result: command succeeded
+```

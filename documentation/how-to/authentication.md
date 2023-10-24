@@ -3,8 +3,9 @@
 Clients of the Charmed Temporal k8s Operator can be authenticated in two
 different ways as described below. Authentication entails acquiring a Google
 OAuth access token, which will be attached to each request made to the Temporal
-Server on the `Authorization` header. The [Authorization]() page will discuss
-further how this access token is further utilized on the Temporal Server.
+Server on the `Authorization` header. The [Authorization](./authorization.md)
+page will discuss further how this access token is further utilized on the
+Temporal Server.
 
 ## 1. Temporal Web UI Authentication
 
@@ -50,9 +51,9 @@ deployed as described in the tutorial.
 
 Service accounts can be used to programmatically trigger and execute workflows
 on the Temporal Server. They can be used by both Temporal clients or
-[workers](https://charmhub.io/temporal-worker-k8s). To enable the use of Google
-Cloud service accounts, you will also need an active Google Cloud project. The
-steps for creating a service account are described
+[worker operator instances](https://charmhub.io/temporal-worker-k8s). To enable
+the use of Google Cloud service accounts, you will also need an active Google
+Cloud project. The steps for creating a service account are described
 [here](https://support.google.com/cloud/answer/6158849?hl=en#zippy=%2Cservice-accounts).
 Once done, you can download a JSON file which contains your service account's
 credentials. With the Charmed Temporal Worker K8s Operator deployed and active,
@@ -83,7 +84,7 @@ And you're done! Requests made by the Temporal worker will now contain an
 `Authorization` header with a valid Google OAuth access token, which will be
 further processed on the Temporal Server for authorization. For Temporal
 clients, you can also use the
-[temporal-lib](https://github.com/canonical/temporal-lib) and
+[temporal-lib-go](https://github.com/canonical/temporal-lib-go) and
 [temporal-lib-py](https://github.com/canonical/temporal-lib-py) client libraries
 and injecting your service account credentials.
 

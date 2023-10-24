@@ -10,7 +10,14 @@ import time
 
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
-from helpers import APP_NAME, run_sample_workflow
+from helpers import (
+    APP_NAME,
+    perform_add_auth_rule_action,
+    perform_check_auth_rule_action,
+    perform_list_auth_rule_action,
+    perform_remove_auth_rule_action,
+    run_sample_workflow,
+)
 from juju.action import Action
 from pytest_operator.plugin import OpsTest
 
@@ -71,7 +78,7 @@ class TestAuth:
 
         logger.info("running the create authorization model action")
         temporal_unit = ops_test.model.applications[APP_NAME].units[0]
-        with open("./tests/integration/authorization_model.json", "r", encoding="utf-8") as model_file:
+        with open("./temporal_auth_model.json", "r", encoding="utf-8") as model_file:
             model_data = model_file.read()
 
             # Remove whitespace and newlines from JSON object
@@ -100,6 +107,35 @@ class TestAuth:
         assert ops_test.model.applications[APP_NAME].status == "active"
 
         await run_sample_workflow(ops_test)
+
+    async def test_openfga_add_auth_rule_action(self, ops_test: OpsTest):
+        """Test add-auth-rule action."""
+        await perform_add_auth_rule_action(ops_test, user="test@example.com", group="test_group")
+        await perform_add_auth_rule_action(ops_test, group="test_group", namespace="test_namespace", role="reader")
+
+    async def test_openfga_check_auth_rule_action(self, ops_test: OpsTest):
+        """Test check-auth-rule action."""
+        await perform_check_auth_rule_action(ops_test, exp_result=True, user="test@example.com", group="test_group")
+        await perform_check_auth_rule_action(ops_test, exp_result=False, user="faker@example.com", group="test_group")
+        await perform_check_auth_rule_action(
+            ops_test, exp_result=True, group="test_group", namespace="test_namespace", role="reader"
+        )
+
+    async def test_openfga_list_auth_rule_action(self, ops_test: OpsTest):
+        """Test list-auth-rule action."""
+        await perform_list_auth_rule_action(ops_test, user="test@example.com")
+        await perform_list_auth_rule_action(ops_test, group="test_group")
+        await perform_list_auth_rule_action(ops_test, namespace="test_namespace")
+
+    async def test_openfga_remove_auth_rule_action(self, ops_test: OpsTest):
+        """Test remove-auth-rule action."""
+        await perform_remove_auth_rule_action(ops_test, group="test_group", namespace="test_namespace", role="reader")
+        await perform_check_auth_rule_action(
+            ops_test, exp_result=False, group="test_group", namespace="test_namespace", role="reader"
+        )
+
+        await perform_remove_auth_rule_action(ops_test, user="test@example.com", group="test_group")
+        await perform_check_auth_rule_action(ops_test, exp_result=False, user="test@example.com", group="test_group")
 
     async def test_openfga_relation_removed(self, ops_test: OpsTest):
         """Remove OpenFGA relation."""

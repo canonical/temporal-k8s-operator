@@ -1,82 +1,95 @@
 {
-    "type_definitions": [
-      {
-        "type": "user",
-        "relations": {}
-      },
-      {
-        "type": "namespace",
-        "relations": {
-          "admin": {
-            "this": {}
-          },
-          "reader": {
-            "union": {
-              "child": [
-                {
-                  "this": {}
-                },
-                {
-                  "computedUserset": {
-                    "object": "",
-                    "relation": "writer"
-                  }
+  "type_definitions": [
+    {
+      "type": "user",
+      "relations": {},
+      "metadata": null
+    },
+    {
+      "type": "namespace",
+      "relations": {
+        "admin": {
+          "this": {}
+        },
+        "reader": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "object": "",
+                  "relation": "writer"
                 }
-              ]
-            }
-          },
-          "writer": {
-            "this": {}
+              }
+            ]
           }
         },
-        "metadata": {
-          "relations": {
-            "admin": {
-              "directly_related_user_types": [
-                {
-                  "type": "group",
-                  "relation": "member"
+        "writer": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "object": "",
+                  "relation": "admin"
                 }
-              ]
-            },
-            "reader": {
-              "directly_related_user_types": [
-                {
-                  "type": "group",
-                  "relation": "member"
-                }
-              ]
-            },
-            "writer": {
-              "directly_related_user_types": [
-                {
-                  "type": "group",
-                  "relation": "member"
-                }
-              ]
-            }
+              }
+            ]
           }
         }
       },
-      {
-        "type": "group",
+      "metadata": {
         "relations": {
-          "member": {
-            "this": {}
-          }
-        },
-        "metadata": {
-          "relations": {
-            "member": {
-              "directly_related_user_types": [
-                {
-                  "type": "user"
-                }
-              ]
-            }
+          "admin": {
+            "directly_related_user_types": [
+              {
+                "type": "group",
+                "relation": "member"
+              }
+            ]
+          },
+          "reader": {
+            "directly_related_user_types": [
+              {
+                "type": "group",
+                "relation": "member"
+              }
+            ]
+          },
+          "writer": {
+            "directly_related_user_types": [
+              {
+                "type": "group",
+                "relation": "member"
+              }
+            ]
           }
         }
       }
-    ],
-    "schema_version": "1.1"
-  }
+    },
+    {
+      "type": "group",
+      "relations": {
+        "member": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "member": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "schema_version": "1.1"
+}

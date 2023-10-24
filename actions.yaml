@@ -14,3 +14,110 @@ create-authorization-model:
       description: |
         The JSON string containing the authorization model.
   required: [model]
+add-auth-rule:
+  description: |
+    Adds an authorization rule to the OpenFGA store using
+    the specified authorization model. This can be triggered 
+    using one of two parameter combinations:
+      - user, group: adds a user as a member of a group.
+      - group, namespace, role: assigns 'role' access to 
+      all members of a group to a namespace.
+  params:
+    user:
+      type: string
+      description: |
+        The user's email.
+    group:
+      type: string
+      description: |
+        The group to add a user to, or assign access to a
+        namespace depending on the parameter combination.
+    namespace:
+      type: string
+      description: |
+        The Temporal namespace to assign access to.
+    role:
+      type: string
+      description: |
+        One of "reader", "writer" or "admin".
+
+remove-auth-rule:
+  description: |
+    Removes an authorization rule from the OpenFGA store using
+    the specified authorization model. This can be triggered 
+    using one of two parameter combinations:
+      - user, group: removes a user as a member from a group.
+      - group, namespace, role: revokes 'role' access to 
+      all members of a group the to a namespace.
+  params:
+    user:
+      type: string
+      description: |
+        The user's email.
+    group:
+      type: string
+      description: |
+        The group to remove a user from, or remove access 
+        to a namespace from depending on the parameter 
+        combination.
+    namespace:
+      type: string
+      description: |
+        The Temporal namespace to remove access from.
+    role:
+      type: string
+      description: |
+        One of "reader", "writer" or "admin".
+
+list-auth-rule:
+  description: |
+    Lists all authorization rules associated with a given
+    parameter. This can be triggered using one of three
+    parameter combinations:
+      - user: lists all groups a user is a member of
+      and all namespaces a user has access to as a result
+      of group memberships.
+      - group: lists all namespaces a given group has
+      access to.
+      - namespace: for a given namespace, lists all groups
+      that has access to it.
+  params:
+    user:
+      type: string
+      description: |
+        The user's email to list access for.
+    group:
+      type: string
+      description: |
+        The group to list access for.
+    namespace:
+      type: string
+      description: |
+        The Temporal namespace to list access for.
+
+check-auth-rule:
+  description: |
+    Checks for an authorization rule. This can be triggered 
+    using one of three parameter combinations:
+      - user, group: checks if a user is a member of a group.
+      - user, namespace, role: checks if a user has 'role' access
+      to a namespace.
+      - group, namespace, role: checks if a group has 'role' access
+      to a namespace..
+  params:
+    user:
+      type: string
+      description: |
+        The user's email to check access for.
+    group:
+      type: string
+      description: |
+        The group to check access for.
+    namespace:
+      type: string
+      description: |
+        The Temporal namespace to check access for.
+    role:
+      type: string
+      description: |
+        One of "reader", "writer" or "admin".
