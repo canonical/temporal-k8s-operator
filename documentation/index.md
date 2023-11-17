@@ -41,8 +41,8 @@ manner for production purposes.
 | 2     | t-run-workflow      | [9. Run Your First Workflow](/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)                 |
 | 2     | t-cleanup           | [10. Cleanup and Extra Info](/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)                  |
 | 1     | how-to              | [How to]()                                                                                                   |
-| 2     | h-authentication    | [Authentication](TODO)                                                                                       |
-| 2     | h-authorization     | [Authorization](TODO)                                                                                        |
+| 2     | h-authentication    | [Authentication](/t/charmed-temporal-k8s-how-to-authentication/12586)                                        |
+| 2     | h-authorization     | [Authorization](/t/charmed-temporal-k8s-how-to-authorization/12587)                                          |
 | 2     | h-observability     | [Observability](/t/charmed-temporal-k8s-how-to-observability/11787)                                          |
 | 2     | how-to-scaling      | [Scaling](/t/10840)                                                                                          |
 | 2     | h-tctl              | [TCTL](/t/charmed-temporal-k8s-how-to-tctl/11788)                                                            |

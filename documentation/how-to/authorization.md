@@ -6,14 +6,15 @@ Enabling authorization requires that you have an active
 [Charmed Temporal K8s Operator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777)
 deployed as described in the tutorial. It is recommended that you first go
 through the steps of enabling authentication as outlined
-[here](./authentication.md).
+[here](/t/charmed-temporal-k8s-how-to-authentication/12586).
 
 By default the Temporal Server doesn't offer any authorization, but it offers
 the plugin mechanism to add a custom one. We have added an OAuth-based
-[authentication](./authentication.md) using Google Cloud and an authorization
-mechanism that leverages [Google Cloud](https://cloud.google.com) and
-[OpenFGA](https://openfga.dev/). This custom build of the Temporal Server can be
-found [here](https://github.com/canonical/charmed-temporal-image).
+[authentication](/t/charmed-temporal-k8s-how-to-authentication/12586) using
+Google Cloud and an authorization mechanism that leverages
+[Google Cloud](https://cloud.google.com) and [OpenFGA](https://openfga.dev/).
+This custom build of the Temporal Server can be found
+[here](https://github.com/canonical/charmed-temporal-image).
 
 ## Deploy OpenFGA
 
@@ -151,7 +152,8 @@ temporal-k8s:peer                 temporal-k8s:peer              temporal       
 
 At this point, our Temporal Server is active again with authorization enabled.
 This means that any request made to the Temporal Server will need to be
-[authenticted](./authentication.md) using Google OAuth.
+[authenticted](/t/charmed-temporal-k8s-how-to-authentication/12586) using Google
+OAuth.
 
 ## Create OpenFGA Authorization Rules
 

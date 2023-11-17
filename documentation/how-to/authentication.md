@@ -3,9 +3,10 @@
 Clients of the Charmed Temporal k8s Operator can be authenticated in two
 different ways as described below. Authentication entails acquiring a Google
 OAuth access token, which will be attached to each request made to the Temporal
-Server on the `Authorization` header. The [Authorization](./authorization.md)
-page will discuss further how this access token is further utilized on the
-Temporal Server.
+Server on the `Authorization` header. The
+[Authorization](/t/charmed-temporal-k8s-how-to-authorization/12587) page will
+discuss further how this access token is further utilized on the Temporal
+Server.
 
 ## 1. Temporal Web UI Authentication
 
@@ -34,7 +35,10 @@ created. With the Charmed Temporal UI K8s Operator deployed and active, you can
 set the following configuration parameters:
 
 ```bash
-juju config temporal-ui-k8s auth-enabled=true auth-client-id="<google_client_id>" auth-secret-id="<google_secret_id>"
+juju config temporal-ui-k8s \
+  auth-enabled=true \
+  auth-client-id="<google_client_id>" \
+  auth-client-secret="<google_secret_id>"
 ```
 
 And you're done! When visiting the Temporal Web UI through the external hostname
@@ -88,5 +92,6 @@ clients, you can also use the
 [temporal-lib-py](https://github.com/canonical/temporal-lib-py) client libraries
 and injecting your service account credentials.
 
-The [Authorization](./authorization.md) page discusses further how to authorize
-users and restrict their access to namespaces once they are authenticated.
+The [Authorization](/t/charmed-temporal-k8s-how-to-authorization/12587) page
+discusses further how to authorize users and restrict their access to namespaces
+once they are authenticated.

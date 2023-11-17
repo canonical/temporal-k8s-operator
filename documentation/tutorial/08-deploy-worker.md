@@ -20,7 +20,7 @@ following commands, which will fetch the charm from
 [Charmhub](https://charmhub.io/temporal-worker-k8s) and deploy it to your model:
 
 ```bash
-juju add-model temporal-worker
+juju add-model worker-model
 juju deploy temporal-worker-k8s
 ```
 
@@ -28,7 +28,7 @@ Wait until the application is ready - when it is ready, `juju status` will show:
 
 ```
 Model            Controller           Cloud/Region        Version  SLA          Timestamp
-temporal-worker  temporal-controller  microk8s/localhost  3.1.5    unsupported  13:21:49+03:00
+worker-model     temporal-controller  microk8s/localhost  3.1.5    unsupported  13:21:49+03:00
 
 App                  Version  Status   Scale  Charm                Channel  Rev  Address         Exposed  Message
 temporal-worker-k8s           waiting      1  temporal-worker-k8s  stable     5  10.152.183.187  no       installing agent
@@ -89,7 +89,7 @@ Wait until the application is ready - when it is ready, `juju status` will show:
 
 ```
 Model            Controller           Cloud/Region        Version  SLA          Timestamp
-temporal-worker  temporal-controller  microk8s/localhost  3.1.5    unsupported  13:45:16+03:00
+worker-model     temporal-controller  microk8s/localhost  3.1.5    unsupported  13:45:16+03:00
 
 App                  Version  Status  Scale  Charm                Channel  Rev  Address         Exposed  Message
 temporal-worker-k8s           active      1  temporal-worker-k8s  stable     5  10.152.183.187  no       worker listening to namespace 'default' on queue 'test-queue'
@@ -102,7 +102,7 @@ To further verify that the worker is functioning correctly, observe the output
 of the following command to ensure the absence of errors:
 
 ```bash
-kubectl -n temporal-model logs temporal-worker-k8s-0 -c temporal-worker -f
+kubectl -n worker-model logs temporal-worker-k8s-0 -c temporal-worker -f
 ```
 
 At this point, we have a Temporal worker connected to our Temporal server on the

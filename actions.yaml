@@ -103,7 +103,7 @@ check-auth-rule:
       - user, namespace, role: checks if a user has 'role' access
       to a namespace.
       - group, namespace, role: checks if a group has 'role' access
-      to a namespace..
+      to a namespace.
   params:
     user:
       type: string
