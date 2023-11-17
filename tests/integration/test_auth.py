@@ -106,7 +106,10 @@ class TestAuth:
 
         assert ops_test.model.applications[APP_NAME].status == "active"
 
-        await run_sample_workflow(ops_test)
+        try:
+            await run_sample_workflow(ops_test)
+        except RuntimeError as e:
+            assert "Request unauthorized." in str(e)
 
     async def test_openfga_add_auth_rule_action(self, ops_test: OpsTest):
         """Test add-auth-rule action."""

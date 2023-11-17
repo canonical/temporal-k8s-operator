@@ -1,7 +1,5 @@
 # Authorization
 
-> **Note:** (TODO) Functionality described on this page is not live yet.
-
 Enabling authorization requires that you have an active
 [Charmed Temporal K8s Operator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777)
 deployed as described in the tutorial. It is recommended that you first go

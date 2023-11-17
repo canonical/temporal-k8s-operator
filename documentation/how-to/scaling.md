@@ -26,11 +26,21 @@ deployed as a separate application which can then be connected together by
 integrating with the same database. These services can then be scaled according
 to your needs.
 
+Note:
+
+- In a scaled deployment, only the unit deployed with the service `frontend`
+  needs to be related to the `nginx-ingress-integrator` charm for ingress and
+  the `openfga-k8s` charm for authorization.
+- The unit deployed with the service `frontend` should also handle the
+  `internal-frontend` service, which is the internal gateway that the `worker`
+  service uses to bypass authorization rules imposed for external connections.
+  This is only necessary when authorization is enabled.
+
 To deploy the services separately in a scalable way, you must deploy the
 application as follows:
 
 ```bash
-juju deploy temporal-k8s --config services="frontend"
+juju deploy temporal-k8s --config services="frontend,internal-frontend"
 juju deploy temporal-k8s --config services="matching" temporal-k8s-matching
 juju deploy temporal-k8s --config services="history" temporal-k8s-history
 juju deploy temporal-k8s --config services="worker" temporal-k8s-worker
@@ -113,7 +123,8 @@ output: |
         "10.1.232.42:6939",
         "10.1.232.61:6935",
         "10.1.232.6:6934",
-        "10.1.232.26:6933"
+        "10.1.232.26:6933",
+        "10.1.232.26:6936"
       ],
       "rings": [
         {
@@ -122,6 +133,15 @@ output: |
           "members": [
             {
               "identity": "10.1.232.26:7233"
+            }
+          ]
+        },
+        {
+          "role": "internal-frontend",
+          "memberCount": 1,
+          "members": [
+            {
+              "identity": "10.1.232.26:7236"
             }
           ]
         },
@@ -237,11 +257,13 @@ output: |
         "10.1.232.42:6939",
         "10.1.232.6:6934",
         "10.1.232.25:6933",
+        "10.1.232.25:6936",
         "10.1.232.51:6934",
         "10.1.232.23:6939",
         "10.1.232.38:6935",
         "10.1.232.61:6935",
-        "10.1.232.26:6933"
+        "10.1.232.26:6933",
+        "10.1.232.26:6936"
       ],
       "rings": [
         {
@@ -253,6 +275,18 @@ output: |
             },
             {
               "identity": "10.1.232.25:7233"
+            }
+          ]
+        },
+        {
+          "role": "internal-frontend",
+          "memberCount": 2,
+          "members": [
+            {
+              "identity": "10.1.232.26:7236"
+            },
+            {
+              "identity": "10.1.232.25:7236"
             }
           ]
         },

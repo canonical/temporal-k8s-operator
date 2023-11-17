@@ -19,7 +19,7 @@ from helpers import (
 from pytest_operator.plugin import OpsTest
 
 ALL_SERVICES = ["temporal-k8s", "temporal-k8s-history", "temporal-k8s-matching", "temporal-k8s-worker"]
-ALL_CONFIG = ["frontend", "history", "matching", "worker"]
+ALL_CONFIG = ["frontend,internal-frontend", "history", "matching", "worker"]
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,6 @@ class TestScaling:
 
         await run_sample_workflow(ops_test)
 
-    @pytest.mark.skip  # skip until scaling down operations work in MicroK8s. Units currently go into "Terminated" state and scale remains at 2.
     async def test_scaling_down(self, ops_test: OpsTest):
         """Scale Temporal charm down to 1 unit."""
         for service in ALL_SERVICES:

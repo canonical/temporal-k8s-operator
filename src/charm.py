@@ -64,6 +64,11 @@ class TemporalK8SCharm(CharmBase):
         external_hostname: DNS listing used for external connections.
     """
 
+    def set_active_unit_status(self):
+        """Set active unit status depending on relations."""
+        message = "auth enabled" if self.config["auth-enabled"] else ""
+        self.unit.status = ActiveStatus(message)
+
     @property
     def external_hostname(self):
         """Return the DNS listing used for external connections."""
@@ -211,7 +216,7 @@ class TemporalK8SCharm(CharmBase):
         logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
         container.restart(self.name)
-        self.unit.status = ActiveStatus()
+        self.set_active_unit_status()
 
     def _check_missing_openfga_params(self):
         """Validate that all OpenFGA required properties were extracted.
@@ -239,7 +244,7 @@ class TemporalK8SCharm(CharmBase):
             raise ValueError("peer relation not ready")
 
         # Validate config.
-        valid_services = ("frontend", "history", "matching", "worker")
+        valid_services = ("frontend", "history", "matching", "worker", "internal-frontend")
         for service in self.config["services"].split(","):
             if service not in valid_services:
                 raise ValueError(f"error in services config: invalid service {service!r}")
@@ -249,7 +254,7 @@ class TemporalK8SCharm(CharmBase):
         if not self._state.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
 
-        if self.config["auth-enabled"]:
+        if self.config["auth-enabled"] and "frontend" in self.config["services"]:
             if not self._state.openfga:
                 raise ValueError("openfga:temporal relation not ready")
             missing_params = self._check_missing_openfga_params()
@@ -313,8 +318,6 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_USER": visibility_conn["user"],
                 "VISIBILITY_PSWD": visibility_conn["password"],
                 "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.bind_address),
-                # TODO(kelkawi-a): do not assume the app is always deployed with this name.
-                "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
             }
         )
 
@@ -358,8 +361,9 @@ class TemporalK8SCharm(CharmBase):
         container.add_layer(self.name, pebble_layer, combine=True)
         container.replan()
 
-        message = "auth enabled" if self.config["auth-enabled"] else ""
-        self.unit.status = ActiveStatus(message)
+        self.set_active_unit_status()
+        if self.unit.is_leader():
+            self.ui._provide_server_status()
 
 
 if __name__ == "__main__":

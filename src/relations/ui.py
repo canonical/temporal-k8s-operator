@@ -42,7 +42,7 @@ class UI(framework.Object):
     def _provide_server_status(self):
         """Provide server status to the UI charm."""
         charm = self.charm
-        is_active = charm.model.unit.status == ActiveStatus()
+        is_active = charm.model.unit.status == ActiveStatus() or charm.model.unit.status == ActiveStatus("auth enabled")
 
         ui_relations = charm.model.relations["ui"]
         if not ui_relations:
