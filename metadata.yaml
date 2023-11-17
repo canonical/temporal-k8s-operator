@@ -64,7 +64,7 @@ containers:
   temporal:
     resource: temporal-server-image
     # Included for simplicity in integration tests.
-    upstream-source: temporalio/server:1.17.4
+    upstream-source: ghcr.io/canonical/temporal-server:latest
 
 resources:
   temporal-server-image:

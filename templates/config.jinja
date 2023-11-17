@@ -21,7 +21,7 @@ persistence:
     visibilityStore: visibility
     {%- set es = ENABLE_ES | default(False) %}
     {%- if es %}
-    advancedVisibilityStore: es-visibility
+    advancedVisibilityStore: visibility
     {%- endif %}
     datastores:
         default:
@@ -205,6 +205,12 @@ services:
             membershipPort: {{ WORKER_MEMBERSHIP_PORT | default("6939") }}
             bindOnIP: {{ BIND_ON_IP | default("0.0.0.0") }}
 
+    internal-frontend:
+        rpc:
+            grpcPort: {{ INTERNAL_FRONTEND_GRPC_PORT | default("7236") }}
+            membershipPort: {{ INTERNAL_FRONTEND_MEMBERSHIP_PORT | default("6936") }}
+            bindOnIP: {{ BIND_ON_IP | default("0.0.0.0") }}
+
 clusterMetadata:
     enableGlobalNamespace: false
     failoverVersionIncrement: 10
@@ -246,11 +252,6 @@ namespaceDefaults:
       state: "disabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
-{% set publicIp = BIND_ON_IP | default("127.0.0.1") -%}
-{%- set defaultPublicHostPost = publicIp + ":" + temporalGrpcPort %}
-publicClient:
-    hostPort: "{{ PUBLIC_FRONTEND_ADDRESS | default(defaultPublicHostPost) }}"
-
 dynamicConfigClient:
-    filepath: "{{ DYNAMIC_CONFIG_FILE_PATH | default("/etc/temporal/config/dynamicconfig/docker.yaml") }}"
+    filepath: "{{ DYNAMIC_CONFIG_FILE_PATH | default("/etc/temporal/config/dynamicconfig/development.yaml") }}"
     pollInterval: "60s"

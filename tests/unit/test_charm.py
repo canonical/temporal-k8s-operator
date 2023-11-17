@@ -143,7 +143,7 @@ class TestCharm(TestCase):
                 "temporal": {
                     "summary": "temporal server",
                     "command": "temporal-server --env charm start "
-                    "--service=frontend --service=history --service=matching --service=worker",
+                    "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                     "startup": "enabled",
                     "override": "replace",
                     "environment": {
@@ -161,7 +161,6 @@ class TestCharm(TestCase):
                         "TEMPORAL_BROADCAST_ADDRESS": str(
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
-                        "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
                     },
                 }
             },
@@ -207,7 +206,6 @@ class TestCharm(TestCase):
                         "TEMPORAL_BROADCAST_ADDRESS": str(
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
-                        "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
                     },
                 }
             },
@@ -227,9 +225,7 @@ class TestCharm(TestCase):
         self.harness.update_config({"services": "worker,bad-wolf"})
 
         # The change is not applied to the plan.
-        want_command = (
-            "temporal-server --env charm start --service=frontend --service=history --service=matching --service=worker"
-        )
+        want_command = "temporal-server --env charm start --service=frontend --service=history --service=matching --service=worker --service=internal-frontend"
         got_command = harness.get_container_pebble_plan("temporal").to_dict()["services"]["temporal"]["command"]
         self.assertEqual(got_command, want_command)
 
@@ -360,7 +356,7 @@ class TestCharm(TestCase):
                 "temporal": {
                     "summary": "temporal server",
                     "command": "temporal-server --env charm start "
-                    "--service=frontend --service=history --service=matching --service=worker",
+                    "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                     "startup": "enabled",
                     "override": "replace",
                     "environment": {
@@ -382,7 +378,6 @@ class TestCharm(TestCase):
                         "TEMPORAL_BROADCAST_ADDRESS": str(
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
-                        "PUBLIC_FRONTEND_ADDRESS": "temporal-k8s:7233",
                         "OFGA_STORE_ID": harness.charm._state.openfga["store_id"],
                         "OFGA_AUTH_MODEL_ID": harness.charm._state.openfga["auth_model_id"],
                         "OFGA_API_HOST": harness.charm._state.openfga["address"],

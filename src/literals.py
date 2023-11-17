@@ -28,6 +28,10 @@ SERVICE_PORTS = {
         "grpc": 7239,
         "http": 6939,
     },
+    "internal-frontend": {
+        "grpc": 7236,
+        "http": 6936,
+    },
 }
 
 PROMETHEUS_PORT = 9090

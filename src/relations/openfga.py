@@ -108,6 +108,10 @@ class OpenFGA(framework.Object):
         Args:
             event: The event triggered when the relation is created.
         """
+        if "frontend" not in self.charm.config["services"]:
+            logger.info(f"{event.relation.name} revoked, relation only supported for frontend service")
+            return
+
         if not event.store_id:
             logger.info(f"{event.relation.name} revoked, no store id")
             return
