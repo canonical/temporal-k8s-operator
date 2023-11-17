@@ -152,3 +152,101 @@ async def perform_temporal_integrations(ops_test: OpsTest):
     )
 
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+
+
+async def perform_add_auth_rule_action(ops_test: OpsTest, user=None, group=None, namespace=None, role=None):
+    """Perform add-auth-rule action tests.
+
+    Args:
+        ops_test: PyTest object.
+        user: User email.
+        group: Group to assign membership to.
+        namespace: Temporal namespace to assign access to.
+        role: one of "reader", "writer" or "admin"
+    """
+    temporal_unit = ops_test.model.applications[APP_NAME].units[0]
+    if user:
+        action = await temporal_unit.run_action("add-auth-rule", user=user, group=group)
+    else:
+        action = await temporal_unit.run_action("add-auth-rule", group=group, namespace=namespace, role=role)
+
+    result = await action.wait()
+    if result.status == "completed":
+        assert "output" in result.results
+
+
+async def perform_remove_auth_rule_action(ops_test: OpsTest, user=None, group=None, namespace=None, role=None):
+    """Perform remove-auth-rule action tests.
+
+    Args:
+        ops_test: PyTest object.
+        user: User email.
+        group: Group to remove membership from.
+        namespace: Temporal namespace to remove access from.
+        role: one of "reader", "writer" or "admin"
+    """
+    temporal_unit = ops_test.model.applications[APP_NAME].units[0]
+    if user:
+        action = await temporal_unit.run_action("remove-auth-rule", user=user, group=group)
+    else:
+        action = await temporal_unit.run_action("remove-auth-rule", group=group, namespace=namespace, role=role)
+
+    result = await action.wait()
+    if result.status == "completed":
+        assert "output" in result.results
+
+
+async def perform_check_auth_rule_action(
+    ops_test: OpsTest, exp_result, user=None, group=None, namespace=None, role=None
+):
+    """Perform check-auth-rule action tests.
+
+    Args:
+        ops_test: PyTest object.
+        exp_result: The expected result of the check.
+        user: User email.
+        group: Group to check membership info for.
+        namespace: Temporal namespace to check access for.
+        role: one of "reader", "writer" or "admin"
+    """
+    temporal_unit = ops_test.model.applications[APP_NAME].units[0]
+    if user:
+        action = await temporal_unit.run_action("check-auth-rule", user=user, group=group)
+    else:
+        action = await temporal_unit.run_action("check-auth-rule", group=group, namespace=namespace, role=role)
+
+    result = await action.wait()
+    if result.status == "completed" and "output" in result.results:
+        assert result.results["output"] == str(exp_result)
+
+
+async def perform_list_auth_rule_action(ops_test: OpsTest, user=None, group=None, namespace=None):
+    """Perform list-auth-rule action tests.
+
+    Args:
+        ops_test: PyTest object.
+        user: User email.
+        group: Group to list membership info for.
+        namespace: Temporal namespace to list access info for.
+    """
+    temporal_unit = ops_test.model.applications[APP_NAME].units[0]
+    if user:
+        action = await temporal_unit.run_action("list-auth-rule", user=user)
+    elif group:
+        action = await temporal_unit.run_action("list-auth-rule", group=group)
+    else:
+        action = await temporal_unit.run_action("list-auth-rule", namespace=namespace)
+
+    result = await action.wait()
+    if user:
+        if result.status == "completed" and "output" in result.results:
+            assert (
+                result.results["output"]["member"] == "['group:test_group']"
+                and result.results["output"]["reader"] == "['namespace:test_namespace']"
+            )
+    elif group:
+        if result.status == "completed" and "output" in result.results:
+            assert result.results["output"]["reader"] == "['namespace:test_namespace']"
+    else:
+        if result.status == "completed" and "output" in result.results:
+            assert result.results["output"]["reader"] == "['group:test_group']"

@@ -18,16 +18,6 @@ allowing the user flexibility in configuration. It streamlines the process of
 deploying, scaling, configuring and overseeing Temporal at scale in a dependable
 manner for production purposes.
 
-## Project and Community
-
-Charmed Temporal K8s is a member of the Ubuntu family. It’s an open source
-project that warmly welcomes community projects, contributions, suggestions,
-fixes and constructive feedback.
-
-- [Read our Code of Conduct](https://ubuntu.com/community/code-of-conduct)
-- [Join the Discourse forum](https://discourse.charmhub.io/tag/temporal)
-- [Contribute and report bugs](https://github.com/canonical/temporal-k8s-operator)
-
 ## In This Documentation
 
 |                                                                                                                                                                        |                                                                                                                                        |
@@ -51,6 +41,8 @@ fixes and constructive feedback.
 | 2     | t-run-workflow      | [9. Run Your First Workflow](/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)                 |
 | 2     | t-cleanup           | [10. Cleanup and Extra Info](/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)                  |
 | 1     | how-to              | [How to]()                                                                                                   |
+| 2     | h-authentication    | [Authentication](/t/charmed-temporal-k8s-how-to-authentication/12586)                                        |
+| 2     | h-authorization     | [Authorization](/t/charmed-temporal-k8s-how-to-authorization/12587)                                          |
 | 2     | h-observability     | [Observability](/t/charmed-temporal-k8s-how-to-observability/11787)                                          |
 | 2     | how-to-scaling      | [Scaling](/t/10840)                                                                                          |
 | 2     | h-tctl              | [TCTL](/t/charmed-temporal-k8s-how-to-tctl/11788)                                                            |
@@ -58,9 +50,18 @@ fixes and constructive feedback.
 | 2     | r-actions           | [Actions](https://charmhub.io/temporal-k8s/actions)                                                          |
 | 2     | r-configurations    | [Configurations](https://charmhub.io/temporal-k8s/configure)                                                 |
 | 2     | r-integrations      | [Integrations](https://charmhub.io/temporal-k8s/integrations)                                                |
-| 1     | explanation         | [Explanation]()                                                                                              |
-| 2     | e-architecture      | [Architecture](/t/charmed-temporal-k8s-explanations-architecture/11789)                                      |
+| 1     | e-architecture      | [Architecture](/t/charmed-temporal-k8s-explanations-architecture/11789)                                      |
 
 # Redirects
 
 [details=Mapping table] | Path | Location | | ---- | -------- | [/details]
+
+## Project and Community
+
+Charmed Temporal K8s is a member of the Ubuntu family. It’s an open source
+project that warmly welcomes community projects, contributions, suggestions,
+fixes and constructive feedback.
+
+- [Read our Code of Conduct](https://ubuntu.com/community/code-of-conduct)
+- [Join the Discourse forum](https://discourse.charmhub.io/tag/temporal)
+- [Contribute and report bugs](https://github.com/canonical/temporal-k8s-operator)

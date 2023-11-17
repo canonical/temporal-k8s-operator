@@ -86,8 +86,10 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.restart_action, self._on_restart_action)
 
         # Handle postgresql relation.
-        self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME)
-        self.visibility = DatabaseRequires(self, relation_name="visibility", database_name=VISIBILITY_DB_NAME)
+        self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME, extra_user_roles="admin")
+        self.visibility = DatabaseRequires(
+            self, relation_name="visibility", database_name=VISIBILITY_DB_NAME, extra_user_roles="admin"
+        )
         self.postgresql = Postgresql(self)
 
         # Handle admin and ui relations.

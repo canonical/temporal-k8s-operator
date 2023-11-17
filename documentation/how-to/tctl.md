@@ -13,7 +13,7 @@ the available commands such as:
 juju run temporal-admin-k8s/0 tctl args="--ns default namespace register -rd 3"
 ```
 
-# List Namespaces
+## List Namespaces
 
 ```bash
 juju run temporal-admin-k8s/0 tctl args="namespace list"
