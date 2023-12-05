@@ -19,7 +19,7 @@ from helpers import (
 from pytest_operator.plugin import OpsTest
 
 ALL_SERVICES = ["temporal-k8s", "temporal-k8s-history", "temporal-k8s-matching", "temporal-k8s-worker"]
-ALL_CONFIG = ["frontend,internal-frontend", "history", "matching", "worker"]
+ALL_CONFIG = ["frontend", "history", "matching", "worker"]
 
 logger = logging.getLogger(__name__)
 

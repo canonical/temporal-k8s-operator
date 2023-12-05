@@ -98,7 +98,7 @@ class OpenFGAEvent(RelationEvent):
     @property
     def token_secret_id(self):
         return self.relation.data[self.relation.app].get("token_secret_id", "")
-    
+
     @property
     def token(self):
         return self.relation.data[self.relation.app].get("token", "")
@@ -142,9 +142,7 @@ class OpenFGARequires(Object):
     def __init__(self, charm, store_name: str):
         super().__init__(charm, RELATION_NAME)
 
-        self.framework.observe(
-            charm.on[RELATION_NAME].relation_joined, self._on_relation_joined
-        )
+        self.framework.observe(charm.on[RELATION_NAME].relation_joined, self._on_relation_joined)
         self.framework.observe(
             charm.on[RELATION_NAME].relation_changed,
             self._on_relation_changed,

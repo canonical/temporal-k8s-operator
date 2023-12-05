@@ -28,6 +28,7 @@ from literals import (
     SERVICE_PORTS,
     VALID_LOG_LEVELS,
     VISIBILITY_DB_NAME,
+    ValidServiceTypes,
 )
 from log import log_event_handler
 
@@ -89,6 +90,7 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.temporal_pebble_ready, self._on_temporal_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.restart_action, self._on_restart_action)
+        self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
 
         # Handle postgresql relation.
         self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME, extra_user_roles="admin")
@@ -121,6 +123,19 @@ class TemporalK8SCharm(CharmBase):
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
+
+    @log_event_handler(logger)
+    def _on_peer_relation_changed(self, event):
+        """Handle peer relation changes.
+
+        Args:
+            event: The event triggered when the peer relation changed.
+        """
+        if self.unit.is_leader():
+            return
+
+        self.unit.status = WaitingStatus("configuring temporal")
+        self._update(event)
 
     def _require_nginx_route(self):
         """Require nginx-route relation based on current configuration."""
@@ -244,9 +259,8 @@ class TemporalK8SCharm(CharmBase):
             raise ValueError("peer relation not ready")
 
         # Validate config.
-        valid_services = ("frontend", "history", "matching", "worker", "internal-frontend")
         for service in self.config["services"].split(","):
-            if service not in valid_services:
+            if not any(service == item.value for item in ValidServiceTypes):
                 raise ValueError(f"error in services config: invalid service {service!r}")
 
         # Validate relations.
@@ -254,7 +268,7 @@ class TemporalK8SCharm(CharmBase):
         if not self._state.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
 
-        if self.config["auth-enabled"] and "frontend" in self.config["services"]:
+        if self.config["auth-enabled"]:
             if not self._state.openfga:
                 raise ValueError("openfga:temporal relation not ready")
             missing_params = self._check_missing_openfga_params()
@@ -344,6 +358,10 @@ class TemporalK8SCharm(CharmBase):
         logger.info("planning temporal execution")
         services = self.config["services"].split(",")
         services_args = " ".join(f"--service={service}" for service in services)
+        if ValidServiceTypes.FRONTEND.value in services:
+            services_args += " --service=internal-frontend"
+
+        # TODO (kelkawi-a): add pebble check
         pebble_layer = {
             "summary": "temporal server layer",
             "services": {
