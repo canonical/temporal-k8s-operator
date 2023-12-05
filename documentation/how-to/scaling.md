@@ -31,16 +31,15 @@ Note:
 - In a scaled deployment, only the unit deployed with the service `frontend`
   needs to be related to the `nginx-ingress-integrator` charm for ingress and
   the `openfga-k8s` charm for authorization.
-- The unit deployed with the service `frontend` should also handle the
+- The unit deployed with the service `frontend` will automatically handle the
   `internal-frontend` service, which is the internal gateway that the `worker`
   service uses to bypass authorization rules imposed for external connections.
-  This is only necessary when authorization is enabled.
 
 To deploy the services separately in a scalable way, you must deploy the
 application as follows:
 
 ```bash
-juju deploy temporal-k8s --config services="frontend,internal-frontend"
+juju deploy temporal-k8s --config services="frontend"
 juju deploy temporal-k8s --config services="matching" temporal-k8s-matching
 juju deploy temporal-k8s --config services="history" temporal-k8s-history
 juju deploy temporal-k8s --config services="worker" temporal-k8s-worker

@@ -8,11 +8,10 @@ import json
 import logging
 from enum import Enum
 
-import openfga_sdk
 import requests
 from charms.openfga_k8s.v0.openfga import OpenFGAStoreCreateEvent
 from openfga_sdk import TupleKey
-from openfga_sdk.client import OpenFgaClient
+from openfga_sdk.client import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
 from openfga_sdk.client.models.tuple import ClientTuple
@@ -108,19 +107,19 @@ class OpenFGA(framework.Object):
         Args:
             event: The event triggered when the relation is created.
         """
-        if "frontend" not in self.charm.config["services"]:
-            logger.info(f"{event.relation.name} revoked, relation only supported for frontend service")
+        if not self.charm.unit.is_leader():
             return
 
         if not event.store_id:
             logger.info(f"{event.relation.name} revoked, no store id")
             return
 
-        token = event.token
         if event.token_secret_id:
             secret = self.charm.model.get_secret(id=event.token_secret_id)
             secret_content = secret.get_content()
             token = secret_content["token"]
+        if event.token:
+            token = event.token
 
         if self.charm.unit.is_leader():
             self.charm._state.openfga = {
@@ -412,7 +411,7 @@ def _get_ofga_client(openfga_data):
         OpenFgaClient: An initialized OpenFgaClient instance configured to interact
         with the OpenFGA store.
     """
-    configuration = openfga_sdk.ClientConfiguration(
+    configuration = ClientConfiguration(
         api_scheme=openfga_data["scheme"],
         api_host=f"{openfga_data['address']}:{openfga_data['port']}",
         store_id=openfga_data["store_id"],

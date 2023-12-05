@@ -5,6 +5,8 @@
 
 """Literals used by the Temporal K8s charm."""
 
+from enum import Enum
+
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 LOG_FILE = "/var/log/temporal"
 DB_NAME = "temporal-k8s_db"
@@ -35,3 +37,19 @@ SERVICE_PORTS = {
 }
 
 PROMETHEUS_PORT = 9090
+
+
+class ValidServiceTypes(Enum):
+    """Enum of valid service types in Temporal.
+
+    Attributes:
+        FRONTEND: Represents the frontend service.
+        HISTORY: Represents the history service.
+        MATCHING: Represents the matching service.
+        WORKER: Represents the worker service.
+    """
+
+    FRONTEND = "frontend"
+    HISTORY = "history"
+    MATCHING = "matching"
+    WORKER = "worker"

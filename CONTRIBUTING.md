@@ -46,7 +46,7 @@ This charm is used to deploy Temporal server in a k8s cluster. For a local
 deployment, follow the following steps:
 
     # Install Microk8s from snap:
-    sudo snap install microk8s --classic --channel=1.24
+    sudo snap install microk8s --classic --channel=1.25
 
     # Install charmcraft from snap:
     sudo snap install charmcraft --classic
@@ -79,13 +79,13 @@ deployment, follow the following steps:
     charmcraft pack [--destructive-mode]
 
     # Deploy the charm:
-    juju deploy ./temporal-k8s_ubuntu-22.04-amd64.charm --resource temporal-server-image=temporalio/server:1.17.4
+    juju deploy ./temporal-k8s_ubuntu-22.04-amd64.charm --resource temporal-server-image=ghcr.io/canonical/temporal-server:latest
 
     # Deploy admin charm (Only if modifying admin charm, otherwise deploy as shown below):
-    juju deploy ./temporal-admin-k8s_ubuntu-22.04-amd64.charm --resource temporal-admin-image=temporalio/admin-tools:1.18.0
+    juju deploy ./temporal-admin-k8s_ubuntu-22.04-amd64.charm --resource temporal-admin-image=temporalio/admin-tools:1.21.5
 
     # Deploy ui charm (Only if modifying UI charm, otherwise deploy as shown below):
-    juju deploy ./temporal-ui-k8s_ubuntu-22.04-amd64.charm --resource temporal-ui-image=temporalio/ui:2.10.3
+    juju deploy ./temporal-ui-k8s_ubuntu-22.04-amd64.charm --resource temporal-ui-image=temporalio/ui:2.21.3
 
     # Relate operator to postgres:
     juju deploy postgresql-k8s --channel 14/stable --trust
@@ -187,3 +187,9 @@ Once done, the hostname will be set to the application name `temporal-ui-k8s` by
 default and can be changed through the `external-hostname` config. If the
 ingress relation has already been created through the previous step, then the
 web UI can be accessed by visiting `https://temporal-ui-k8s`.
+
+### openfga
+
+To enable authorization, the OpenFGA charm must be deployed. Instructions on how
+to enable authorization can be found
+[here](./documentation/how-to/authorization.md).

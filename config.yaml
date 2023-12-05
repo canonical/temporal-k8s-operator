@@ -3,7 +3,7 @@
 
 options:
   services:
-    default: frontend,history,matching,worker,internal-frontend
+    default: frontend,history,matching,worker
     description: |
       A comma-separated list of Temporal services to run. Temporal components
       can be either run in a single container or spread across multiple
