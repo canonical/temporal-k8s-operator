@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Temporal charm integration test config."""
@@ -6,7 +6,6 @@
 import asyncio
 import logging
 
-import pytest
 import pytest_asyncio
 from helpers import (
     APP_NAME,
@@ -21,7 +20,6 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skip_if_deployed
 @pytest_asyncio.fixture(name="deploy", scope="module")
 async def deploy(ops_test: OpsTest):
     """The app is up and running."""
