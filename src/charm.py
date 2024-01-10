@@ -352,6 +352,19 @@ class TemporalK8SCharm(CharmBase):
                 }
             )
 
+        http_proxy = os.environ.get("JUJU_CHARM_HTTP_PROXY")
+        https_proxy = os.environ.get("JUJU_CHARM_HTTPS_PROXY")
+        no_proxy = os.environ.get("JUJU_CHARM_NO_PROXY")
+
+        if http_proxy or https_proxy:
+            context.update(
+                {
+                    "HTTP_PROXY": http_proxy,
+                    "HTTPS_PROXY": https_proxy,
+                    "NO_PROXY": no_proxy,
+                }
+            )
+
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
 
