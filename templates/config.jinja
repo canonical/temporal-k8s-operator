@@ -44,7 +44,7 @@ persistence:
                     serverName: {{ SQL_HOST_NAME | default("") }}
         visibility:
             sql:
-                pluginName: "postgres"
+                pluginName: "postgres12"
                 databaseName: "{{ VISIBILITY_NAME }}"
                 connectAddr: "{{ VISIBILITY_HOST }}:{{ VISIBILITY_PORT }}"
                 connectProtocol: "tcp"
