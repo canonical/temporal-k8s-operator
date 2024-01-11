@@ -292,6 +292,13 @@ class TemporalK8SCharm(CharmBase):
                 close_port(port=ports["grpc"])
                 close_port(port=ports["http"])
 
+        if "frontend" in services:
+            open_port(port=SERVICE_PORTS["internal-frontend"]["grpc"])
+            open_port(port=SERVICE_PORTS["internal-frontend"]["http"])
+        else:
+            close_port(port=SERVICE_PORTS["internal-frontend"]["grpc"])
+            close_port(port=SERVICE_PORTS["internal-frontend"]["http"])
+
     def _update(self, event):
         """Update the Temporal server configuration and replan its execution.
 
