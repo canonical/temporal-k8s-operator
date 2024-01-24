@@ -20,6 +20,7 @@ from jinja2 import Environment, FileSystemLoader
 from ops import main
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.pebble import CheckStatus
 
 from literals import (
     DB_NAME,
@@ -91,6 +92,7 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.restart_action, self._on_restart_action)
         self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
+        self.framework.observe(self.on.update_status, self._on_update_status)
 
         # Handle postgresql relation.
         self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME, extra_user_roles="admin")
@@ -232,6 +234,45 @@ class TemporalK8SCharm(CharmBase):
         self.unit.status = MaintenanceStatus("restarting temporal")
         container.restart(self.name)
         self.set_active_unit_status()
+
+    @log_event_handler(logger)
+    def _on_update_status(self, event):
+        """Handle `update-status` events.
+
+        Args:
+            event: The `update-status` event triggered at intervals.
+        """
+        try:
+            self._validate()
+        except ValueError:
+            return
+
+        container = self.unit.get_container(self.name)
+        valid_pebble_plan = self._validate_pebble_plan(container)
+        if not valid_pebble_plan:
+            self._update(event)
+            return
+
+        check = container.get_check("up")
+        if check.status != CheckStatus.UP:
+            self.unit.status = MaintenanceStatus("Status check: DOWN")
+            return
+
+        self.set_active_unit_status()
+        if self.unit.is_leader():
+            self.ui._provide_server_status()
+
+    def _validate_pebble_plan(self, container):
+        """Validate Temporal server pebble plan.
+
+        Args:
+            container: application container
+
+        Returns:
+            bool of pebble plan validity
+        """
+        plan = container.get_plan().to_dict()
+        return bool(plan and plan["services"].get(self.name, {}).get("on-check-failure"))
 
     def _check_missing_openfga_params(self):
         """Validate that all OpenFGA required properties were extracted.
@@ -381,7 +422,6 @@ class TemporalK8SCharm(CharmBase):
         if ValidServiceTypes.FRONTEND.value in services:
             services_args += " --service=internal-frontend"
 
-        # TODO (kelkawi-a): add pebble check
         pebble_layer = {
             "summary": "temporal server layer",
             "services": {
@@ -393,15 +433,23 @@ class TemporalK8SCharm(CharmBase):
                     # Including config values here so that a change in the
                     # config forces replanning to restart the service.
                     "environment": context,
+                    "on-check-failure": {"up": "ignore"},
+                }
+            },
+            "checks": {
+                "up": {
+                    "override": "replace",
+                    "level": "alive",
+                    "period": "300s",
+                    # curl cluster health of internal-frontend service
+                    "exec": {"command": "tctl --address=0.0.0.0:7236 cluster health"},
                 }
             },
         }
         container.add_layer(self.name, pebble_layer, combine=True)
         container.replan()
 
-        self.set_active_unit_status()
-        if self.unit.is_leader():
-            self.ui._provide_server_status()
+        self.unit.status = MaintenanceStatus("replanning application")
 
 
 if __name__ == "__main__":

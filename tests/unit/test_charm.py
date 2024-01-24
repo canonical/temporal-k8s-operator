@@ -9,15 +9,17 @@
 # pylint:disable=protected-access
 
 import json
-from unittest import TestCase
+from unittest import TestCase, mock
 
-from ops.model import ActiveStatus, BlockedStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.pebble import CheckStatus
 from ops.testing import Harness
 
 from charm import TemporalK8SCharm
 from state import State
 
 SERVER_PORT = "7233"
+mock_incomplete_pebble_plan = {"services": {"temporal": {"override": "replace"}}}
 
 
 class TestCharm(TestCase):
@@ -162,7 +164,8 @@ class TestCharm(TestCase):
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
                     },
-                }
+                    "on-check-failure": {"up": "ignore"},
+                },
             },
         }
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
@@ -173,7 +176,7 @@ class TestCharm(TestCase):
         self.assertTrue(service.is_running())
 
         # The ActiveStatus is set with no message.
-        self.assertEqual(harness.model.unit.status, ActiveStatus())
+        self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
 
     def test_config_changed(self):
         """The pebble plan changes according to config changes."""
@@ -207,14 +210,14 @@ class TestCharm(TestCase):
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
                     },
-                }
+                    "on-check-failure": {"up": "ignore"},
+                },
             },
         }
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
         self.assertEqual(got_plan, want_plan)
 
-        # The ActiveStatus is set with no message.
-        self.assertEqual(harness.model.unit.status, ActiveStatus())
+        self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
 
     def test_invalid_config_value(self):
         """The charm blocks if an invalid config value is provided."""
@@ -385,13 +388,84 @@ class TestCharm(TestCase):
                         "OFGA_SECRETS_BEARER_TOKEN": harness.charm._state.openfga["token"],
                         "OFGA_API_PORT": harness.charm._state.openfga["port"],
                     },
+                    "on-check-failure": {"up": "ignore"},
                 }
             },
         }
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
         self.assertEqual(got_plan, want_plan)
 
+        # self.assertEqual(harness.model.unit.status, ActiveStatus("auth enabled"))
+        self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
+
+    def test_update_status_up(self):
+        """The charm updates the unit status to active based on UP status."""
+        harness = self.harness
+
+        simulate_lifecycle(harness)
+        harness.update_config({"auth-enabled": True})
+
+        secret_id = harness.add_model_secret("temporal-k8s", {"token": "openfga_token"})
+        event = make_openfga_store_created_event(secret_id)
+        harness.charm.openfga_relation._on_openfga_store_created(event)
+
+        harness.charm._state.openfga = {
+            **harness.charm._state.openfga,
+            "auth_model_id": "123",
+        }
+
+        harness.update_config({})
+
+        container = harness.model.unit.get_container("temporal")
+        container.get_check = mock.Mock(status="up")
+        container.get_check.return_value.status = CheckStatus.UP
+        harness.charm.on.update_status.emit()
+
         self.assertEqual(harness.model.unit.status, ActiveStatus("auth enabled"))
+
+    def test_update_status_down(self):
+        """The charm updates the unit status to maintenance based on DOWN status."""
+        harness = self.harness
+
+        simulate_lifecycle(harness)
+
+        container = harness.model.unit.get_container("temporal")
+        container.get_check = mock.Mock(status="up")
+        container.get_check.return_value.status = CheckStatus.DOWN
+        harness.charm.on.update_status.emit()
+
+        self.assertEqual(harness.model.unit.status, MaintenanceStatus("Status check: DOWN"))
+
+    def test_incomplete_pebble_plan(self):
+        """The charm re-applies the pebble plan if incomplete."""
+        harness = self.harness
+        simulate_lifecycle(harness)
+
+        container = harness.model.unit.get_container("temporal")
+        container.add_layer("temporal", mock_incomplete_pebble_plan, combine=True)
+        harness.charm.on.update_status.emit()
+
+        self.assertEqual(
+            harness.model.unit.status,
+            MaintenanceStatus("replanning application"),
+        )
+        plan = harness.get_container_pebble_plan("temporal").to_dict()
+        assert plan != mock_incomplete_pebble_plan
+
+    @mock.patch("charm.TemporalK8SCharm._validate_pebble_plan", return_value=True)
+    def test_missing_pebble_plan(self, mock_validate_pebble_plan):
+        """The charm re-applies the pebble plan if missing."""
+        harness = self.harness
+        simulate_lifecycle(harness)
+
+        mock_validate_pebble_plan.return_value = False
+        harness.charm.on.update_status.emit()
+        self.assertEqual(
+            harness.model.unit.status,
+            MaintenanceStatus("replanning application"),
+        )
+        plan = harness.get_container_pebble_plan("temporal").to_dict()
+        assert plan is not None
 
 
 def simulate_lifecycle(harness):
