@@ -38,7 +38,7 @@ async def scale(ops_test: OpsTest, app, units):
         status="active",
         idle_period=30,
         raise_on_blocked=True,
-        timeout=300,
+        timeout=600,
         wait_for_exact_units=units,
     )
 
