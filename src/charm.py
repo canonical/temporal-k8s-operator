@@ -253,11 +253,10 @@ class TemporalK8SCharm(CharmBase):
             self._update(event)
             return
 
-        if "frontend" in self.config["services"]:
-            check = container.get_check("up")
-            if check.status != CheckStatus.UP:
-                self.unit.status = MaintenanceStatus("Status check: DOWN")
-                return
+        check = container.get_check("up")
+        if check.status != CheckStatus.UP:
+            self.unit.status = MaintenanceStatus("Status check: DOWN")
+            return
 
         self.set_active_unit_status()
         if self.unit.is_leader():
@@ -443,7 +442,7 @@ class TemporalK8SCharm(CharmBase):
                     "level": "alive",
                     "period": "300s",
                     # curl cluster health of internal-frontend service
-                    "exec": {"command": "tctl --address=0.0.0.0:7236 cluster health"},
+                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
                 }
             },
         }
