@@ -20,6 +20,7 @@ from jinja2 import Environment, FileSystemLoader
 from ops import main
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.pebble import CheckStatus
 
 from literals import (
     DB_NAME,
@@ -252,6 +253,11 @@ class TemporalK8SCharm(CharmBase):
             self._update(event)
             return
 
+        check = container.get_check("up")
+        if check.status != CheckStatus.UP:
+            self.unit.status = MaintenanceStatus("Status check: DOWN")
+            return
+
         self.set_active_unit_status()
         if self.unit.is_leader():
             self.ui._provide_server_status()
@@ -416,7 +422,6 @@ class TemporalK8SCharm(CharmBase):
         if ValidServiceTypes.FRONTEND.value in services:
             services_args += " --service=internal-frontend"
 
-        # TODO (kelkawi-a): add pebble check
         pebble_layer = {
             "summary": "temporal server layer",
             "services": {
