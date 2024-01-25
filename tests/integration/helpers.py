@@ -32,16 +32,15 @@ async def scale(ops_test: OpsTest, app, units):
     """
     await ops_test.model.applications[app].scale(scale=units)
 
-    async with ops_test.fast_forward():
-        # Wait for model to settle
-        await ops_test.model.wait_for_idle(
-            apps=[app],
-            status="active",
-            idle_period=30,
-            raise_on_blocked=True,
-            timeout=600,
-            wait_for_exact_units=units,
-        )
+    # Wait for model to settle
+    await ops_test.model.wait_for_idle(
+        apps=[app],
+        status="active",
+        idle_period=30,
+        raise_on_blocked=True,
+        timeout=300,
+        wait_for_exact_units=units,
+    )
 
     assert len(ops_test.model.applications[app].units) == units
 

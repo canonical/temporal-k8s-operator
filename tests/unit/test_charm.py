@@ -9,9 +9,9 @@
 # pylint:disable=protected-access
 
 import json
-from unittest import TestCase, mock
+from unittest import TestCase
 
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
 
 from charm import TemporalK8SCharm
