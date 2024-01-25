@@ -17,7 +17,7 @@ from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
 from charms.openfga_k8s.v0.openfga import OpenFGARequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
-from ops import main
+from ops import main, pebble
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import CheckStatus
@@ -271,8 +271,11 @@ class TemporalK8SCharm(CharmBase):
         Returns:
             bool of pebble plan validity
         """
-        plan = container.get_plan().to_dict()
-        return bool(plan and plan["services"].get(self.name, {}).get("on-check-failure"))
+        try:
+            plan = container.get_plan().to_dict()
+            return bool(plan and plan["services"].get(self.name, {}).get("on-check-failure"))
+        except pebble.ConnectionError:
+            return False
 
     def _check_missing_openfga_params(self):
         """Validate that all OpenFGA required properties were extracted.
