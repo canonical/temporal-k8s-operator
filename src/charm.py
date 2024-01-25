@@ -253,10 +253,11 @@ class TemporalK8SCharm(CharmBase):
             self._update(event)
             return
 
-        check = container.get_check("up")
-        if check.status != CheckStatus.UP:
-            self.unit.status = MaintenanceStatus("Status check: DOWN")
-            return
+        if "frontend" in self.config["services"]:
+            check = container.get_check("up")
+            if check.status != CheckStatus.UP:
+                self.unit.status = MaintenanceStatus("Status check: DOWN")
+                return
 
         self.set_active_unit_status()
         if self.unit.is_leader():
