@@ -31,6 +31,8 @@ async def deploy(ops_test: OpsTest):
     charm = await ops_test.build_charm(".")
     resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
 
+    await ops_test.model.set_config({"update-status-hook-interval": "1m"})
+
     # Deploy temporal server, temporal admin and postgresql charms.
     for i in range(4):
         # for service in ALL_SERVICES:
