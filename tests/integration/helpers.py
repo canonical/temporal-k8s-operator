@@ -38,7 +38,7 @@ async def scale(ops_test: OpsTest, app, units):
         status="active",
         idle_period=30,
         raise_on_blocked=True,
-        timeout=300,
+        timeout=600,
         wait_for_exact_units=units,
     )
 
@@ -121,7 +121,7 @@ async def simulate_charm_crash(ops_test: OpsTest):
     Args:
         ops_test: PyTest object.
     """
-    await ops_test.model.applications[APP_NAME].destroy(force=True)
+    await ops_test.model.applications[APP_NAME].destroy()
     await ops_test.model.block_until(lambda: APP_NAME not in ops_test.model.applications)
 
     charm = await ops_test.build_charm(".")

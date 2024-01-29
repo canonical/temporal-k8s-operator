@@ -193,7 +193,22 @@ sudo nano /etc/hosts
 
 By default, the hostname will be set to the respective application names
 `temporal-k8s` and `temporal-ui-k8s`. You can then connect a Temporal client
-through this hostname i.e. `Client.connect("temporal-k8s")`.
+through this hostname as follows, where `[CERTIFICATE]` is the `.crt` file generated previously:
+
+```python
+from temporalio.client import Client, TLSConfig
+
+tls_root_cas = """
+-----BEGIN CERTIFICATE-----
+[CERTIFICATE]
+-----END CERTIFICATE-----
+"""
+
+enc_tls_root_cas = tls_root_cas.encode()
+tls = TLSConfig(server_root_ca_cert=enc_tls_root_cas, domain="temporal-k8s")
+
+client = await Client.connect("temporal-k8s", tls=tls)
+```
 
 > **See next:
 > [Deploy Temporal Worker](/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)**

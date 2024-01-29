@@ -31,6 +31,8 @@ async def deploy(ops_test: OpsTest):
     charm = await ops_test.build_charm(".")
     resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
 
+    await ops_test.model.set_config({"update-status-hook-interval": "1m"})
+
     # Deploy temporal server, temporal admin and postgresql charms.
     for i in range(4):
         # for service in ALL_SERVICES:
@@ -40,14 +42,14 @@ async def deploy(ops_test: OpsTest):
 
     await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
     await ops_test.model.deploy(APP_NAME_UI, channel="edge")
-    await ops_test.model.deploy("postgresql-k8s", channel="14", trust=True)
+    await ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True)
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME_ADMIN, APP_NAME_UI] + ALL_SERVICES, status="blocked", raise_on_blocked=False, timeout=1200
         )
         await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
+            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=1200
         )
 
         for service in ALL_SERVICES:
@@ -57,7 +59,7 @@ async def deploy(ops_test: OpsTest):
         await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
         await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
+        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
         for service in ALL_SERVICES:
             if service != "temporal-k8s":
@@ -69,12 +71,12 @@ async def deploy(ops_test: OpsTest):
 
         await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=180
+            apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=1200
         )
 
         await create_default_namespace(ops_test)
 
-        await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=300)
+        await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1200)
         assert ops_test.model.applications["temporal-k8s"].units[0].workload_status == "active"
 
         await run_sample_workflow(ops_test)

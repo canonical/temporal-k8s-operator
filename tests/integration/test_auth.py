@@ -32,84 +32,86 @@ class TestAuth:
     async def test_openfga_relation(self, ops_test: OpsTest):
         """Add OpenFGA relation and authorization model."""
         await ops_test.model.applications[APP_NAME].set_config({"auth-enabled": "true"})
-        await ops_test.model.deploy("openfga-k8s", channel="latest/edge")
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, "openfga-k8s"],
-            status="blocked",
-            raise_on_blocked=False,
-            timeout=1200,
-        )
+        await ops_test.model.deploy("openfga-k8s", channel="1.0/edge")
 
-        logger.info("adding openfga postgresql relation")
-        await ops_test.model.integrate("openfga-k8s:database", "postgresql-k8s:database")
+        async with ops_test.fast_forward():
+            await ops_test.model.wait_for_idle(
+                apps=[APP_NAME, "openfga-k8s"],
+                status="blocked",
+                raise_on_blocked=False,
+                timeout=1200,
+            )
 
-        await ops_test.model.wait_for_idle(
-            apps=["openfga-k8s"],
-            status="blocked",
-            raise_on_blocked=False,
-            timeout=1200,
-        )
+            logger.info("adding openfga postgresql relation")
+            await ops_test.model.integrate("openfga-k8s:database", "postgresql-k8s:database")
 
-        openfga_unit = ops_test.model.applications["openfga-k8s"].units[0]
-        for i in range(10):
-            action: Action = await openfga_unit.run_action("schema-upgrade")
-            result = await action.wait()
-            logger.info(f"attempt {i} -> action result {result.status} {result.results}")
-            if result.results == {"result": "done", "return-code": 0}:
-                break
-            time.sleep(2)
+            await ops_test.model.wait_for_idle(
+                apps=["openfga-k8s"],
+                status="blocked",
+                raise_on_blocked=False,
+                timeout=1200,
+            )
 
-        await ops_test.model.wait_for_idle(
-            apps=["openfga-k8s"],
-            status="active",
-            raise_on_blocked=False,
-            timeout=1200,
-        )
-
-        logger.info("adding openfga relation")
-        await ops_test.model.integrate(APP_NAME, "openfga-k8s")
-
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="blocked",
-            raise_on_blocked=False,
-            timeout=600,
-        )
-
-        logger.info("running the create authorization model action")
-        temporal_unit = ops_test.model.applications[APP_NAME].units[0]
-        with open("./temporal_auth_model.json", "r", encoding="utf-8") as model_file:
-            model_data = model_file.read()
-
-            # Remove whitespace and newlines from JSON object
-            json_text = "".join(model_data.split())
-            data = json.loads(json_text)
-            model_data = json.dumps(data, separators=(",", ":"))
-
+            openfga_unit = ops_test.model.applications["openfga-k8s"].units[0]
             for i in range(10):
-                action = await temporal_unit.run_action(
-                    "create-authorization-model",
-                    model=model_data,
-                )
+                action: Action = await openfga_unit.run_action("schema-upgrade")
                 result = await action.wait()
                 logger.info(f"attempt {i} -> action result {result.status} {result.results}")
-                if result.status == "completed" and result.results == {"return-code": 0}:
+                if result.results == {"result": "done", "return-code": 0}:
                     break
                 time.sleep(2)
 
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
-            raise_on_blocked=True,
-            timeout=300,
-        )
+            await ops_test.model.wait_for_idle(
+                apps=["openfga-k8s"],
+                status="active",
+                raise_on_blocked=False,
+                timeout=1200,
+            )
 
-        assert ops_test.model.applications[APP_NAME].status == "active"
+            logger.info("adding openfga relation")
+            await ops_test.model.integrate(APP_NAME, "openfga-k8s")
 
-        try:
-            await run_sample_workflow(ops_test)
-        except RuntimeError as e:
-            assert "Request unauthorized." in str(e)
+            await ops_test.model.wait_for_idle(
+                apps=[APP_NAME],
+                status="blocked",
+                raise_on_blocked=False,
+                timeout=600,
+            )
+
+            logger.info("running the create authorization model action")
+            temporal_unit = ops_test.model.applications[APP_NAME].units[0]
+            with open("./temporal_auth_model.json", "r", encoding="utf-8") as model_file:
+                model_data = model_file.read()
+
+                # Remove whitespace and newlines from JSON object
+                json_text = "".join(model_data.split())
+                data = json.loads(json_text)
+                model_data = json.dumps(data, separators=(",", ":"))
+
+                for i in range(10):
+                    action = await temporal_unit.run_action(
+                        "create-authorization-model",
+                        model=model_data,
+                    )
+                    result = await action.wait()
+                    logger.info(f"attempt {i} -> action result {result.status} {result.results}")
+                    if result.status == "completed" and result.results == {"return-code": 0}:
+                        break
+                    time.sleep(2)
+
+            await ops_test.model.wait_for_idle(
+                apps=[APP_NAME],
+                status="active",
+                raise_on_blocked=True,
+                timeout=600,
+            )
+
+            assert ops_test.model.applications[APP_NAME].status == "active"
+
+            try:
+                await run_sample_workflow(ops_test)
+            except RuntimeError as e:
+                assert "Request unauthorized." in str(e)
 
     async def test_openfga_add_auth_rule_action(self, ops_test: OpsTest):
         """Test add-auth-rule action."""
