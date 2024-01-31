@@ -325,11 +325,7 @@ class TestCharm(TestCase):
         harness = self.harness
 
         simulate_lifecycle(harness)
-        harness.update_config({"auth-enabled": True})
-
-        secret_id = harness.add_model_secret("temporal-k8s", {"token": "openfga_token"})
-        event = make_openfga_store_created_event(secret_id)
-        harness.charm.openfga_relation._on_openfga_store_created(event)
+        simulate_auth_lifecycle(harness, include_auth_model=False)
 
         # database relation ready but no openfga store set up
         self.assertEqual(harness.model.unit.status, BlockedStatus("missing openfga authorization model"))
@@ -339,18 +335,7 @@ class TestCharm(TestCase):
         harness = self.harness
 
         simulate_lifecycle(harness)
-        harness.update_config({"auth-enabled": True})
-
-        secret_id = harness.add_model_secret("temporal-k8s", {"token": "openfga_token"})
-        event = make_openfga_store_created_event(secret_id)
-        harness.charm.openfga_relation._on_openfga_store_created(event)
-
-        harness.charm._state.openfga = {
-            **harness.charm._state.openfga,
-            "auth_model_id": "123",
-        }
-
-        harness.update_config({})
+        simulate_auth_lifecycle(harness)
 
         # The plan is generated after pebble is ready.
         want_plan = {
@@ -406,18 +391,7 @@ class TestCharm(TestCase):
         harness = self.harness
 
         simulate_lifecycle(harness)
-        harness.update_config({"auth-enabled": True})
-
-        secret_id = harness.add_model_secret("temporal-k8s", {"token": "openfga_token"})
-        event = make_openfga_store_created_event(secret_id)
-        harness.charm.openfga_relation._on_openfga_store_created(event)
-
-        harness.charm._state.openfga = {
-            **harness.charm._state.openfga,
-            "auth_model_id": "123",
-        }
-
-        harness.update_config({})
+        simulate_auth_lifecycle(harness)
 
         container = harness.model.unit.get_container("temporal")
         container.get_check = mock.Mock(status="up")
@@ -500,6 +474,34 @@ def simulate_lifecycle(harness):
     harness.charm.admin._on_admin_relation_changed(event)
 
 
+def simulate_auth_lifecycle(harness, include_auth_model=True):
+    """Simulate a charm life-cycle with auth enabled.
+
+    Args:
+        harness: ops.testing.Harness object used to simulate charm lifecycle.
+        include_auth_model: whether or not to include the auth model id in the harness.
+    """
+    harness.update_config({"auth-enabled": True})
+
+    relation_id = harness.add_relation("openfga", "temporal")
+    secret_id = harness.add_model_secret("temporal-k8s", {"token": "openfga_token"})
+    event = make_openfga_store_created_event(secret_id)
+    harness.charm.openfga_relation._on_openfga_store_created(event)
+    harness.update_relation_data(
+        relation_id,
+        "temporal",
+        openfga_provider_databag(secret_id),
+    )
+
+    if include_auth_model:
+        harness.charm._state.openfga = {
+            **harness.charm._state.openfga,
+            "auth_model_id": "123",
+        }
+
+    harness.update_config({})
+
+
 def make_openfga_store_created_event(token_secret_id):
     """Create and return a mock master changed event for OpenFGA.
 
@@ -516,14 +518,29 @@ def make_openfga_store_created_event(token_secret_id):
         (),
         {
             "store_id": "storeid12345",
-            "token": "openfga_token",
-            "token_secret_id": token_secret_id,
-            "address": "10.1.152.3",
-            "port": "1111",
-            "scheme": "myschema",
             "relation": type("Relation", (), {"name": "openfga"}),
         },
     )
+
+
+def openfga_provider_databag(token_secret_id):
+    """Create and return mock store info.
+
+    Args:
+        token_secret_id: Secret ID where token is stored in the model.
+
+    Returns:
+        Store info.
+    """
+    return {
+        "store_id": "storeid12345",
+        "token_secret_id": token_secret_id,
+        "address": "127.0.0.1",
+        "scheme": "http",
+        "port": "8080",
+        "http_api_url": "http://127.0.0.1:8080",
+        "grpc_api_url": "http://127.0.0.1:8081",
+    }
 
 
 def make_database_changed_event(rel_name):

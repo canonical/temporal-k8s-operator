@@ -37,6 +37,7 @@ SERVICE_PORTS = {
 }
 
 PROMETHEUS_PORT = 9090
+WORKLOAD_VERSION = "1.21.5"
 
 
 class ValidServiceTypes(Enum):

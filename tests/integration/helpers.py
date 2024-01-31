@@ -250,3 +250,20 @@ async def perform_list_auth_rule_action(ops_test: OpsTest, user=None, group=None
     else:
         if result.status == "completed" and "output" in result.results:
             assert result.results["output"]["reader"] == "['group:test_group']"
+
+
+async def perform_list_system_admins_action(ops_test: OpsTest):
+    """Perform list-system-admins action tests.
+
+    Args:
+        ops_test: PyTest object.
+    """
+    temporal_unit = ops_test.model.applications[APP_NAME].units[0]
+    action = await temporal_unit.run_action("list-system-admins")
+    result = await action.wait()
+
+    assert result.status == "completed" and "output" in result.results
+    assert (
+        result.results["output"]["red"] == "['admin_one@example.com']"
+        and result.results["output"]["green"] == "['admin_two@example.com']"
+    )
