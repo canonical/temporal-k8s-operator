@@ -55,4 +55,4 @@ further inspect juju logs, can watch for logs with `juju debug-log`. More info
 on logging at [juju logs](https://juju.is/docs/olm/juju-logs).
 
 > **See next:
-> [Deploy PostgreSQL Database](/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)**
+> [Deploy PostgreSQL Database](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)**
