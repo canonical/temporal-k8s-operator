@@ -13,7 +13,6 @@ import requests
 from charms.openfga_k8s.v1.openfga import OpenFGAStoreCreateEvent
 from openfga_sdk import TupleKey
 from openfga_sdk.client import ClientConfiguration, OpenFgaClient
-from openfga_sdk.client.models import ClientExpandRequest
 from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
 from openfga_sdk.client.models.tuple import ClientTuple
@@ -39,14 +38,12 @@ class OFGAOperationType(Enum):
         READ: Represents a read operation.
         LIST: Represents a list operation.
         CHECK: Represents a check operation.
-        EXPAND: Represents an expand operation.
     """
 
     WRITE = "write"
     READ = "read"
     LIST = "list"
     CHECK = "check"
-    EXPAND = "expand"
 
 
 class AuthRuleActionType(Enum):
@@ -154,7 +151,7 @@ class OpenFGA(framework.Object):
             event: The event triggered when the relation changed.
         """
         if not self.charm.unit.is_leader():
-            return        
+            return
 
         if not self.charm._state.is_ready():
             event.defer()
@@ -303,19 +300,19 @@ class OpenFGA(framework.Object):
 
         try:
             for admin_group in admin_groups:
-                body = ClientExpandRequest(
-                    relation="member",
+                body = TupleKey(
                     object=f"group:{admin_group}",
                 )
 
                 response = asyncio.run(
                     _perform_ofga_api_call(
-                        event=event, openfga_data=openfga_data, body=body, op_type=OFGAOperationType.EXPAND
+                        event=event, openfga_data=openfga_data, body=body, op_type=OFGAOperationType.READ
                     )
                 )
 
-                for user in response.tree.root.leaf.users.users:
-                    user_email = user.split("user:")[-1]
+                for result in response:
+                    # extract format "user:<email>" into "<email>"
+                    user_email = result.key.user.split("user:")[-1]
                     results[admin_group].append(user_email)
 
             event.set_results({"result": "command succeeded", "output": results})
@@ -509,8 +506,6 @@ async def _perform_ofga_api_call(event, openfga_data, body, op_type):
         elif op_type == OFGAOperationType.LIST:
             response = await ofga_client.list_objects(body)
             response = response.objects
-        elif op_type == OFGAOperationType.EXPAND:
-            response = await ofga_client.expand(body)
         elif op_type == OFGAOperationType.WRITE:
             await ofga_client.write(body)
             response = None
