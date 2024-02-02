@@ -4,7 +4,7 @@ Clients of the Charmed Temporal k8s Operator can be authenticated in two
 different ways as described below. Authentication entails acquiring a Google
 OAuth access token, which will be attached to each request made to the Temporal
 Server on the `Authorization` header. The
-[Authorization](/t/charmed-temporal-k8s-how-to-authorization/12587) page will
+[Authorization](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authorization/12587) page will
 discuss further how this access token is further utilized on the Temporal
 Server.
 
@@ -92,6 +92,6 @@ clients, you can also use the
 [temporal-lib-py](https://github.com/canonical/temporal-lib-py) client libraries
 and injecting your service account credentials.
 
-The [Authorization](/t/charmed-temporal-k8s-how-to-authorization/12587) page
+The [Authorization](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authorization/12587) page
 discusses further how to authorize users and restrict their access to namespaces
 once they are authenticated.
