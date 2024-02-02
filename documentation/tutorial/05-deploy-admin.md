@@ -87,4 +87,4 @@ result: command succeeded
 ```
 
 > **See next:
-> [Deploy Temporal Web UI](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)**
+> [Deploy Temporal Web UI](/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)**

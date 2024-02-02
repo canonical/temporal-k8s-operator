@@ -211,4 +211,4 @@ client = await Client.connect("temporal-k8s", tls=tls)
 ```
 
 > **See next:
-> [Deploy Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)**
+> [Deploy Temporal Worker](/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)**

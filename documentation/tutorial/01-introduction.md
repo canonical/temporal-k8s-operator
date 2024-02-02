@@ -5,15 +5,15 @@ day 0 to day 2 on [Temporal](https://temporal.io/). It is an open source,
 end-to-end, production-ready workflow engine on top of [Juju](https://juju.is/).
 This tutorial will cover the following:
 
-- [Environment Setup](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-environment-setup/11778)
-- [Deploy Temporal Server](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-server/11779)
-- [Deploy PostgreSQL Database](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)
-- [Deploy Temporal Admin](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)
-- [Deploy Temporal Web UI](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)
-- [Deploy Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783)
-- [Deploy Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)
-- [Run Your First Workflow](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)
-- [Cleanup and Extra Info](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)
+- [Environment Setup](/t/charmed-temporal-k8s-tutorial-environment-setup/11778)
+- [Deploy Temporal Server](/t/charmed-temporal-k8s-tutorial-deploy-temporal-server/11779)
+- [Deploy PostgreSQL Database](/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)
+- [Deploy Temporal Admin](/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)
+- [Deploy Temporal Web UI](/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)
+- [Deploy Nginx Ingress Integrator](/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783)
+- [Deploy Temporal Worker](/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)
+- [Run Your First Workflow](/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)
+- [Cleanup and Extra Info](/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)
 
 This tutorial assumes a basic understanding of the following:
 

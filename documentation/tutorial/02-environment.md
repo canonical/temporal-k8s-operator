@@ -86,4 +86,4 @@ juju status
 ```
 
 > **See next:
-> [Deploying Temporal Server](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-server/11779)**
+> [Deploying Temporal Server](/t/charmed-temporal-k8s-tutorial-deploy-temporal-server/11779)**

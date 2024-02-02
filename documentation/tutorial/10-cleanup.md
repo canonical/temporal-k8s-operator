@@ -30,9 +30,7 @@ If you’re looking for what to do next you can:
   and
   [observability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787).
 - Explore
-  Temporal client authentication and encryption:
-    - [Python](https://github.com/canonical/temporal-lib-py)
-    - [Go](https://github.com/canonical/temporal-lib-go)
+  [Temporal client authentication and encryption](https://pypi.org/project/temporal-lib-py/)
 - Explore [workflow samples](https://github.com/temporalio/samples-python)
 - Report any problems you encountered for any of the following charms:
   - [Temporal Server](https://github.com/canonical/temporal-k8s-operator/issues)

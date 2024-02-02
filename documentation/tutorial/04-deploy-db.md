@@ -67,4 +67,4 @@ temporal-k8s:peer                 temporal-k8s:peer              temporal       
 ```
 
 > **See next:
-> [Deploy Temporal Admin](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)**
+> [Deploy Temporal Admin](/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)**

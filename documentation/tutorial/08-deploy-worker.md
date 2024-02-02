@@ -109,4 +109,4 @@ At this point, we have a Temporal worker connected to our Temporal server on the
 `default` namespace listening for tasks on the `test-queue` task queue.
 
 > **See next:
-> [Run Your First Workflow](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)**
+> [Run Your First Workflow](/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)**
