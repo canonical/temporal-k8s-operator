@@ -20,10 +20,11 @@ Excerpt from
 > each version for these processes to complete before upgrading to the next
 > version.
 
-The Charmed Temporal K8s charms facilitate server upgrades in the following way:
+The Temporal K8s charms facilitate server upgrades in the following way:
 
-1. The Charmed Temporal Admin charm should be updated to the next revision that
-   you currently have deployed as follows:
+1. The Temporal Admin charm should be updated to the next
+   [charm revision](https://juju.is/docs/sdk/revision) that you currently have
+   deployed as follows:
 
    ```bash
    juju refresh temporal-admin-k8s --revision=<your_revision + 1>
@@ -32,8 +33,8 @@ The Charmed Temporal K8s charms facilitate server upgrades in the following way:
    This will ensure that your database schema is updated if any updates are
    available.
 
-2. The Charmed Temporal K8s charm should be updated to the next revision that
-   you currently have deployed as follows:
+2. The Temporal K8s charm should be updated to the next charm revision
+   that you currently have deployed as follows:
 
    ```bash
    juju refresh temporal-k8s --revision=<your_revision + 1>

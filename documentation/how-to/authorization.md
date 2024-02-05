@@ -246,11 +246,11 @@ enabled as follows:
 
 ```bash
 
-# Configure admin group (can be multiple comma-separated groups)
+# Configure admin group (can be multiple comma-separated groups) and add system admin
 juju config temporal-k8s auth-admin-groups="admins"
+juju run temporal-k8s/0 add-auth-rule user="<your_email>" group="admins"
 
 # List system admins
-juju run temporal-k8s/0 add-auth-rule user="<your_email>" group="admins"
 juju run temporal-k8s/0 list-system-admins
 
 # Output:
