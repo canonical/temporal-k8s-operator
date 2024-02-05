@@ -131,17 +131,16 @@ class OpenFGA(framework.Object):
         address = url_components.hostname
         http_port = url_components.port
 
-        if self.charm.unit.is_leader():
-            self.charm._state.openfga = {
-                "store_id": info.store_id,
-                "token": info.token,
-                "address": address,
-                "port": http_port,
-                "scheme": scheme,
-                "auth_model_id": None,
-            }
+        self.charm._state.openfga = {
+            "store_id": info.store_id,
+            "token": info.token,
+            "address": address,
+            "port": http_port,
+            "scheme": scheme,
+            "auth_model_id": None,
+        }
 
-            self.charm._update(event)
+        self.charm._update(event)
 
     @log_event_handler(logger)
     def _on_openfga_relation_broken(self, event) -> None:
