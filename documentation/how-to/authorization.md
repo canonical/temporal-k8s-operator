@@ -4,12 +4,12 @@ Enabling authorization requires that you have an active
 [Charmed Temporal K8s Operator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777)
 deployed as described in the tutorial. It is recommended that you first go
 through the steps of enabling authentication as outlined
-[here](/t/charmed-temporal-k8s-how-to-authentication/12586).
+[here](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authentication/12586).
 
 By default the Temporal Server doesn't offer any authorization, but it offers
 the plugin mechanism to add a custom one. We have added an OAuth-based
-[authentication](/t/charmed-temporal-k8s-how-to-authentication/12586) using
-Google Cloud and an authorization mechanism that leverages
+[authentication](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authentication/12586)
+using Google Cloud and an authorization mechanism that leverages
 [Google Cloud](https://cloud.google.com) and [OpenFGA](https://openfga.dev/).
 This custom build of the Temporal Server can be found
 [here](https://github.com/canonical/charmed-temporal-image).
@@ -49,13 +49,6 @@ To relate the two charms together, run the following command:
 
 ```bash
 juju relate openfga-k8s postgresql-k8s
-```
-
-Once the `openfga-k8s` unit settles, you will see a message
-`Please run schema-upgrade action`. You must now run the following action:
-
-```bash
-juju run openfga-k8s/leader schema-upgrade --wait 30s
 ```
 
 Wait until the charm has settled - when ready, `juju status --relations` will
@@ -150,8 +143,8 @@ temporal-k8s:peer                 temporal-k8s:peer              temporal       
 
 At this point, our Temporal Server is active again with authorization enabled.
 This means that any request made to the Temporal Server will need to be
-[authenticted](/t/charmed-temporal-k8s-how-to-authentication/12586) using Google
-OAuth.
+[authenticated](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authentication/12586)
+using Google OAuth.
 
 ## Create OpenFGA Authorization Rules
 
@@ -219,14 +212,14 @@ The following actions may also be used for removing auth rules, checking access
 rules and for auditing purposes:
 
 ```bash
-# Check auth rule
+# 1. Check auth rule
 juju run temporal-k8s/0 check-auth-rule user="<your_email>" namespace="default" role="writer"
 
 # Output:
 output: "True"
 result: command succeeded
 
-# List auth rules
+# 2. List auth rules
 juju run temporal-k8s/0 list-auth-rule user="<your_email>"
 
 # Output:
@@ -237,10 +230,36 @@ output: |
   writer: '[''namespace:default'']'
 result: command succeeded
 
-# Remove auth rule
+# 3. Remove auth rule
 juju run temporal-k8s/0 remove-auth-rule user="<your_email>" group="test_group"
 
 # Output:
 output: 'operation type "delete" for user "<your_email>" on group "test_group" successful'
 result: command succeeded
 ```
+
+### Temporal System Admins
+
+A Temporal System Admin refers to anyone who has access to all namespaces, as
+well as the ability to administer namespace creation and removal. This can be
+enabled as follows:
+
+```bash
+
+# Configure admin group (can be multiple comma-separated groups) and add system admin
+juju config temporal-k8s auth-admin-groups="admins"
+juju run temporal-k8s/0 add-auth-rule user="<your_email>" group="admins"
+
+# List system admins
+juju run temporal-k8s/0 list-system-admins
+
+# Output:
+output:
+  admins: '[''<your_email>'']'
+result: command succeeded
+
+```
+
+Once configured, the user with `<your_email>` will be able to see all namespaces
+through the Web UI as well as create new namespaces using
+[tctl](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-tctl/11788).

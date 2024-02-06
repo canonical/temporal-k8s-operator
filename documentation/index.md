@@ -20,37 +20,38 @@ manner for production purposes.
 
 ## In This Documentation
 
-|                                                                                                                                                                        |                                                                                                                                        |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| [Tutorial](/t/charmed-temporal-k8s-tutorial-introduction/11777) </br> Get started - a hands-on introduction to using Charmed Temporal K8s operator for new users </br> | [How-to guides](/t/charmed-temporal-k8s-how-to-observability/11787) </br> Step-by-step guides covering key operations and common tasks |
-| [Reference](https://charmhub.io/temporal-k8s/actions) </br> Technical information - specifications, APIs, architecture                                                 | [Explanation](/t/charmed-temporal-k8s-explanations-architecture/11789) </br> Concepts - discussion and clarification of key topics     |
+|                                                                                                                                                                                                     |                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777) </br> Get started - a hands-on introduction to using Charmed Temporal K8s operator for new users </br> | [How-to guides](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787) </br> Step-by-step guides covering key operations and common tasks |
+| [Reference](https://charmhub.io/temporal-k8s/actions) </br> Technical information - specifications, APIs, architecture                                                                              | [Explanation](https://discourse.charmhub.io/t/charmed-temporal-k8s-explanations-architecture/11789) </br> Concepts - discussion and clarification of key topics     |
 
 # Navigation
 
-| Level | Path                | Navlink                                                                                                      |
-| ----- | ------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 1     | tutorial            | [Tutorial]()                                                                                                 |
-| 2     | t-introduction      | [1. Introduction](/t/charmed-temporal-k8s-tutorial-introduction/11777)                                       |
-| 2     | t-setup-environment | [2. Environment Setup](/t/charmed-temporal-k8s-tutorial-environment-setup/11778)                             |
-| 2     | t-deploy-server     | [3. Deploy Temporal Server](/t/charmed-temporal-k8s-tutorial-deploy-temporal-server/11779)                   |
-| 2     | t-deploy-db         | [4. Deploy PostgreSQL Database](/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)           |
-| 2     | t-deploy-admin      | [5. Deploy Temporal Admin](/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)                     |
-| 2     | t-deploy-ui         | [6. Deploy Temporal Web UI](/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)                   |
-| 2     | t-deploy-ingress    | [7. Deploy Nginx Ingress Integrator](/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783) |
-| 2     | t-deploy-worker     | [8. Deploy Temporal Worker](/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)                   |
-| 2     | t-run-workflow      | [9. Run Your First Workflow](/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)                 |
-| 2     | t-cleanup           | [10. Cleanup and Extra Info](/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)                  |
-| 1     | how-to              | [How to]()                                                                                                   |
-| 2     | h-authentication    | [Authentication](/t/charmed-temporal-k8s-how-to-authentication/12586)                                        |
-| 2     | h-authorization     | [Authorization](/t/charmed-temporal-k8s-how-to-authorization/12587)                                          |
-| 2     | h-observability     | [Observability](/t/charmed-temporal-k8s-how-to-observability/11787)                                          |
-| 2     | how-to-scaling      | [Scaling](/t/10840)                                                                                          |
-| 2     | h-tctl              | [TCTL](/t/charmed-temporal-k8s-how-to-tctl/11788)                                                            |
-| 1     | reference           | [Reference]()                                                                                                |
-| 2     | r-actions           | [Actions](https://charmhub.io/temporal-k8s/actions)                                                          |
-| 2     | r-configurations    | [Configurations](https://charmhub.io/temporal-k8s/configure)                                                 |
-| 2     | r-integrations      | [Integrations](https://charmhub.io/temporal-k8s/integrations)                                                |
-| 1     | e-architecture      | [Architecture](/t/charmed-temporal-k8s-explanations-architecture/11789)                                      |
+| Level | Path                | Navlink                                                                                                                                   |
+| ----- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | tutorial            | [Tutorial]()                                                                                                                              |
+| 2     | t-introduction      | [1. Introduction](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777)                                       |
+| 2     | t-setup-environment | [2. Environment Setup](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-environment-setup/11778)                             |
+| 2     | t-deploy-server     | [3. Deploy Temporal Server](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-server/11779)                   |
+| 2     | t-deploy-db         | [4. Deploy PostgreSQL Database](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)           |
+| 2     | t-deploy-admin      | [5. Deploy Temporal Admin](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)                     |
+| 2     | t-deploy-ui         | [6. Deploy Temporal Web UI](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)                   |
+| 2     | t-deploy-ingress    | [7. Deploy Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783) |
+| 2     | t-deploy-worker     | [8. Deploy Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)                   |
+| 2     | t-run-workflow      | [9. Run Your First Workflow](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)                 |
+| 2     | t-cleanup           | [10. Cleanup and Extra Info](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)                  |
+| 1     | how-to              | [How to]()                                                                                                                                |
+| 2     | h-authentication    | [Authentication](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authentication/12586)                                        |
+| 2     | h-authorization     | [Authorization](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authorization/12587)                                          |
+| 2     | h-observability     | [Observability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787)                                          |
+| 2     | h-scaling           | [Scaling](https://discourse.charmhub.io/t/10840)                                                                                          |
+| 2     | h-tctl              | [TCTL](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-tctl/11788)                                                            |
+| 2     | h-server-upgrades   | [Server Upgrades](CREATE_DISCOURSE_PAGE_AFTER_PR_APPROVAL)                                                                                |
+| 1     | reference           | [Reference]()                                                                                                                             |
+| 2     | r-actions           | [Actions](https://charmhub.io/temporal-k8s/actions)                                                                                       |
+| 2     | r-configurations    | [Configurations](https://charmhub.io/temporal-k8s/configure)                                                                              |
+| 2     | r-integrations      | [Integrations](https://charmhub.io/temporal-k8s/integrations)                                                                             |
+| 1     | e-architecture      | [Architecture](https://discourse.charmhub.io/t/charmed-temporal-k8s-explanations-architecture/11789)                                      |
 
 # Redirects
 

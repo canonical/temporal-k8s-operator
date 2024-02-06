@@ -63,4 +63,4 @@ generated in the ingress step of this tutorial as part of your
 making requests to the Temporal server.
 
 > **See next:
-> [Cleanup your environment](/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)**
+> [Cleanup your environment](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)**

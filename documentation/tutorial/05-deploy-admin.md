@@ -72,7 +72,7 @@ You can run the following command to create the initial Temporal namespace:
 
 ```bash
 # Create default namespace:
-juju run temporal-admin-k8s/0 tctl args="--ns default namespace register -rd 3"
+juju run temporal-admin-k8s/0 tctl args="--ns default namespace register -rd 3" --wait 1m
 
 # Output:
 Running operation 19 with 1 task
@@ -87,4 +87,4 @@ result: command succeeded
 ```
 
 > **See next:
-> [Deploy Temporal Web UI](/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)**
+> [Deploy Temporal Web UI](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)**
