@@ -53,6 +53,10 @@ requires:
   openfga:
     interface: openfga
     limit: 1
+  s3-parameters:
+    interface: s3
+    limit: 1
+    optional: true
 
 provides:
   metrics-endpoint:
