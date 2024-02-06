@@ -25,7 +25,15 @@ the different charms and their relations. The charmed components are as follows:
 - **Nginx Ingress Integrator**: The Charmed Temporal K8s operator exposes its
   service ports using the
   [Nginx Ingress Integrator](https://charmhub.io/nginx-ingress-integrator)
-  operator.
+  charmed operator.
+
+- **OpenFGA**: The Charmed Temporal K8s operator can relate to the
+  [OpenFGA K8s](https://charmhub.io/openfga-k8s) charmed operator to enable an
+  authorization layer and control namespace-level access.
+
+- **S3 Integrator**: The Charmed Temporal K8s operator can be used to enable
+  event histories archival in an S3-compatible storage by relating it to the
+  [S3 Integrator](https://charmhub.io/s3-integrator) charmed operator.
 
 - **Temporal Worker**: The [Temporal Worker](https://docs.temporal.io/workers)
   is the entity which listens and polls on specific task queue, and executes

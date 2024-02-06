@@ -46,7 +46,8 @@ manner for production purposes.
 | 2     | h-observability     | [Observability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787)                                          |
 | 2     | h-scaling           | [Scaling](https://discourse.charmhub.io/t/10840)                                                                                          |
 | 2     | h-tctl              | [TCTL](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-tctl/11788)                                                            |
-| 2     | h-server-upgrades   | [Server Upgrades](CREATE_DISCOURSE_PAGE_AFTER_PR_APPROVAL)                                                                                |
+| 2     | h-server-upgrades   | [Server Upgrades](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-server-upgrades/13105)                                      |
+| 2     | h-archival          | [Enable Archival](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-enable-archival/13106)                                      |
 | 1     | reference           | [Reference]()                                                                                                                             |
 | 2     | r-actions           | [Actions](https://charmhub.io/temporal-k8s/actions)                                                                                       |
 | 2     | r-configurations    | [Configurations](https://charmhub.io/temporal-k8s/configure)                                                                              |
