@@ -232,25 +232,63 @@ archival:
     state: "enabled"
     enableRead: true
     provider:
+      {%- if ARCHIVAL_ENABLED %}
+      s3store:
+        region: {{ ARCHIVAL_BUCKET_REGION | default("") }}
+        endpoint: {{ ARCHIVAL_ENDPOINT | default("") }}
+        logLevel: 0
+        {%- if ARCHIVAL_URI_STYLE == "path" %}
+        s3ForcePathStyle: true
+        {%- endif %}
+      {%- else %}
       filestore:
         fileMode: "0666"
         dirMode: "0766"
+      {%- endif %}
   visibility:
     state: "enabled"
     enableRead: true
     provider:
+      {%- if ARCHIVAL_ENABLED %}
+      s3store:
+        region: {{ ARCHIVAL_BUCKET_REGION | default("") }}
+        endpoint: {{ ARCHIVAL_ENDPOINT | default("") }}
+        logLevel: 0
+        {%- if ARCHIVAL_URI_STYLE == "path" %}
+        s3ForcePathStyle: true
+        {%- endif %}
+      {%- else %}
       filestore:
         fileMode: "0666"
         dirMode: "0766"
+      {%- endif %}
 
 namespaceDefaults:
   archival:
     history:
+      {%- if ARCHIVAL_ENABLED %}
+      state: "enabled"
+      URI: "s3://temporal-archival-test/temporal_archival"
+      {%- else %}
       state: "disabled"
       URI: "file:///tmp/temporal_archival/development"
+      {%- endif %}
     visibility:
+      {%- if ARCHIVAL_ENABLED %}
+      state: "enabled"
+      URI: "s3://temporal-archival-test/temporal_vis_archival"
+      {%- else %}
       state: "disabled"
       URI: "file:///tmp/temporal_vis_archival/development"
+      {%- endif %}
+
+{%- if ARCHIVAL_ENABLED %}
+additionalEnvs:
+    - name: AWS_ACCESS_KEY_ID
+      value: {{ AWS_ACCESS_KEY_ID | default("") }}
+    - name: AWS_SECRET_ACCESS_KEY
+      value: {{ AWS_SECRET_ACCESS_KEY | default("") }}
+{%- endif %}
 
 dynamicConfigClient:
     filepath: "{{ DYNAMIC_CONFIG_FILE_PATH | default("/etc/temporal/config/dynamicconfig/development.yaml") }}"

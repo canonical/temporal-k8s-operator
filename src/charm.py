@@ -11,6 +11,7 @@ import logging
 import os
 
 from charms.data_platform_libs.v0.database_requires import DatabaseRequires
+from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
@@ -26,6 +27,8 @@ from literals import (
     DB_NAME,
     LOG_FILE,
     PROMETHEUS_PORT,
+    REQUIRED_OPENFGA_KEYS,
+    REQUIRED_S3_PARAMETERS,
     SERVICE_PORTS,
     VALID_LOG_LEVELS,
     VISIBILITY_DB_NAME,
@@ -38,6 +41,7 @@ from log import log_event_handler
 from relations.admin import Admin
 from relations.openfga import OpenFGA
 from relations.postgresql import Postgresql
+from relations.s3_archival import S3Integrator
 from relations.ui import UI
 from state import State
 
@@ -109,6 +113,10 @@ class TemporalK8SCharm(CharmBase):
         # Handle openfga relation
         self.openfga = OpenFGARequires(self, self.name)
         self.openfga_relation = OpenFGA(self)
+
+        # Handle S3 integrator relation
+        self.s3_client = S3Requirer(self, "s3-parameters")
+        self.s3_relation = S3Integrator(self)
 
         # Handle Ingress
         self._require_nginx_route()
@@ -279,19 +287,23 @@ class TemporalK8SCharm(CharmBase):
         except (KeyError, pebble.ConnectionError):
             return False
 
-    def _check_missing_openfga_params(self):
-        """Validate that all OpenFGA required properties were extracted.
+    def _check_missing_params(self, params, required_params):
+        """Validate that all required properties were extracted.
+
+        Args:
+            params: dictionary of parameters extracted from relation.
+            required_params: list of required parameters.
 
         Returns:
             list: List of OpenFGA parameters that are not set in state.
         """
         missing_params = []
-        required_openfga_keys = ["store_id", "address", "port", "scheme", "token"]
-        for key in required_openfga_keys:
-            if self._state.openfga.get(key) is None:
+        for key in required_params:
+            if params.get(key) is None:
                 missing_params.append(key)
         return missing_params
 
+    # flake8: noqa: C901
     def _validate(self):
         """Validate that configuration and relations are valid and ready.
 
@@ -309,19 +321,29 @@ class TemporalK8SCharm(CharmBase):
             if not any(service == item.value for item in ValidServiceTypes):
                 raise ValueError(f"error in services config: invalid service {service!r}")
 
-        # Validate relations.
+        # Validate admin relation.
         self.database_connections()
         if not self._state.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
 
+        # Validate OpenFGA relation.
         if self.config["auth-enabled"]:
             if not self._state.openfga:
                 raise ValueError("openfga:temporal relation not ready")
-            missing_params = self._check_missing_openfga_params()
+            missing_params = self._check_missing_params(self._state.openfga, REQUIRED_OPENFGA_KEYS)
             if len(missing_params) > 0:
                 raise ValueError(f"openfga:missing parameters {missing_params!r}")
             if not self._state.openfga["auth_model_id"]:
                 raise ValueError("missing openfga authorization model")
+
+        # Validate S3 relation.
+        if self._state.s3:
+            missing_params = self._check_missing_params(self._state.s3, REQUIRED_S3_PARAMETERS)
+            if len(missing_params) > 0:
+                raise ValueError(f"s3:missing parameters {missing_params!r}")
+
+            if not self._state.s3["bucket_created"]:
+                raise ValueError("s3:archival failed to create s3 bucket.")
 
     def _open_service_ports(self):
         """Open the respective ports based on Temporal service."""
@@ -393,12 +415,12 @@ class TemporalK8SCharm(CharmBase):
             context.update(
                 {
                     "AUTH_ENABLED": True,
-                    "OFGA_STORE_ID": openfga["store_id"],
-                    "OFGA_AUTH_MODEL_ID": openfga["auth_model_id"],
-                    "OFGA_API_HOST": openfga["address"],
-                    "OFGA_API_SCHEME": openfga["scheme"],
-                    "OFGA_SECRETS_BEARER_TOKEN": openfga["token"],
-                    "OFGA_API_PORT": openfga["port"],
+                    "OFGA_STORE_ID": openfga.get("store_id"),
+                    "OFGA_AUTH_MODEL_ID": openfga.get("auth_model_id"),
+                    "OFGA_API_HOST": openfga.get("address"),
+                    "OFGA_API_SCHEME": openfga.get("scheme"),
+                    "OFGA_SECRETS_BEARER_TOKEN": openfga.get("token"),
+                    "OFGA_API_PORT": openfga.get("port"),
                     "AUTH_ADMIN_GROUPS": self.config["auth-admin-groups"],
                     "AUTH_OPEN_ACCESS_NAMESPACES": self.config["auth-open-access-namespaces"],
                     "AUTH_GOOGLE_CLIENT_ID": self.config["auth-google-client-id"],
@@ -415,6 +437,18 @@ class TemporalK8SCharm(CharmBase):
                     "HTTP_PROXY": http_proxy,
                     "HTTPS_PROXY": https_proxy,
                     "NO_PROXY": no_proxy,
+                }
+            )
+
+        if self._state.s3:
+            context.update(
+                {
+                    "ARCHIVAL_ENABLED": True,
+                    "ARCHIVAL_BUCKET_REGION": self._state.s3.get("region"),
+                    "ARCHIVAL_ENDPOINT": self._state.s3.get("endpoint"),
+                    "ARCHIVAL_URI_STYLE": self._state.s3.get("uri_style"),
+                    "AWS_ACCESS_KEY_ID": self._state.s3.get("aws_access_key_id"),
+                    "AWS_SECRET_ACCESS_KEY": self._state.s3.get("aws_secret_access_key"),
                 }
             )
 

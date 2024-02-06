@@ -177,6 +177,63 @@ class TestCharm(TestCase):
 
         self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
 
+    @mock.patch("relations.s3_archival._create_bucket_if_not_exists", return_value=None)
+    def test_s3_archival_relation(self, _create_bucket_if_not_exists):
+        """The pebble plan is correctly generated when the charm is ready."""
+        harness = self.harness
+        simulate_lifecycle(harness)
+
+        relation_id = harness.add_relation("s3-parameters", "temporal")
+        harness.update_relation_data(
+            relation_id,
+            "temporal",
+            s3_provider_databag(),
+        )
+
+        # The plan is generated after pebble is ready.
+        want_plan = {
+            "services": {
+                "temporal": {
+                    "summary": "temporal server",
+                    "command": "temporal-server --env charm start "
+                    "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
+                    "startup": "enabled",
+                    "override": "replace",
+                    "environment": {
+                        "DB_HOST": "myhost",
+                        "DB_NAME": "temporal-k8s_db",
+                        "DB_PORT": "5432",
+                        "DB_PSWD": "inner-light",
+                        "DB_USER": "jean-luc@db",
+                        "VISIBILITY_HOST": "myhost",
+                        "VISIBILITY_NAME": "temporal-k8s_visibility",
+                        "VISIBILITY_PORT": "5432",
+                        "VISIBILITY_PSWD": "inner-light",
+                        "VISIBILITY_USER": "jean-luc@visibility",
+                        "LOG_LEVEL": "info",
+                        "TEMPORAL_BROADCAST_ADDRESS": str(
+                            self.harness.model.get_binding("peer").network.ingress_address
+                        ),
+                        "ARCHIVAL_ENABLED": True,
+                        "ARCHIVAL_BUCKET_REGION": "region",
+                        "ARCHIVAL_ENDPOINT": "endpoint",
+                        "ARCHIVAL_URI_STYLE": "path",
+                        "AWS_ACCESS_KEY_ID": "access",
+                        "AWS_SECRET_ACCESS_KEY": "secret",
+                    },
+                    "on-check-failure": {"up": "ignore"},
+                },
+            },
+        }
+        got_plan = harness.get_container_pebble_plan("temporal").to_dict()
+        self.assertEqual(got_plan, want_plan)
+
+        # The service was started.
+        service = harness.model.unit.get_container("temporal").get_service("temporal")
+        self.assertTrue(service.is_running())
+
+        self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
+
     def test_config_changed(self):
         """The pebble plan changes according to config changes."""
         harness = self.harness
@@ -564,6 +621,23 @@ def make_database_changed_event(rel_name):
             "relation": type("Relation", (), {"name": rel_name}),
         },
     )
+
+
+def s3_provider_databag():
+    """Create and return mock s3 credentials.
+
+    Returns:
+        S3 parameters.
+    """
+    return {
+        "access-key": "access",
+        "secret-key": "secret",
+        "bucket": "bucket_name",
+        "endpoint": "endpoint",
+        "path": "path",
+        "region": "region",
+        "s3-uri-style": "path",
+    }
 
 
 class TestState(TestCase):
