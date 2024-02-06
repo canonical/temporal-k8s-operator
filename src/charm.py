@@ -342,7 +342,7 @@ class TemporalK8SCharm(CharmBase):
             if len(missing_params) > 0:
                 raise ValueError(f"s3:missing parameters {missing_params!r}")
 
-            if not self._state.s3["bucket_created"]:
+            if not self._state.s3.get("bucket_created"):
                 raise ValueError("s3:archival failed to create s3 bucket.")
 
     def _open_service_ports(self):

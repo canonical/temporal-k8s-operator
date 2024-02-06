@@ -73,15 +73,17 @@ class S3Integrator(framework.Object):
         Args:
             event: The event triggered when the relation was broken.
         """
-        if self.charm.unit.is_leader():
-            self.charm._state.s3 = None
-            self.charm._update(event)
+        if not self.charm.unit.is_leader():
+            return
+
+        self.charm._state.s3 = None
+        self.charm._update(event)
 
     def _retrieve_s3_parameters(self):
         """Retrieve S3 parameters from the S3 integrator relation.
 
         Returns:
-            s3 parameters and any missing parameters from the relation.
+            s3 parameters (dict) and any missing parameters (list) from the relation.
         """
         s3_parameters = self.charm.s3_client.get_s3_connection_info()
         required_parameters = [
@@ -98,7 +100,7 @@ class S3Integrator(framework.Object):
 
         # Add some sensible defaults (as expected by the code) for missing optional parameters
         s3_parameters.setdefault("endpoint", "https://s3.amazonaws.com")
-        s3_parameters.setdefault("region")
+        s3_parameters.setdefault("region", "")
         s3_parameters.setdefault("path", "")
         s3_parameters.setdefault("s3-uri-style", "host")
 
