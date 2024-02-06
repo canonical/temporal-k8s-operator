@@ -62,12 +62,30 @@ class TestCharm(TestCase):
         # The BlockStatus is set with a message.
         self.assertEqual(harness.model.unit.status, BlockedStatus("peer relation not ready"))
 
+    def test_blocked_by_missing_num_history_shards(self):
+        """The charm is blocked because of a missing number of history shards in config."""
+        harness = self.harness
+
+        # Simulate peer relation readiness.
+        harness.add_relation("peer", "temporal")
+
+        # Simulate pebble readiness.
+        container = harness.model.unit.get_container("temporal")
+        harness.charm.on.temporal_pebble_ready.emit(container)
+
+        # The BlockStatus is set with a message.
+        self.assertEqual(
+            harness.model.unit.status, BlockedStatus("value of 'num-history-shards' config must be greater than 0")
+        )
+
     def test_blocked_by_db(self):
         """The charm is blocked without a db:pgsql relation with a ready master."""
         harness = self.harness
 
         # Simulate peer relation readiness.
-        self.harness.add_relation("peer", "temporal")
+        harness.add_relation("peer", "temporal")
+
+        harness.update_config({"num-history-shards": 1})
 
         # Simulate pebble readiness.
         container = harness.model.unit.get_container("temporal")
@@ -88,7 +106,9 @@ class TestCharm(TestCase):
         harness = self.harness
 
         # Simulate peer relation readiness.
-        self.harness.add_relation("peer", "temporal")
+        harness.add_relation("peer", "temporal")
+
+        harness.update_config({"num-history-shards": 1})
 
         # Simulate pebble readiness.
         container = harness.model.unit.get_container("temporal")
@@ -113,7 +133,9 @@ class TestCharm(TestCase):
         harness = self.harness
 
         # Simulate peer relation readiness.
-        self.harness.add_relation("peer", "temporal")
+        harness.add_relation("peer", "temporal")
+
+        harness.update_config({"num-history-shards": 1})
 
         # Simulate pebble readiness.
         container = harness.model.unit.get_container("temporal")
@@ -163,6 +185,7 @@ class TestCharm(TestCase):
                         "TEMPORAL_BROADCAST_ADDRESS": str(
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
+                        "NUM_HISTORY_SHARDS": 1,
                     },
                     "on-check-failure": {"up": "ignore"},
                 },
@@ -214,6 +237,7 @@ class TestCharm(TestCase):
                         "TEMPORAL_BROADCAST_ADDRESS": str(
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
+                        "NUM_HISTORY_SHARDS": 1,
                         "ARCHIVAL_ENABLED": True,
                         "ARCHIVAL_BUCKET_REGION": "region",
                         "ARCHIVAL_ENDPOINT": "endpoint",
@@ -265,6 +289,7 @@ class TestCharm(TestCase):
                         "TEMPORAL_BROADCAST_ADDRESS": str(
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
+                        "NUM_HISTORY_SHARDS": 1,
                     },
                     "on-check-failure": {"up": "ignore"},
                 },
@@ -422,6 +447,7 @@ class TestCharm(TestCase):
                         "TEMPORAL_BROADCAST_ADDRESS": str(
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
+                        "NUM_HISTORY_SHARDS": 1,
                         "OFGA_STORE_ID": harness.charm._state.openfga["store_id"],
                         "OFGA_AUTH_MODEL_ID": harness.charm._state.openfga["auth_model_id"],
                         "OFGA_API_HOST": harness.charm._state.openfga["address"],
@@ -522,6 +548,8 @@ def simulate_lifecycle(harness):
     # Simulate visibility readiness.
     event = make_database_changed_event("visibility")
     harness.charm.postgresql._on_database_changed(event)
+
+    harness.update_config({"num-history-shards": 1})
 
     # Simulate schema readiness.
     app = type("App", (), {"name": "temporal-k8s"})()

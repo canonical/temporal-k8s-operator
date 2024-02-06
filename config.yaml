@@ -9,6 +9,16 @@ options:
       can be either run in a single container or spread across multiple
       containers, which allows to independently scale each component.
     type: string
+  num-history-shards:
+    default: 0
+    description: |
+      The number of concurrent database operations that can occur for a Temporal Cluster.
+      This value can only be set once at deployment time. Setting the value after it has
+      already been set will send the charm into a blocked state until it is set back to the
+      original value.
+
+      This value must be consistent across all components if using a scaled deployment.
+    type: int
   log-level:
     default: info
     description: Temporal server logging level.
