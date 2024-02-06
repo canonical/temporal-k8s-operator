@@ -15,10 +15,11 @@ from helpers import (
     perform_add_auth_rule_action,
     perform_check_auth_rule_action,
     perform_list_auth_rule_action,
+    perform_list_system_admins_action,
     perform_remove_auth_rule_action,
     run_sample_workflow,
+    scale,
 )
-from juju.action import Action
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -31,8 +32,12 @@ class TestAuth:
 
     async def test_openfga_relation(self, ops_test: OpsTest):
         """Add OpenFGA relation and authorization model."""
-        await ops_test.model.applications[APP_NAME].set_config({"auth-enabled": "true"})
-        await ops_test.model.deploy("openfga-k8s", channel="1.0/edge")
+        await ops_test.model.set_config({"update-status-hook-interval": "1m"})
+
+        await ops_test.model.applications[APP_NAME].set_config(
+            {"auth-enabled": "true", "auth-admin-groups": "red,green"}
+        )
+        await ops_test.model.deploy("openfga-k8s", channel="latest/edge")
 
         async with ops_test.fast_forward():
             await ops_test.model.wait_for_idle(
@@ -44,22 +49,6 @@ class TestAuth:
 
             logger.info("adding openfga postgresql relation")
             await ops_test.model.integrate("openfga-k8s:database", "postgresql-k8s:database")
-
-            await ops_test.model.wait_for_idle(
-                apps=["openfga-k8s"],
-                status="blocked",
-                raise_on_blocked=False,
-                timeout=1200,
-            )
-
-            openfga_unit = ops_test.model.applications["openfga-k8s"].units[0]
-            for i in range(10):
-                action: Action = await openfga_unit.run_action("schema-upgrade")
-                result = await action.wait()
-                logger.info(f"attempt {i} -> action result {result.status} {result.results}")
-                if result.results == {"result": "done", "return-code": 0}:
-                    break
-                time.sleep(2)
 
             await ops_test.model.wait_for_idle(
                 apps=["openfga-k8s"],
@@ -132,6 +121,12 @@ class TestAuth:
         await perform_list_auth_rule_action(ops_test, group="test_group")
         await perform_list_auth_rule_action(ops_test, namespace="test_namespace")
 
+    async def test_openfga_list_system_admins_action(self, ops_test: OpsTest):
+        """Test list-auth-rule action."""
+        await perform_add_auth_rule_action(ops_test, user="admin_one@example.com", group="red")
+        await perform_add_auth_rule_action(ops_test, user="admin_two@example.com", group="green")
+        await perform_list_system_admins_action(ops_test)
+
     async def test_openfga_remove_auth_rule_action(self, ops_test: OpsTest):
         """Test remove-auth-rule action."""
         await perform_remove_auth_rule_action(ops_test, group="test_group", namespace="test_namespace", role="reader")
@@ -141,6 +136,10 @@ class TestAuth:
 
         await perform_remove_auth_rule_action(ops_test, user="test@example.com", group="test_group")
         await perform_check_auth_rule_action(ops_test, exp_result=False, user="test@example.com", group="test_group")
+
+    async def test_scaling_auth(self, ops_test: OpsTest):
+        """Scale Temporal server to 2 units and test active status."""
+        await scale(ops_test, app=APP_NAME, units=2)
 
     async def test_openfga_relation_removed(self, ops_test: OpsTest):
         """Remove OpenFGA relation."""

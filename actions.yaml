@@ -121,3 +121,8 @@ check-auth-rule:
       type: string
       description: |
         One of "reader", "writer" or "admin".
+
+list-system-admins:
+  description: |
+    Lists all system admins who are members of any group listed in
+    the "auth-admin-groups" config parameters.

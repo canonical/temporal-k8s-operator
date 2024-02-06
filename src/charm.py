@@ -14,7 +14,7 @@ from charms.data_platform_libs.v0.database_requires import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
-from charms.openfga_k8s.v0.openfga import OpenFGARequires
+from charms.openfga_k8s.v1.openfga import OpenFGARequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from ops import main, pebble
@@ -29,6 +29,7 @@ from literals import (
     SERVICE_PORTS,
     VALID_LOG_LEVELS,
     VISIBILITY_DB_NAME,
+    WORKLOAD_VERSION,
     ValidServiceTypes,
 )
 from log import log_event_handler
@@ -258,6 +259,7 @@ class TemporalK8SCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Status check: DOWN")
             return
 
+        self.unit.set_workload_version(WORKLOAD_VERSION)
         self.set_active_unit_status()
         if self.unit.is_leader():
             self.ui._provide_server_status()

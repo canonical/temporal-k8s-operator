@@ -7,9 +7,10 @@ import asyncio
 import json
 import logging
 from enum import Enum
+from urllib.parse import urlsplit
 
 import requests
-from charms.openfga_k8s.v0.openfga import OpenFGAStoreCreateEvent
+from charms.openfga_k8s.v1.openfga import OpenFGAStoreCreateEvent
 from openfga_sdk import TupleKey
 from openfga_sdk.client import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models.check_request import ClientCheckRequest
@@ -73,6 +74,7 @@ class OpenFGA(framework.Object):
             charm.openfga.on.openfga_store_created,
             self._on_openfga_store_created,
         )
+
         charm.framework.observe(
             charm.on.create_authorization_model_action,
             self._on_create_authorization_model_action,
@@ -98,6 +100,11 @@ class OpenFGA(framework.Object):
             self._on_check_auth_rule_action,
         )
 
+        charm.framework.observe(
+            charm.on.list_system_admins_action,
+            self._on_list_system_admins_action,
+        )
+
         charm.framework.observe(charm.on.openfga_relation_broken, self._on_openfga_relation_broken)
 
     @log_event_handler(logger)
@@ -114,22 +121,24 @@ class OpenFGA(framework.Object):
             logger.info(f"{event.relation.name} revoked, no store id")
             return
 
-        if event.token_secret_id:
-            secret = self.charm.model.get_secret(id=event.token_secret_id)
-            secret_content = secret.get_content()
-            token = secret_content["token"]
-        if event.token:
-            token = event.token
+        info = self.charm.openfga.get_store_info()
+        if not info:
+            logger.info(f"{event.relation.name} revoked, no store info found")
+            return
 
-        if self.charm.unit.is_leader():
-            self.charm._state.openfga = {
-                "store_id": event.store_id,
-                "token": token,
-                "address": event.address,
-                "port": event.port,
-                "scheme": event.scheme,
-                "auth_model_id": None,
-            }
+        url_components = urlsplit(info.http_api_url)
+        scheme = url_components.scheme
+        address = url_components.hostname
+        http_port = url_components.port
+
+        self.charm._state.openfga = {
+            "store_id": info.store_id,
+            "token": info.token,
+            "address": address,
+            "port": http_port,
+            "scheme": scheme,
+            "auth_model_id": None,
+        }
 
         self.charm._update(event)
 
@@ -140,13 +149,15 @@ class OpenFGA(framework.Object):
         Args:
             event: The event triggered when the relation changed.
         """
+        if not self.charm.unit.is_leader():
+            return
+
         if not self.charm._state.is_ready():
             event.defer()
             return
 
-        if self.charm.unit.is_leader():
-            self.charm._state.openfga = None
-            self.charm._update(event)
+        self.charm._state.openfga = None
+        self.charm._update(event)
 
     @log_event_handler(logger)
     def _on_create_authorization_model_action(self, event):
@@ -155,6 +166,9 @@ class OpenFGA(framework.Object):
         Args:
             event: The event triggered when the action is performed.
         """
+        if not self.charm.unit.is_leader():
+            return
+
         if not _check_openfga_relation(self.charm._state, event):
             return
 
@@ -261,6 +275,46 @@ class OpenFGA(framework.Object):
             )
             event.set_results({"result": "command succeeded", "output": response.allowed})
             return
+        except ApiException:
+            event.set_results({"error": "failed to perform ofga operation"})
+
+    @log_event_handler(logger)
+    def _on_list_system_admins_action(self, event):
+        """Handle OpenFGA list system admins action.
+
+        Args:
+            event: The event triggered when the action is performed.
+        """
+        if not _check_openfga_relation(self.charm._state, event):
+            return
+
+        openfga_data = self.charm._state.openfga
+        admin_groups = self.charm.config["auth-admin-groups"].split(",")
+        results = {key: [] for key in admin_groups}
+
+        if admin_groups == [""]:
+            event.set_results(
+                {"result": "command succeeded", "output": "no admin groups set in 'auth-admin-groups' config"}
+            )
+
+        try:
+            for admin_group in admin_groups:
+                body = TupleKey(
+                    object=f"group:{admin_group}",
+                )
+
+                response = asyncio.run(
+                    _perform_ofga_api_call(
+                        event=event, openfga_data=openfga_data, body=body, op_type=OFGAOperationType.READ
+                    )
+                )
+
+                for result in response:
+                    # extract format "user:<email>" into "<email>"
+                    user_email = result.key.user.split("user:")[-1]
+                    results[admin_group].append(user_email)
+
+            event.set_results({"result": "command succeeded", "output": results})
         except ApiException:
             event.set_results({"error": "failed to perform ofga operation"})
 
