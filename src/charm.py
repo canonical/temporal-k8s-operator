@@ -322,15 +322,14 @@ class TemporalK8SCharm(CharmBase):
                 raise ValueError(f"error in services config: invalid service {service!r}")
 
         num_history_shards = self._state.num_history_shards
-        if self.config["num-history-shards"] == 0 and num_history_shards is None:
-            raise ValueError("value of 'num-history-shards' config must be greater than 0")
-
         if num_history_shards is None:
-            self._state.num_history_shards = self.config["num-history-shards"]
+            if self.config.get("num-history-shards", "") == "":
+                raise ValueError("value of 'num-history-shards' config must be set")
+            self._state.num_history_shards = self.config.get("num-history-shards")
         elif num_history_shards != self.config["num-history-shards"]:
-            raise ValueError(
-                f"value of 'num-history-shards' config cannot be changed after deployment. Value should be {num_history_shards}"
-            )
+            message = f"value of 'num-history-shards' config cannot be changed after deployment. Value should be {num_history_shards}"
+            logger.error(message)
+            raise ValueError(message)
 
         # Validate admin relation.
         self.database_connections()

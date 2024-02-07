@@ -6,7 +6,7 @@
 
 """Temporal charm unit tests."""
 
-# pylint:disable=protected-access
+# pylint:disable=protected-access,too-many-public-methods
 
 import json
 from unittest import TestCase, mock
@@ -74,9 +74,7 @@ class TestCharm(TestCase):
         harness.charm.on.temporal_pebble_ready.emit(container)
 
         # The BlockStatus is set with a message.
-        self.assertEqual(
-            harness.model.unit.status, BlockedStatus("value of 'num-history-shards' config must be greater than 0")
-        )
+        self.assertEqual(harness.model.unit.status, BlockedStatus("value of 'num-history-shards' config must be set"))
 
     def test_blocked_by_db(self):
         """The charm is blocked without a db:pgsql relation with a ready master."""
@@ -199,6 +197,24 @@ class TestCharm(TestCase):
         self.assertTrue(service.is_running())
 
         self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
+
+    def test_blocked_by_setting_new_num_history_shards(self):
+        """The charm is blocked because of setting a new number of history shards in config."""
+        harness = self.harness
+        simulate_lifecycle(harness)
+
+        container = harness.model.unit.get_container("temporal")
+        container.get_check = mock.Mock(status="up")
+        container.get_check.return_value.status = CheckStatus.UP
+        harness.charm.on.update_status.emit()
+
+        harness.update_config({"num-history-shards": 4})
+
+        # The BlockStatus is set with a message.
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus("value of 'num-history-shards' config cannot be changed after deployment. Value should be 1"),
+        )
 
     @mock.patch("relations.s3_archival._create_bucket_if_not_exists", return_value=None)
     def test_s3_archival_relation(self, _create_bucket_if_not_exists):
