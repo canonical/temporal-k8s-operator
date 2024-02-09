@@ -37,7 +37,10 @@ async def deploy(ops_test: OpsTest):
     for i in range(4):
         # for service in ALL_SERVICES:
         await ops_test.model.deploy(
-            charm, resources=resources, application_name=ALL_SERVICES[i], config={"services": ALL_CONFIG[i]}
+            charm,
+            resources=resources,
+            application_name=ALL_SERVICES[i],
+            config={"services": ALL_CONFIG[i], "num-history-shards": 1},
         )
 
     await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")

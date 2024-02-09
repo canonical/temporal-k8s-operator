@@ -28,7 +28,7 @@ async def deploy(ops_test: OpsTest):
 
     # Deploy temporal server, temporal admin and postgresql charms.
     asyncio.gather(
-        ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME),
+        ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME, config={"num-history-shards": 1}),
         ops_test.model.deploy(APP_NAME_ADMIN, channel="edge"),
         ops_test.model.deploy(APP_NAME_UI, channel="edge"),
         ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True),

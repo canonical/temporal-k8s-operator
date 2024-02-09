@@ -321,6 +321,18 @@ class TemporalK8SCharm(CharmBase):
             if not any(service == item.value for item in ValidServiceTypes):
                 raise ValueError(f"error in services config: invalid service {service!r}")
 
+        num_history_shards = self._state.num_history_shards
+        if num_history_shards is None:
+            if self.config.get("num-history-shards", "") == "" or self.config.get("num-history-shards") <= 0:
+                raise ValueError(
+                    "value of 'num-history-shards' config must be set to a positive power of 2 (e.g. 1, 2, 4)"
+                )
+            self._state.num_history_shards = self.config.get("num-history-shards")
+        elif num_history_shards != self.config["num-history-shards"]:
+            message = f"value of 'num-history-shards' config cannot be changed after deployment. Value should be {num_history_shards}"
+            logger.error(message)
+            raise ValueError(message)
+
         # Validate admin relation.
         self.database_connections()
         if not self._state.schema_ready:
@@ -407,6 +419,7 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_USER": visibility_conn["user"],
                 "VISIBILITY_PSWD": visibility_conn["password"],
                 "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.bind_address),
+                "NUM_HISTORY_SHARDS": self._state.num_history_shards,
             }
         )
 
