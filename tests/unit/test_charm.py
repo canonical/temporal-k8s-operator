@@ -74,7 +74,10 @@ class TestCharm(TestCase):
         harness.charm.on.temporal_pebble_ready.emit(container)
 
         # The BlockStatus is set with a message.
-        self.assertEqual(harness.model.unit.status, BlockedStatus("value of 'num-history-shards' config must be set"))
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus("value of 'num-history-shards' config must be set to a positive power of 2 (e.g. 1, 2, 4)"),
+        )
 
     def test_blocked_by_db(self):
         """The charm is blocked without a db:pgsql relation with a ready master."""

@@ -323,8 +323,10 @@ class TemporalK8SCharm(CharmBase):
 
         num_history_shards = self._state.num_history_shards
         if num_history_shards is None:
-            if self.config.get("num-history-shards", "") == "":
-                raise ValueError("value of 'num-history-shards' config must be set")
+            if self.config.get("num-history-shards", "") == "" or self.config.get("num-history-shards") <= 0:
+                raise ValueError(
+                    "value of 'num-history-shards' config must be set to a positive power of 2 (e.g. 1, 2, 4)"
+                )
             self._state.num_history_shards = self.config.get("num-history-shards")
         elif num_history_shards != self.config["num-history-shards"]:
             message = f"value of 'num-history-shards' config cannot be changed after deployment. Value should be {num_history_shards}"
