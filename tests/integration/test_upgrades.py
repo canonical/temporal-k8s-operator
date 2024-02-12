@@ -29,10 +29,10 @@ logger = logging.getLogger(__name__)
 async def deploy(ops_test: OpsTest):
     """The app is up and running."""
     # Deploy temporal server, temporal admin and postgresql charms.
-    await ops_test.model.deploy(APP_NAME, channel="edge")
+    await ops_test.model.deploy(APP_NAME, channel="edge", config={"num-history-shards": 1})
     await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
     await ops_test.model.deploy(APP_NAME_UI, channel="edge")
-    await ops_test.model.deploy("postgresql-k8s", channel="14", trust=True)
+    await ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True)
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
@@ -66,9 +66,6 @@ class TestUpgrade:
         # This is to accmmodate for a self-resolving error which sometimes appears when Temporal
         # services attempt to connect to the cluster before the application is ready.
         await ops_test.model.applications[APP_NAME].refresh(path=str(charm), resources=resources)
-        await ops_test.model.applications[APP_NAME].set_config(
-            {"num-history-shards": "1"},
-        )
 
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600

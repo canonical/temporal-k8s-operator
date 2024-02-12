@@ -15,6 +15,7 @@ jobs:
           - integration-scaling
           - integration-upgrades
           - integration-auth
+          - integration-server-upgrade
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

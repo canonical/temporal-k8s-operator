@@ -33,8 +33,8 @@ The Temporal K8s charms facilitate server upgrades in the following way:
    This will ensure that your database schema is updated if any updates are
    available.
 
-2. The Temporal K8s charm should be updated to the next charm revision
-   that you currently have deployed as follows:
+2. The Temporal K8s charm should be updated to the next charm revision that you
+   currently have deployed as follows:
 
    ```bash
    juju refresh temporal-k8s --revision=<your_revision + 1>
@@ -44,3 +44,14 @@ _Warning: It is essential that upgrades are done one consecutive revision at a
 time. Charmed Temporal K8s can only guarantee backward compatibility between two
 consecutive revisions in line with the upgrade system adopted by the Temporal
 Server._
+
+## Appendix
+
+The table below shows a mapping between the Temporal K8s charms and the Temporal
+server versions. It can be used as a reference for upgrading your charm
+revisions in line with the Temporal server version so as to avoid any breaking
+changes.
+
+| Temporal Server Charm Revision | Temporal Admin Charm Revision | Temporal Server Version |
+| :----------------------------: | :---------------------------: | :---------------------: |
+|             20-21              |              8-9              |         v1.21.5         |
