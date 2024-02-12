@@ -291,5 +291,5 @@ additionalEnvs:
 {%- endif %}
 
 dynamicConfigClient:
-    filepath: "{{ DYNAMIC_CONFIG_FILE_PATH | default("/etc/temporal/config/dynamicconfig/development.yaml") }}"
+    filepath: "{{ DYNAMIC_CONFIG_FILE_PATH | default("/etc/temporal/config/dynamicconfig/docker.yaml") }}"
     pollInterval: "60s"
