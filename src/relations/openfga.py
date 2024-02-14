@@ -118,12 +118,12 @@ class OpenFGA(framework.Object):
             return
 
         if not event.store_id:
-            logger.info(f"{event.relation.name} revoked, no store id")
+            logger.info("openfga relation revoked, no store id")
             return
 
         info = self.charm.openfga.get_store_info()
         if not info:
-            logger.info(f"{event.relation.name} revoked, no store info found")
+            logger.info("openfga relation revoked, no store info found")
             return
 
         url_components = urlsplit(info.http_api_url)
