@@ -9,6 +9,7 @@
 import functools
 import logging
 import os
+import re
 
 from charms.data_platform_libs.v0.database_requires import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -61,6 +62,19 @@ def render(template_name, context):
     charm_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     loader = FileSystemLoader(os.path.join(charm_dir, "templates"))
     return Environment(loader=loader, autoescape=True).get_template(template_name).render(**context)
+
+
+def is_valid_time_duration(duration_str):
+    """Validate time duration.
+
+    Args:
+        duration_str: time duration string.
+
+    Returns:
+        True if the time duration is valid, False otherwise.
+    """
+    allowed_pattern = r"^\d+[smh]$"
+    return bool(re.match(allowed_pattern, duration_str))
 
 
 class TemporalK8SCharm(CharmBase):
@@ -333,6 +347,15 @@ class TemporalK8SCharm(CharmBase):
             logger.error(message)
             raise ValueError(message)
 
+        db_types = ["persistence", "visibility"]
+        for db_type in db_types:
+            if self.config[f"{db_type}-max-conns"] < 1:
+                raise ValueError(f"value of '{db_type}-max-conns' must be >= 1")
+            if self.config[f"{db_type}-max-idle-conns"] < 1:
+                raise ValueError(f"value of '{db_type}-max-idle-conns' must be >= 1")
+            if not is_valid_time_duration(self.config[f"{db_type}-max-conn-time"]):
+                raise ValueError(f"value of '{db_type}-max-conn-time' must be a valid time duration e.g. 1h")
+
         # Validate admin relation.
         self.database_connections()
         if not self._state.schema_ready:
@@ -420,6 +443,12 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_PSWD": visibility_conn["password"],
                 "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.bind_address),
                 "NUM_HISTORY_SHARDS": self._state.num_history_shards,
+                "SQL_MAX_CONNS": self.config["persistence-max-conns"],
+                "SQL_MAX_IDLE_CONNS": self.config["persistence-max-idle-conns"],
+                "SQL_MAX_CONN_TIME": self.config["persistence-max-conn-time"],
+                "SQL_VIS_MAX_CONNS": self.config["visibility-max-conns"],
+                "SQL_VIS_MAX_IDLE_CONNS": self.config["visibility-max-idle-conns"],
+                "SQL_VIS_MAX_CONN_TIME": self.config["visibility-max-conn-time"],
             }
         )
 
