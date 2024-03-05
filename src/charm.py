@@ -73,7 +73,7 @@ def is_valid_time_duration(duration_str):
     Returns:
         True if the time duration is valid, False otherwise.
     """
-    allowed_pattern = r"^\d+[smh]$"
+    allowed_pattern = r"^[1-9]\d*[smh]$"
     return bool(re.match(allowed_pattern, duration_str))
 
 
