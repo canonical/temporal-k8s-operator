@@ -16,7 +16,7 @@ which will fetch the charm from [Charmhub](https://charmhub.io/temporal-k8s) and
 deploy it to your model:
 
 ```bash
-juju deploy temporal-k8s
+juju deploy temporal-k8s --config num-history-shards=4
 ```
 
 Juju will now fetch Charmed Temporal K8s and begin deploying it to the local
@@ -53,6 +53,11 @@ temporal-k8s/0*  blocked   idle   10.1.232.64         database relation not read
 To exit the screen with `juju status --watch 1s`, enter `Ctrl+c`. If you want to
 further inspect juju logs, can watch for logs with `juju debug-log`. More info
 on logging at [juju logs](https://juju.is/docs/olm/juju-logs).
+
+Note: When deploying Charmed Temporal K8s previously, we set the
+`num-history-shards` configuration parameter to 4. More information can be found
+about history shards in the official Temporalio documentation. For development
+environments, a value of 4 should be more than sufficient.
 
 > **See next:
 > [Deploy PostgreSQL Database](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)**

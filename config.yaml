@@ -9,6 +9,7 @@ options:
       can be either run in a single container or spread across multiple
       containers, which allows to independently scale each component.
     type: string
+
   num-history-shards:
     description: |
       The number of concurrent database operations that can occur for a Temporal Cluster.
@@ -18,26 +19,31 @@ options:
 
       This value must be consistent across all components if using a scaled deployment.
     type: int
+  
   log-level:
     default: info
     description: Temporal server logging level.
     type: string
+
   external-hostname:
     description: |
         The DNS listing used for external connections. Will default to the name of the deployed
         application.
     default: ""
     type: string
+
   tls-secret-name:
     description: |
         Name of the k8s secret which contains the TLS certificate to be used by ingress.
     default: "temporal-tls"
     type: string
+
   auth-enabled:
     description: |
         Specifies whether authorization should be enabled through OpenFGA.
     default: false
     type: boolean
+
   auth-google-client-id:
     description: |
         The client ID of the Google OAuth project used for authentication.
@@ -46,6 +52,7 @@ options:
         for added security.
     default: ""
     type: string
+
   auth-admin-groups:
     description: |
         A comma-separated list of groups with read-access to all namespaces.
@@ -53,9 +60,46 @@ options:
         users added to it as members.
     default: ""
     type: string
+
   auth-open-access-namespaces:
     description: |
         A comma-separated list of namespaces which will be visible to all 
         authenticated users.
     default: ""
+    type: string
+
+  persistence-max-conns:
+    description: |
+        Maximum number of connections for persistence database.
+    default: 20
+    type: int
+
+  persistence-max-idle-conns:
+    description: |
+        Maximum number of idle connections for persistence database.
+    default: 20
+    type: int
+
+  persistence-max-conn-time:
+    description: |
+        Maximum time a database connection is held with the persistence database.
+    default: "1h"
+    type: string
+
+  visibility-max-conns:
+    description: |
+        Maximum number of connections for visibility database.
+    default: 10
+    type: int
+
+  visibility-max-idle-conns:
+    description: |
+        Maximum number of idle connections for visibility database.
+    default: 10
+    type: int
+
+  visibility-max-conn-time:
+    description: |
+        Maximum time a database connection is held with the visibility database.
+    default: "1h"
     type: string
