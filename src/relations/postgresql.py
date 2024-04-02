@@ -93,7 +93,7 @@ class Postgresql(framework.Object):
         """
         if self.charm._state.database_connections is None:
             self.charm._state.database_connections = {}
-        
+
         database_connections = self.charm._state.database_connections
         database_connections[rel_name] = db_conn
         self.charm._state.database_connections = database_connections
