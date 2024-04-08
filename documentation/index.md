@@ -29,7 +29,7 @@ manner for production purposes.
 
 | Level | Path                | Navlink                                                                                                                                   |
 | ----- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | tutorial            | [Tutorial]()                                                                                                                              |
+| 1     | tutorial            | [Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777)                                              |
 | 2     | t-introduction      | [1. Introduction](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777)                                       |
 | 2     | t-setup-environment | [2. Environment Setup](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-environment-setup/11778)                             |
 | 2     | t-deploy-server     | [3. Deploy Temporal Server](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-server/11779)                   |
@@ -40,7 +40,7 @@ manner for production purposes.
 | 2     | t-deploy-worker     | [8. Deploy Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)                   |
 | 2     | t-run-workflow      | [9. Run Your First Workflow](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)                 |
 | 2     | t-cleanup           | [10. Cleanup and Extra Info](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)                  |
-| 1     | how-to              | [How to]()                                                                                                                                |
+| 1     | how-to              | [How to](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-index/13740)                                                         |
 | 2     | h-authentication    | [Authentication](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authentication/12586)                                        |
 | 2     | h-authorization     | [Authorization](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authorization/12587)                                          |
 | 2     | h-observability     | [Observability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787)                                          |
@@ -48,7 +48,7 @@ manner for production purposes.
 | 2     | h-tctl              | [TCTL](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-tctl/11788)                                                            |
 | 2     | h-server-upgrades   | [Server Upgrades](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-server-upgrades/13105)                                      |
 | 2     | h-archival          | [Enable Archival](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-enable-archival/13106)                                      |
-| 1     | reference           | [Reference]()                                                                                                                             |
+| 1     | reference           | [Reference](https://discourse.charmhub.io/t/charmed-temporal-k8s-reference-index/13741)                                                   |
 | 2     | r-actions           | [Actions](https://charmhub.io/temporal-k8s/actions)                                                                                       |
 | 2     | r-configurations    | [Configurations](https://charmhub.io/temporal-k8s/configure)                                                                              |
 | 2     | r-integrations      | [Integrations](https://charmhub.io/temporal-k8s/integrations)                                                                             |
