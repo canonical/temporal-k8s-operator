@@ -37,7 +37,7 @@ class TestAuth:
         await ops_test.model.applications[APP_NAME].set_config(
             {"auth-enabled": "true", "auth-admin-groups": "red,green"}
         )
-        await ops_test.model.deploy("openfga-k8s", channel="latest/edge", revision=27)
+        await ops_test.model.deploy("openfga-k8s", channel="latest/edge")
 
         async with ops_test.fast_forward():
             await ops_test.model.wait_for_idle(
