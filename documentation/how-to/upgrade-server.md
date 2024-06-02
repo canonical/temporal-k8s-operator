@@ -48,10 +48,11 @@ Server._
 ## Appendix
 
 The table below shows a mapping between the Temporal K8s charms and the Temporal
-server versions. It can be used as a reference for upgrading your charm
-revisions in line with the Temporal server version so as to avoid any breaking
-changes.
+server versions on the **edge** channel. It can be used as a reference for
+upgrading your charm revisions in line with the Temporal server version so as to
+avoid any breaking changes.
 
 | Temporal Server Charm Revision | Temporal Admin Charm Revision | Temporal Server Version |
 | :----------------------------: | :---------------------------: | :---------------------: |
-|             20-21              |              8-9              |         v1.21.5         |
+|             20-24              |              8-9              |         v1.21.5         |
+|              25-               |              10-              |         v1.23.1         |

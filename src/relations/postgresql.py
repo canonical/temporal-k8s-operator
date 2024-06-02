@@ -44,11 +44,11 @@ class Postgresql(framework.Object):
         Args:
             event: The event triggered when the relation changed.
         """
-        if not self.charm._state.is_ready():
-            event.defer()
+        if not self.charm.unit.is_leader():
             return
 
-        if not self.charm.unit.is_leader():
+        if not self.charm._state.is_ready():
+            event.defer()
             return
 
         self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
@@ -76,13 +76,15 @@ class Postgresql(framework.Object):
         Args:
             event: The event triggered when the relation changed.
         """
+        if not self.charm.unit.is_leader():
+            return
+
         if not self.charm._state.is_ready():
             event.defer()
             return
 
-        if self.charm.unit.is_leader():
-            self._update_db_connections(event.relation.name, None)
-            self.charm._update(event)
+        self._update_db_connections(event.relation.name, None)
+        self.charm._update(event)
 
     def _update_db_connections(self, rel_name, db_conn):
         """Assign nested value in peer relation.
