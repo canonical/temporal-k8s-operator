@@ -82,10 +82,19 @@ deployment, follow the following steps:
     juju deploy ./temporal-k8s_ubuntu-22.04-amd64.charm --resource temporal-server-image=ghcr.io/canonical/temporal-server:latest
 
     # Deploy admin charm (Only if modifying admin charm, otherwise deploy as shown below):
-    juju deploy ./temporal-admin-k8s_ubuntu-22.04-amd64.charm --resource temporal-admin-image=temporalio/admin-tools:1.21.5
+    juju deploy ./temporal-admin-k8s_ubuntu-22.04-amd64.charm --resource temporal-admin-image=temporalio/admin-tools:1.23.1
 
     # Deploy ui charm (Only if modifying UI charm, otherwise deploy as shown below):
-    juju deploy ./temporal-ui-k8s_ubuntu-22.04-amd64.charm --resource temporal-ui-image=temporalio/ui:2.21.3
+    juju deploy ./temporal-ui-k8s_ubuntu-22.04-amd64.charm --resource temporal-ui-image=temporalio/ui:2.27.1
+
+    # Refresh charm
+    juju refresh --path="./temporal-k8s_ubuntu-22.04-amd64.charm" temporal-k8s --force-units --resource temporal-server-image=ghcr.io/canonical/temporal-server:latest
+
+    # Refresh the admin charm
+    juju refresh --path="./temporal-admin-k8s_ubuntu-22.04-amd64.charm" temporal-admin-k8s --force-units --resource temporal-admin-image=temporalio/admin-tools:1.23.1
+
+    # Refresh the ui charm
+    juju refresh --path="./temporal-ui-k8s_ubuntu-22.04-amd64.charm" temporal-ui-k8s --force-units --resource temporal-ui-image=temporalio/ui:2.27.1
 
     # Relate operator to postgres:
     juju deploy postgresql-k8s --channel 14/stable --trust

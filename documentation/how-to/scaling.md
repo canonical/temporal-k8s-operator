@@ -60,15 +60,12 @@ services to the same database and admin charms:
 ```bash
 juju relate temporal-k8s-history:db postgresql-k8s:database
 juju relate temporal-k8s-history:visibility postgresql-k8s:database
-juju relate temporal-k8s-history:admin temporal-admin-k8s:admin
 
 juju relate temporal-k8s-matching:db postgresql-k8s:database
 juju relate temporal-k8s-matching:visibility postgresql-k8s:database
-juju relate temporal-k8s-matching:admin temporal-admin-k8s:admin
 
 juju relate temporal-k8s-worker:db postgresql-k8s:database
 juju relate temporal-k8s-worker:visibility postgresql-k8s:database
-juju relate temporal-k8s-worker:admin temporal-admin-k8s:admin
 ```
 
 Once deployed, you can run `juju status --watch 1s` to watch the status of your

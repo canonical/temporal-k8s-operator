@@ -103,3 +103,19 @@ options:
         Maximum time a database connection is held with the visibility database.
     default: "1h"
     type: string
+
+  global-rps-limit:
+    description: |
+        Global limit for requests per second per namespace.
+    default: 2000
+    type: int
+
+  namespace-rps-limit:
+    description: |
+        Pipe-separated definition of namespace requests per second limits.
+
+        e.g. "namespaceA:100|namespaceB:200" means namespaceA will have an RPS
+        limit of 100, namespaceB of 200, and any other namespaces not defined
+        in this config will fall back to the value defined in `global-rps-limit`.
+    default: ""
+    type: string

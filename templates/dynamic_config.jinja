@@ -1,0 +1,15 @@
+{% set pairs = NAMESPACE_RPS_LIMIT.split('|') %}
+{%- if GLOBAL_RPS_LIMIT or NAMESPACE_RPS_LIMIT %}
+frontend.namespacerps:
+{%- if GLOBAL_RPS_LIMIT %}
+  - value: {{ GLOBAL_RPS_LIMIT }}
+{%- endif %}
+{%- if NAMESPACE_RPS_LIMIT %}
+{% for pair in pairs %}
+{% set namespace, value = pair.split(':') %}
+  - value: {{ value }}
+    constraints:
+      namespace: "{{ namespace }}"
+{% endfor %}
+{%- endif %}
+{%- endif %}

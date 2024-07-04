@@ -28,6 +28,9 @@ The Temporal K8s charms facilitate server upgrades in the following way:
 
    ```bash
    juju refresh temporal-admin-k8s --revision=<your_revision + 1>
+
+   # The schema setup action must be run before updating the Temporal K8s charm
+   juju run temporal-admin-k8s/leader setup-schema
    ```
 
    This will ensure that your database schema is updated if any updates are

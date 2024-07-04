@@ -350,6 +350,9 @@ class TemporalK8SCharm(CharmBase):
             logger.error(message)
             raise ValueError(message)
 
+        if self.config["global-rps-limit"] < 0:
+            raise ValueError("`global-rps-limit` must be grater than 0")
+
         db_types = ["persistence", "visibility"]
         for db_type in db_types:
             if self.config[f"{db_type}-max-conns"] < 1:
@@ -361,7 +364,7 @@ class TemporalK8SCharm(CharmBase):
 
         # Validate admin relation.
         self.database_connections()
-        if not self._state.schema_ready:
+        if "frontend" in self.config["services"] and not self._state.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
 
         # Validate OpenFGA relation.
@@ -499,6 +502,13 @@ class TemporalK8SCharm(CharmBase):
 
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
+
+        dynamic_context = {
+            "GLOBAL_RPS_LIMIT": self.config["global-rps-limit"],
+            "NAMESPACE_RPS_LIMIT": self.config["namespace-rps-limit"],
+        }
+        dynamic_config = render("dynamic_config.jinja", dynamic_context)
+        container.push("/etc/temporal/config/dynamicconfig/docker.yaml", dynamic_config, make_dirs=True)
 
         logger.info("planning temporal execution")
         services = self.config["services"].split(",")
