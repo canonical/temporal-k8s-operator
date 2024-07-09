@@ -8,6 +8,7 @@
 
 # pylint:disable=protected-access,too-many-public-methods
 
+from textwrap import dedent
 from unittest import TestCase, mock
 
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
@@ -570,24 +571,27 @@ class TestCharm(TestCase):
 
     def test_rendering(self):
         """The dynamic config gets rendered correctly."""
-        expected_output = """frontend.namespacerps:
-  - value: 500
+        expected_output = dedent(
+            """
+        frontend.namespacerps:
+        - value: 500
 
 
-  - value: 50
-    constraints:
-      namespace: "namespaceA"
+        - value: 50
+          constraints:
+            namespace: "namespaceA"
 
 
-  - value: 100
-    constraints:
-      namespace: "namespaceB"
+        - value: 100
+          constraints:
+            namespace: "namespaceB"
 
 
-  - value: 200
-    constraints:
-      namespace: "namespaceC"
+        - value: 200
+          constraints:
+            namespace: "namespaceC"
         """
+        ).strip()
 
         dynamic_context = {
             "GLOBAL_RPS_LIMIT": 500,
@@ -595,7 +599,7 @@ class TestCharm(TestCase):
         }
 
         dynamic_config = render("dynamic_config.jinja", dynamic_context).strip()
-        self.assertEqual(dynamic_config.strip(), expected_output.strip())
+        self.assertEqual(dedent(dynamic_config).strip(), expected_output)
 
 
 def simulate_lifecycle(harness):
