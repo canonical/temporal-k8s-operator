@@ -68,7 +68,6 @@ async def deploy(ops_test: OpsTest):
             if service != "temporal-k8s":
                 await ops_test.model.integrate(f"{service}:db", "postgresql-k8s:database")
                 await ops_test.model.integrate(f"{service}:visibility", "postgresql-k8s:database")
-                await ops_test.model.integrate(f"{service}:admin", f"{APP_NAME_ADMIN}:admin")
 
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
 

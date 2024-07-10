@@ -8,15 +8,14 @@
 
 # pylint:disable=protected-access,too-many-public-methods
 
-import json
+from textwrap import dedent
 from unittest import TestCase, mock
 
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import CheckStatus
 from ops.testing import Harness
 
-from charm import TemporalK8SCharm
-from state import State
+from charm import TemporalK8SCharm, render
 
 SERVER_PORT = "7233"
 mock_incomplete_pebble_plan = {"services": {"temporal": {"override": "replace"}}}
@@ -570,6 +569,38 @@ class TestCharm(TestCase):
         plan = harness.get_container_pebble_plan("temporal").to_dict()
         assert plan is not None
 
+    def test_rendering(self):
+        """The dynamic config gets rendered correctly."""
+        expected_output = dedent(
+            """
+        frontend.namespacerps:
+        - value: 500
+
+
+        - value: 50
+          constraints:
+            namespace: "namespaceA"
+
+
+        - value: 100
+          constraints:
+            namespace: "namespaceB"
+
+
+        - value: 200
+          constraints:
+            namespace: "namespaceC"
+        """
+        ).strip()
+
+        dynamic_context = {
+            "GLOBAL_RPS_LIMIT": 500,
+            "NAMESPACE_RPS_LIMIT": "namespaceA:50|namespaceB:100|namespaceC:200",
+        }
+
+        dynamic_config = render("dynamic_config.jinja", dynamic_context).strip()
+        self.assertEqual(dedent(dynamic_config).strip(), expected_output)
+
 
 def simulate_lifecycle(harness):
     """Simulate a healthy charm life-cycle.
@@ -709,61 +740,3 @@ def s3_provider_databag():
         "region": "region",
         "s3-uri-style": "path",
     }
-
-
-class TestState(TestCase):
-    """Unit tests for state.
-
-    Attrs:
-        maxDiff: Specifies max difference shown by failed tests.
-    """
-
-    maxDiff = None
-
-    def test_get(self):
-        """It is possible to retrieve attributes from the state."""
-        state = make_state({"foo": json.dumps("bar")})
-        self.assertEqual(state.foo, "bar")
-        self.assertIsNone(state.bad)
-
-    def test_set(self):
-        """It is possible to set attributes in the state."""
-        data = {"foo": json.dumps("bar")}
-        state = make_state(data)
-        state.foo = 42
-        state.list = [1, 2, 3]
-        self.assertEqual(state.foo, 42)
-        self.assertEqual(state.list, [1, 2, 3])
-        self.assertEqual(data, {"foo": "42", "list": "[1, 2, 3]"})
-
-    def test_del(self):
-        """It is possible to unset attributes in the state."""
-        data = {"foo": json.dumps("bar"), "answer": json.dumps(42)}
-        state = make_state(data)
-        del state.foo
-        self.assertIsNone(state.foo)
-        self.assertEqual(data, {"answer": "42"})
-        # Deleting a name that is not set does not error.
-        del state.foo
-
-    def test_is_ready(self):
-        """The state is not ready when it is not possible to get relations."""
-        state = make_state({})
-        self.assertTrue(state.is_ready())
-
-        state = State("myapp", lambda: None)
-        self.assertFalse(state.is_ready())
-
-
-def make_state(data):
-    """Create state object.
-
-    Args:
-        data: Data to be included in state.
-
-    Returns:
-        State object with data.
-    """
-    app = "myapp"
-    rel = type("Rel", (), {"data": {app: data}})()
-    return State(app, lambda: rel)
