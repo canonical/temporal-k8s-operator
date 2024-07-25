@@ -14,7 +14,7 @@ import re
 from charms.data_platform_libs.v0.database_requires import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -26,7 +26,6 @@ from ops.pebble import CheckStatus
 
 from literals import (
     DB_NAME,
-    LOG_FILE,
     PROMETHEUS_PORT,
     REQUIRED_OPENFGA_KEYS,
     REQUIRED_S3_PARAMETERS,
@@ -144,7 +143,7 @@ class TemporalK8SCharm(CharmBase):
         )
 
         # Loki
-        self._log_proxy = LogProxyConsumer(self, log_files=[LOG_FILE], relation_name="log-proxy")
+        self._log_forwarder = LogForwarder(self, relation_name="logging")
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
