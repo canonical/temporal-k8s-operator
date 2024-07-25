@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import requests
 from charms.openfga_k8s.v1.openfga import OpenFGAStoreCreateEvent
-from openfga_sdk import TupleKey
+from openfga_sdk import ReadRequestTupleKey, TupleKey
 from openfga_sdk.client import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
@@ -305,7 +305,7 @@ class OpenFGA(framework.Object):
 
         try:
             for admin_group in admin_groups:
-                body = TupleKey(
+                body = ReadRequestTupleKey(
                     object=f"group:{admin_group}",
                 )
 
