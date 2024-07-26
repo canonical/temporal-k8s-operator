@@ -110,23 +110,6 @@ temporal-ui-k8s:peer                  temporal-ui-k8s:peer           temporal   
 temporal-ui-k8s:ui                    temporal-k8s:ui                temporal           regular
 ```
 
-After relating the Charmed Temporal K8s operator to cos-lite services, it will
-temporarily be in an error state. For the time being, we need to attach the
-promtail-bin resource so that Loki works without trying to download promtail
-from the web:
-
-```bash
-# Download promtail binary
-curl -O -L "https://github.com/grafana/loki/releases/download/v2.7.5/promtail-linux-amd64.zip"
-
-# Extract the binary
-unzip "promtail-linux-amd64.zip"
-
-# Make sure it is executable
-chmod a+x "promtail-linux-amd64"
-juju attach-resource temporal-k8s promtail-bin=<PATH_TO_PROMTAIL_BINARY>/promtail-linux-amd64
-```
-
 Once done, the Charmed Temporal K8s operator should be back in an active state .
 We can now access our Grafana dashboard as follows:
 
