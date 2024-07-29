@@ -187,7 +187,7 @@ class OpenFGA(framework.Object):
         headers = _build_headers(openfga_data)
 
         try:
-            response = _post_authorization_model(url, model_json, headers, event)
+            response = requests.post(url, json=model_json, headers=headers, timeout=10)
         except RequestException as e:
             event.fail(f"failed to create authorization model: {e}")
             return
@@ -666,23 +666,6 @@ def _build_headers(openfga_data):
     if openfga_data["token"]:
         headers["Authorization"] = f"Bearer {openfga_data['token']}"
     return headers
-
-
-def _post_authorization_model(url, model_json, headers, event):
-    """Create authorization model in OpenFGA store.
-
-    Args:
-        url: OpenFGA store authorization models URL.
-        model_json: JSON representation of the provided authorization model.
-        headers: Request headers.
-        event: The event triggered when the action is performed.
-
-    Returns:
-        HTTP Response after creating the OpenFGA authorization model.
-    """
-    logger.info(f"posting to {url}, with headers {headers}")
-    response = requests.post(url, json=model_json, headers=headers, timeout=10)
-    return response
 
 
 def _extract_authorization_model_id(response, event):
