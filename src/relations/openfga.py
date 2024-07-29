@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import requests
 from charms.openfga_k8s.v1.openfga import OpenFGAStoreCreateEvent
-from openfga_sdk import TupleKey
+from openfga_sdk import ReadRequestTupleKey, TupleKey
 from openfga_sdk.client import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
@@ -174,25 +174,31 @@ class OpenFGA(framework.Object):
 
         model = event.params["model"]
         if not model:
-            event.set_results({"error": "authorization model not specified"})
+            event.fail("authorization model not specified")
             return
 
         model_json = _parse_model_json(model, event)
         if model_json is None:
-            event.set_results({"error": "failed to parse model json"})
+            event.fail("failed to parse model json")
             return
 
         openfga_data = self.charm._state.openfga
         url = f"{openfga_data['scheme']}://{openfga_data['address']}:{openfga_data['port']}/stores/{openfga_data['store_id']}/authorization-models"
         headers = _build_headers(openfga_data)
 
-        response = _post_authorization_model(url, model_json, headers, event)
-        if response is None:
+        try:
+            response = requests.post(url, json=model_json, headers=headers, timeout=10)
+        except RequestException as e:
+            event.fail(f"failed to create authorization model: {e}")
             return
 
-        authorization_model_id = _extract_authorization_model_id(response, event)
-        if not authorization_model_id:
+        try:
+            authorization_model_id = _extract_authorization_model_id(response, event)
+        except Exception as e:
+            event.fail(f"failed to extract authorization model ID: {e}")
             return
+
+        event.set_results({"result": "successfully created authorization model"})
 
         # Replacing the whole openfga dict to include the auth model id.
         self.charm._state.openfga = {
@@ -275,8 +281,8 @@ class OpenFGA(framework.Object):
             )
             event.set_results({"result": "command succeeded", "output": response.allowed})
             return
-        except ApiException:
-            event.set_results({"error": "failed to perform ofga operation"})
+        except ApiException as e:
+            event.fail(f"failed to perform ofga operation: {e}")
 
     @log_event_handler(logger)
     def _on_list_system_admins_action(self, event):
@@ -299,7 +305,7 @@ class OpenFGA(framework.Object):
 
         try:
             for admin_group in admin_groups:
-                body = TupleKey(
+                body = ReadRequestTupleKey(
                     object=f"group:{admin_group}",
                 )
 
@@ -315,8 +321,8 @@ class OpenFGA(framework.Object):
                     results[admin_group].append(user_email)
 
             event.set_results({"result": "command succeeded", "output": results})
-        except ApiException:
-            event.set_results({"error": "failed to perform ofga operation"})
+        except ApiException as e:
+            event.fail(f"failed to perform ofga operation: {e}")
 
     @log_event_handler(logger)
     def _on_add_auth_rule_action(self, event):
@@ -386,11 +392,11 @@ class OpenFGA(framework.Object):
                     }
                 )
                 return
-            except ApiException:
-                event.set_results({"error": "failed to perform ofga operation"})
+            except ApiException as e:
+                event.fail(f"failed to perform ofga operation: {e}")
         else:
             if role not in ALLOWED_OFGA_ROLES:
-                event.set_results({"error": f"provided role {role!r} not in allowed roles: {ALLOWED_OFGA_ROLES!r}"})
+                event.fail(f"provided role {role!r} not in allowed roles: {ALLOWED_OFGA_ROLES!r}")
                 return
 
             op_tuple = [
@@ -420,8 +426,8 @@ class OpenFGA(framework.Object):
                     }
                 )
                 return
-            except ApiException:
-                event.set_results({"error": "failed to perform ofga operation"})
+            except ApiException as e:
+                event.fail(f"failed to perform ofga operation: {e}")
 
 
 def _validate_event_params(event, valid_combinations):
@@ -446,10 +452,8 @@ def _validate_event_params(event, valid_combinations):
             valid_combination_strings.append(f"{i+1}. '{', '.join(combination)}'")
 
         valid_combinations_message = "\n".join(valid_combination_strings)
-        event.set_results(
-            {
-                "error": f"parameter combination not supported. parameters for this operation must either be:\n{valid_combinations_message}"
-            }
+        event.fail(
+            f"parameter combination not supported. parameters for this operation must either be:\n{valid_combinations_message}"
         )
 
     return valid
@@ -557,8 +561,8 @@ async def _list_user_auth_rules(event, openfga_data):
             results[role] = response
 
         event.set_results({"result": "command succeeded", "output": results})
-    except ApiException:
-        event.set_results({"error": "failed to perform ofga operation"})
+    except ApiException as e:
+        event.fail(f"failed to perform ofga operation: {e}")
 
 
 async def _list_group_auth_rules(event, openfga_data):
@@ -582,8 +586,8 @@ async def _list_group_auth_rules(event, openfga_data):
             results[role] = response
 
         event.set_results({"result": "command succeeded", "output": results})
-    except ApiException:
-        event.set_results({"error": "failed to perform ofga operation"})
+    except ApiException as e:
+        event.fail(f"failed to perform ofga operation: {e}")
 
 
 async def _list_namespace_auth_rules(event, openfga_data):
@@ -609,8 +613,8 @@ async def _list_namespace_auth_rules(event, openfga_data):
             results[result.key.relation].append(group)
 
         event.set_results({"result": "command succeeded", "output": results})
-    except ApiException:
-        event.set_results({"error": "failed to perform ofga operation"})
+    except ApiException as e:
+        event.fail(f"failed to perform ofga operation: {e}")
 
 
 def _parse_model_json(model, event):
@@ -664,30 +668,6 @@ def _build_headers(openfga_data):
     return headers
 
 
-def _post_authorization_model(url, model_json, headers, event):
-    """Create authorization model in OpenFGA store.
-
-    Args:
-        url: OpenFGA store authorization models URL.
-        model_json: JSON representation of the provided authorization model.
-        headers: Request headers.
-        event: The event triggered when the action is performed.
-
-    Returns:
-        HTTP Response after creating the OpenFGA authorization model.
-    """
-    logger.info(f"posting to {url}, with headers {headers}")
-    try:
-        response = requests.post(url, json=model_json, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response
-    except RequestException as error:
-        error_msg = f"error occurred in: {error}"
-        event.fail(error_msg)
-        logger.info(error_msg)
-        return None
-
-
 def _extract_authorization_model_id(response, event):
     """Extract authorization model ID from response.
 
@@ -697,20 +677,17 @@ def _extract_authorization_model_id(response, event):
 
     Returns:
         OpenFGA authorization model ID.
+
+    Raises:
+        Exception: if authorization model could not be extracted.
     """
     if not response.ok:
-        error_msg = f"failed to create authorization model: {response.text}"
-        event.fail(error_msg)
-        logger.info(error_msg)
-        return None
+        raise Exception(response.text)
 
     data = response.json()
     authorization_model_id = data.get("authorization_model_id", "")
     if not authorization_model_id:
-        error_msg = f"response does not contain authorization model id: {response.text}"
-        event.fail(error_msg)
-        logger.info(error_msg)
-        return None
+        raise Exception(response.text)
 
     logger.info(f"auth model id is {authorization_model_id}")
     return authorization_model_id

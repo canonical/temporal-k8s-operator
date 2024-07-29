@@ -18,4 +18,6 @@ parts:
     # See <https://github.com/canonical/charmcraft/issues/551>.
     charm-python-packages: [setuptools, pip]
     charm-binary-python-packages:
-      - cosl
+      - openfga-sdk==0.6.0
+      - cosl==0.0.6
+      - requests==2.31.0
