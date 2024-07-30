@@ -15,13 +15,21 @@ environment from the Temporal server. As our server is currently locally
 deployed, we will opt for a direct connection from the worker rather than using
 the ingress.
 
-To deploy Charmed Temporal Worker to a different model, you need to run the
-following commands, which will fetch the charm from
-[Charmhub](https://charmhub.io/temporal-worker-k8s) and deploy it to your model:
+In order to test our Temporal worker, we will use a
+[sample resource](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample_py)
+which contains two workflows and two activities. This will require the
+availability of a local registry. In our case, we can enable the
+[microk8s registry](https://microk8s.io/docs/registry-built-in). You can run the
+following commands to clone the repository, build the necessary rock image and
+deploy the worker charm with it:
 
 ```bash
 juju add-model worker-model
-juju deploy temporal-worker-k8s
+
+git clone https://github.com/canonical/temporal-worker-k8s-operator.git
+make -C resource_sample_py build_rock
+
+juju deploy temporal-worker-k8s --resource temporal-worker-image=localhost:32000/temporal-worker-rock
 ```
 
 Wait until the application is ready - when it is ready, `juju status` will show:
@@ -34,36 +42,27 @@ App                  Version  Status   Scale  Charm                Channel  Rev 
 temporal-worker-k8s           waiting      1  temporal-worker-k8s  stable     5  10.152.183.187  no       installing agent
 
 Unit                    Workload  Agent  Address      Ports  Message
-temporal-worker-k8s/0*  blocked   idle   10.1.232.75         Invalid config: wheel-file-name missing
+temporal-worker-k8s/0*  blocked   idle   10.1.232.75         Invalid config: host missing
 ```
 
 ## Configure Worker
 
-In order to test our Temporal worker, we will use a
-[sample resource](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample)
-which contains one workflow and one activity. You can run the following commands
-to clone the repository, build the necessary wheel file and attach it to the
-worker charm:
-
-```bash
-git clone https://github.com/canonical/temporal-worker-k8s-operator.git
-cd temporal-worker-k8s-operator/resource_sample
-
-poetry build -f wheel # Take note of the generated file's name
-```
-
 We will then configure our worker to the Temporal server deployed in the
-previous steps. Create a file `config.yaml` with the following content:
+previous steps. We will also configure our charm to add a couple of environment
+variables to be read by the workflows. Create a file `config.yaml` with the
+following content:
 
 ```yaml
 temporal-worker-k8s:
   host: "10.1.232.64:7233" # Temporal Server unit IP address
   queue: "test-queue"
   namespace: "default"
-  workflows-file-name: "python_samples-1.1.0-py3-none-any.whl"
-  # To support all defined workflows and activities, use the 'all' keyword
-  supported-workflows: "all"
-  supported-activities: "all"
+  environment: |
+    env:
+      - name: message
+        value: hello
+      - name: juju-key1
+        value: world
 ```
 
 Note: To get the Temporal Server unit IP address, you need to switch to the
@@ -77,12 +76,6 @@ juju config temporal-worker-k8s --file=path/to/config.yaml
 
 # Verify that the charm has been configured with the correct value
 juju config temporal-worker-k8s host
-```
-
-And then run the following command to attach the workflows file to the worker:
-
-```bash
-juju attach-resource temporal-worker-k8s workflows-file=./dist/python_samples-1.1.0-py3-none-any.whl
 ```
 
 Wait until the application is ready - when it is ready, `juju status` will show:
