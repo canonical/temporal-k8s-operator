@@ -196,6 +196,14 @@ class TestCharm(TestCase):
                     "on-check-failure": {"up": "ignore"},
                 },
             },
+            "checks": {
+                "up": {
+                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                    "level": "alive",
+                    "override": "replace",
+                    "period": "300s",
+                }
+            },
         }
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
         self.assertEqual(got_plan, want_plan)
@@ -278,6 +286,14 @@ class TestCharm(TestCase):
                     "on-check-failure": {"up": "ignore"},
                 },
             },
+            "checks": {
+                "up": {
+                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                    "level": "alive",
+                    "override": "replace",
+                    "period": "300s",
+                }
+            },
         }
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
         self.assertEqual(got_plan, want_plan)
@@ -329,6 +345,14 @@ class TestCharm(TestCase):
                     },
                     "on-check-failure": {"up": "ignore"},
                 },
+            },
+            "checks": {
+                "up": {
+                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                    "level": "alive",
+                    "override": "replace",
+                    "period": "300s",
+                }
             },
         }
         got_plan = harness.get_container_pebble_plan("temporal").to_dict()
@@ -498,6 +522,14 @@ class TestCharm(TestCase):
                         "OFGA_API_PORT": harness.charm._state.openfga["port"],
                     },
                     "on-check-failure": {"up": "ignore"},
+                }
+            },
+            "checks": {
+                "up": {
+                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                    "level": "alive",
+                    "override": "replace",
+                    "period": "300s",
                 }
             },
         }
