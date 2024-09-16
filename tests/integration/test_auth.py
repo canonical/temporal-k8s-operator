@@ -85,7 +85,10 @@ class TestAuth:
                     )
                     result = await action.wait()
                     logger.info(f"attempt {i} -> action result {result.status} {result.results}")
-                    if result.status == "completed" and result.results == {"return-code": 0}:
+                    if result.status == "completed" and result.results == {
+                        "result": "successfully created authorization model",
+                        "return-code": 0,
+                    }:
                         break
                     time.sleep(2)
 

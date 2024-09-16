@@ -241,6 +241,7 @@ class TemporalK8SCharm(CharmBase):
             event: The event triggered when the relation changed.
         """
         self.unit.status = WaitingStatus("configuring temporal")
+        self.admin._provide_db_info()
         self._update(event)
 
     @log_event_handler(logger)
@@ -454,6 +455,7 @@ class TemporalK8SCharm(CharmBase):
                 "SQL_VIS_MAX_CONNS": self.config["visibility-max-conns"],
                 "SQL_VIS_MAX_IDLE_CONNS": self.config["visibility-max-idle-conns"],
                 "SQL_VIS_MAX_CONN_TIME": self.config["visibility-max-conn-time"],
+                "SQL_TLS_ENABLED": self.config["db-tls-enabled"],
             }
         )
 

@@ -75,7 +75,7 @@ class TestServerUpgrade:
         """Refresh the charm with a new resource which requires a schema update."""
         # Update admin charm to v1.21.2 first
         await ops_test.model.applications[APP_NAME_ADMIN].refresh(
-            resources={"temporal-admin-image": "temporalio/admin-tools:1.21.2"},
+            resources={"temporal-admin-image": "temporalio/admin-tools:1.21.2.0"},
         )
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME_ADMIN], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
@@ -86,7 +86,7 @@ class TestServerUpgrade:
 
         # Update server charm to v1.21.2
         await ops_test.model.applications[APP_NAME].refresh(
-            resources={"temporal-server-image": "temporalio/server:1.21.2"},
+            resources={"temporal-server-image": "temporalio/server:1.21.2.0"},
             path=str(charm),
         )
 

@@ -161,6 +161,9 @@ class Admin(framework.Object):
         """Provide DB info to the admin charm."""
         charm = self.charm
 
+        if not charm.unit.is_leader():
+            return
+
         try:
             database_connections = charm.database_connections()
         except ValueError as err:
@@ -173,4 +176,14 @@ class Admin(framework.Object):
             return
         for relation in admin_relations:
             logger.debug(f"admin:temporal: providing database connections on relation {relation.id}")
-            relation.data[charm.app].update({"database_connections": json.dumps(database_connections)})
+            relation_databag = {
+                "database_connections": json.dumps(database_connections),
+            }
+
+            if self.charm.config["db-tls-enabled"]:
+                relation_databag.update(
+                    {
+                        "tls_enabled": str(self.charm.config["db-tls-enabled"]),
+                    }
+                )
+            relation.data[charm.app].update(relation_databag)
