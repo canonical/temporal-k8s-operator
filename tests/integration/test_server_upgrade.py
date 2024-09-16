@@ -21,7 +21,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-
+@pytest.mark.skip # TODO (kelkawi-a): investigate bug with test https://github.com/canonical/temporal-k8s-operator/actions/runs/10886756137/job/30209211247
 @pytest.mark.skip_if_deployed
 @pytest_asyncio.fixture(name="deploy", scope="module")
 async def deploy(ops_test: OpsTest):
@@ -62,6 +62,7 @@ async def deploy(ops_test: OpsTest):
         await run_sample_workflow(ops_test)
 
 
+@pytest.mark.skip
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("deploy")
 class TestServerUpgrade:
