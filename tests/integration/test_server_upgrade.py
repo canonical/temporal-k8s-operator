@@ -74,21 +74,33 @@ class TestServerUpgrade:
     async def test_server_upgrade(self, ops_test: OpsTest):
         """Refresh the charm with a new resource which requires a schema update."""
         # Update admin charm to v1.21.2 first
-        await ops_test.model.applications[APP_NAME_ADMIN].refresh(
-            resources={"temporal-admin-image": "temporalio/admin-tools:1.21.2.0"},
+        await ops_test.model.applications[APP_NAME_ADMIN].destroy()
+        await ops_test.model.block_until(lambda: APP_NAME_ADMIN not in ops_test.model.applications)
+        await ops_test.model.deploy(
+            APP_NAME_ADMIN, channel="edge", resources={"temporal-admin-image": "temporalio/admin-tools:1.21.2"}
         )
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME_ADMIN], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
         )
 
+        admin_unit = ops_test.model.applications[APP_NAME_ADMIN].units[0]
+        action = await admin_unit.run_action("setup-schema")
+        await action.wait()
+
         # Needed for a local charm refresh
         charm = await ops_test.build_charm(".")
 
         # Update server charm to v1.21.2
-        await ops_test.model.applications[APP_NAME].refresh(
-            resources={"temporal-server-image": "temporalio/server:1.21.2.0"},
-            path=str(charm),
+        await ops_test.model.applications[APP_NAME].destroy()
+        await ops_test.model.block_until(lambda: APP_NAME not in ops_test.model.applications)
+        await ops_test.model.deploy(
+            charm,
+            application_name=APP_NAME,
+            resources={"temporal-server-image": "temporalio/server:1.21.2"},
+            config={"num-history-shards": "1"},
         )
+
+        await perform_temporal_integrations(ops_test)
 
         # This is to accmmodate for a self-resolving error which sometimes appears when Temporal
         # services attempt to connect to the cluster before the application is ready.
