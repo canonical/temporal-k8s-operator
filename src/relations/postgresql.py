@@ -63,10 +63,12 @@ class Postgresql(framework.Object):
             "port": port,
             "password": event.password,
             "user": event.username,
+            "tls": event.tls,
         }
 
         self._update_db_connections(rel_name, db_conn)
 
+        self.charm.admin._provide_db_info()
         self.charm._update(event)
 
     @log_event_handler(logger)

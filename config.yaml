@@ -119,9 +119,3 @@ options:
         in this config will fall back to the value defined in `global-rps-limit`.
     default: ""
     type: string
-
-  db-tls-enabled:
-    description: |
-        Specifies whether the database charm is using a TLS certificate.
-    default: false
-    type: boolean      

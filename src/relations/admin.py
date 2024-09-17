@@ -176,14 +176,4 @@ class Admin(framework.Object):
             return
         for relation in admin_relations:
             logger.debug(f"admin:temporal: providing database connections on relation {relation.id}")
-            relation_databag = {
-                "database_connections": json.dumps(database_connections),
-            }
-
-            if self.charm.config["db-tls-enabled"]:
-                relation_databag.update(
-                    {
-                        "tls_enabled": str(self.charm.config["db-tls-enabled"]),
-                    }
-                )
-            relation.data[charm.app].update(relation_databag)
+            relation.data[charm.app].update({"database_connections": json.dumps(database_connections)})

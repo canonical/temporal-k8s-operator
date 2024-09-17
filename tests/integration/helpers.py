@@ -133,7 +133,7 @@ async def simulate_charm_crash(ops_test: OpsTest):
         resources=resources,
         application_name=APP_NAME,
         num_units=1,
-        config={"num-history-shards": 1, "db-tls-enabled": True},
+        config={"num-history-shards": 1},
     )
 
     async with ops_test.fast_forward():

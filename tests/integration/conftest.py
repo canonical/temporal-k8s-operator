@@ -46,7 +46,6 @@ async def deploy(ops_test: OpsTest, charm: str):
             application_name=APP_NAME,
             config={
                 "num-history-shards": 1,
-                "db-tls-enabled": True,
                 "global-rps-limit": 100,
                 "namespace-rps-limit": "default:50|test:40",
             },
