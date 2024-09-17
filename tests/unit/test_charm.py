@@ -186,7 +186,7 @@ class TestCharm(TestCase):
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
                         "NUM_HISTORY_SHARDS": 1,
-                        "SQL_TLS_ENABLED": True,
+                        "SQL_TLS_ENABLED": False,
                         "SQL_MAX_CONNS": 20,
                         "SQL_MAX_IDLE_CONNS": 20,
                         "SQL_MAX_CONN_TIME": "1h",
@@ -272,7 +272,7 @@ class TestCharm(TestCase):
                         ),
                         "NUM_HISTORY_SHARDS": 1,
                         "SQL_MAX_CONNS": 20,
-                        "SQL_TLS_ENABLED": True,
+                        "SQL_TLS_ENABLED": False,
                         "SQL_MAX_IDLE_CONNS": 20,
                         "SQL_MAX_CONN_TIME": "1h",
                         "SQL_VIS_MAX_CONNS": 10,
@@ -338,7 +338,7 @@ class TestCharm(TestCase):
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
                         "NUM_HISTORY_SHARDS": 1,
-                        "SQL_TLS_ENABLED": True,
+                        "SQL_TLS_ENABLED": False,
                         "SQL_MAX_CONNS": 20,
                         "SQL_MAX_IDLE_CONNS": 20,
                         "SQL_MAX_CONN_TIME": "1h",
@@ -396,7 +396,7 @@ class TestCharm(TestCase):
                     "host": "myhost",
                     "password": "inner-light",
                     "port": "5432",
-                    "tls": True,
+                    "tls": False,
                     "user": "jean-luc@db",
                 },
                 "visibility": {
@@ -404,7 +404,7 @@ class TestCharm(TestCase):
                     "host": "myhost",
                     "password": "inner-light",
                     "port": "5432",
-                    "tls": True,
+                    "tls": False,
                     "user": "jean-luc@visibility",
                 },
             },
@@ -513,7 +513,7 @@ class TestCharm(TestCase):
                             self.harness.model.get_binding("peer").network.ingress_address
                         ),
                         "NUM_HISTORY_SHARDS": 1,
-                        "SQL_TLS_ENABLED": True,
+                        "SQL_TLS_ENABLED": False,
                         "SQL_MAX_CONNS": 20,
                         "SQL_MAX_IDLE_CONNS": 20,
                         "SQL_MAX_CONN_TIME": "1h",

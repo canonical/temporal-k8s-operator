@@ -119,3 +119,8 @@ options:
         in this config will fall back to the value defined in `global-rps-limit`.
     default: ""
     type: string
+
+  db-tls-enabled:
+    description: Where TLS is enabled on the database.
+    default: False
+    type: boolean

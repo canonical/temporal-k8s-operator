@@ -63,7 +63,7 @@ class Postgresql(framework.Object):
             "port": port,
             "password": event.password,
             "user": event.username,
-            "tls": event.tls,
+            "tls": self.charm.config["db-tls-enabled"],
         }
 
         self._update_db_connections(rel_name, db_conn)

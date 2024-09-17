@@ -454,7 +454,7 @@ class TemporalK8SCharm(CharmBase):
                 "SQL_VIS_MAX_CONNS": self.config["visibility-max-conns"],
                 "SQL_VIS_MAX_IDLE_CONNS": self.config["visibility-max-idle-conns"],
                 "SQL_VIS_MAX_CONN_TIME": self.config["visibility-max-conn-time"],
-                "SQL_TLS_ENABLED": db_conn["tls"],
+                "SQL_TLS_ENABLED": db_conn.get("tls", False),
             }
         )
 
