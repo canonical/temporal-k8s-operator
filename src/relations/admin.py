@@ -161,6 +161,9 @@ class Admin(framework.Object):
         """Provide DB info to the admin charm."""
         charm = self.charm
 
+        if not charm.unit.is_leader():
+            return
+
         try:
             database_connections = charm.database_connections()
         except ValueError as err:
