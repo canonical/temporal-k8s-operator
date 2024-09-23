@@ -1,0 +1,22 @@
+groups:
+
+- name: TemporalK8s
+
+  rules:
+    - alert: TemporalServerDown
+      expr: '100 - (sum(rate(service_errors[2m]) or on() vector(0)) / sum(rate(service_requests[2m])) * 100) == 0'
+      for: 0m
+      labels:
+        severity: critical
+      annotations:
+        summary: Temporal server is down (instance {{ $labels.instance }})
+        description: "Temporal instance is down\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+
+    - alert: TemporalDBDown
+      expr: '100 - (sum (rate(persistence_errors[2m]) OR on() vector(0)) /sum (rate(persistence_requests[2m])) * 100) == 0'
+      for: 0m
+      labels:
+        severity: critical
+      annotations:
+        summary: Temporal down (instance {{ $labels.instance }})
+        description: "Temporal instance is down\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
