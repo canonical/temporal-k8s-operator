@@ -67,10 +67,10 @@ provides:
 containers:
   temporal:
     resource: temporal-server-image
-    # Included for simplicity in integration tests.
-    upstream-source: ghcr.io/canonical/temporal-server:latest
 
 resources:
   temporal-server-image:
     type: oci-image
     description: OCI image for Temporal
+    # Included for simplicity in integration tests.
+    upstream-source: ghcr.io/canonical/temporal-server:latest
