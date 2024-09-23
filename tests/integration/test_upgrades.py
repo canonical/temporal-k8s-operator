@@ -59,7 +59,7 @@ class TestUpgrade:
     async def test_upgrade(self, ops_test: OpsTest):
         """Builds the current charm and refreshes the current deployment."""
         charm = await ops_test.build_charm(".")
-        resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
+        resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
 
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 

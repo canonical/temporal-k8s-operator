@@ -125,7 +125,7 @@ async def simulate_charm_crash(ops_test: OpsTest):
     await ops_test.model.block_until(lambda: APP_NAME not in ops_test.model.applications)
 
     charm = await ops_test.build_charm(".")
-    resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
+    resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
 
     # Deploy temporal server, temporal admin and postgresql charms.
     await ops_test.model.deploy(
