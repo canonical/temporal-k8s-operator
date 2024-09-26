@@ -15,13 +15,13 @@ groups:
         severity: critical
       annotations:
         summary: Temporal server is down (instance {{ $labels.instance }})
-        description: "Temporal instance is down\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+        description: "Temporal server instance is down\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
 
-    - alert: TemporalDBDown
+    - alert: TemporalDatabaseDown
       expr: '100 - (sum (rate(persistence_errors[2m]) OR on() vector(0)) /sum (rate(persistence_requests[2m])) * 100) == 0'
       for: 0m
       labels:
         severity: critical
       annotations:
-        summary: Temporal down (instance {{ $labels.instance }})
-        description: "Temporal instance is down\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+        summary: Temporal database is down (instance {{ $labels.instance }})
+        description: "Temporal database instance is down\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
