@@ -59,7 +59,7 @@
         "enableLogDetails": true,
         "prettifyLogMessage": true,
         "showCommonLabels": false,
-        "showLabels": false,
+        "showLabels": true,
         "showTime": false,
         "sortOrder": "Descending",
         "wrapLogMessage": false
@@ -68,10 +68,10 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "${prometheusds}"
+            "uid": "${lokids}"
           },
           "editorMode": "builder",
-          "expr": "{juju_application=\"$juju_application\"}",
+          "expr": "{juju_application=\"temporal-k8s\"}",
           "queryType": "range",
           "refId": "A"
         }
@@ -346,7 +346,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P2B9F25C311467308"
+            "uid": "${prometheusds}"
           },
           "editorMode": "code",
           "expr": "sum by (namespace) (rate(service_authorization_latency_sum{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))/sum by (namespace) (rate(service_authorization_latency_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",

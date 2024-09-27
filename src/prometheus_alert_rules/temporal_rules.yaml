@@ -9,7 +9,7 @@ groups:
 
   rules:
     - alert: TemporalServerDown
-      expr: '100 - (sum(rate(service_errors[2m]) or on() vector(0)) / sum(rate(service_requests[2m])) * 100) == 0'
+      expr: '100 - (sum(rate(service_errors[2m]) or on() vector(0)) / sum(rate(service_requests[2m])) * 100) < 10'
       for: 0m
       labels:
         severity: critical
@@ -18,7 +18,7 @@ groups:
         description: "Temporal server instance is down\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
 
     - alert: TemporalDatabaseDown
-      expr: '100 - (sum (rate(persistence_errors[2m]) OR on() vector(0)) /sum (rate(persistence_requests[2m])) * 100) == 0'
+      expr: '100 - (sum (rate(persistence_errors[2m]) OR on() vector(0)) /sum (rate(persistence_requests[2m])) * 100) < 10'
       for: 0m
       labels:
         severity: critical
