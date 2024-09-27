@@ -4,6 +4,16 @@ on:
   pull_request:
 
 jobs:
+  alertmanager-rules-lint:
+    name: Alertmanager Rules Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Prometheus
+        run: sudo snap install prometheus
+      - name: Run promtool checks on Prometheus alert definitions
+        run: promtool check rules $(find "$PWD" -name "*_rules.yaml")
   unit-tests:
     uses: canonical/operator-workflows/.github/workflows/test.yaml@main
     secrets: inherit
