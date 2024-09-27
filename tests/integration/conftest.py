@@ -36,7 +36,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
 @pytest_asyncio.fixture(name="deploy", scope="module")
 async def deploy(ops_test: OpsTest, charm: str):
     """The app is up and running."""
-    resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
+    resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
 
     # Deploy temporal server, temporal admin and postgresql charms.
     asyncio.gather(

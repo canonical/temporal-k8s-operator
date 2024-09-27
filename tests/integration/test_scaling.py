@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 async def deploy(ops_test: OpsTest):
     """The app is up and running."""
     charm = await ops_test.build_charm(".")
-    resources = {"temporal-server-image": METADATA["containers"]["temporal"]["upstream-source"]}
+    resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
 
     await ops_test.model.set_config({"update-status-hook-interval": "1m"})
 
