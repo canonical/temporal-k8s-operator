@@ -25,59 +25,73 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
+  "id": 53,
   "links": [],
   "liveNow": false,
   "panels": [
     {
-      "collapsed": false,
-      "datasource": null,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 0
       },
-      "id": 11,
-      "panels": [],
-      "title": "Temporal",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "${prometheusds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 101,
-      "options": {
-        "dedupStrategy": "exact",
-        "enableLogDetails": true,
-        "prettifyLogMessage": true,
-        "showCommonLabels": false,
-        "showLabels": true,
-        "showTime": false,
-        "sortOrder": "Descending",
-        "wrapLogMessage": false
-      },
-      "targets": [
+      "id": 103,
+      "panels": [
         {
           "datasource": {
             "type": "loki",
             "uid": "${lokids}"
           },
-          "editorMode": "builder",
-          "expr": "{juju_application=\"temporal-k8s\"}",
-          "queryType": "range",
-          "refId": "A"
+          "gridPos": {
+            "h": 18,
+            "w": 24,
+            "x": 0,
+            "y": 1
+          },
+          "id": 101,
+          "options": {
+            "dedupStrategy": "exact",
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": false,
+            "showTime": false,
+            "sortOrder": "Descending",
+            "wrapLogMessage": false
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "loki",
+                "uid": "${lokids}"
+              },
+              "editorMode": "builder",
+              "expr": "{juju_application=\"temporal-k8s\", juju_model=~\"$juju_model\", juju_model_uuid=~\"$juju_model_uuid\", juju_unit=~\"$juju_unit\"} | json",
+              "queryType": "range",
+              "refId": "A"
+            }
+          ],
+          "title": "Server Logs",
+          "type": "logs"
         }
       ],
-      "title": "Server Logs",
-      "type": "logs"
+      "title": "Logs",
+      "type": "row"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 11,
+      "panels": [],
+      "title": "Temporal",
+      "type": "row"
     },
     {
       "aliasColors": {},
@@ -90,7 +104,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -101,7 +114,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 2
       },
       "hiddenSeries": false,
       "id": 2,
@@ -118,11 +131,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -132,16 +144,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "100 - (sum(rate(service_errors{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]) OR on() vector(0)) / sum(rate(service_requests{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m])) * 100)",
+          "expr": "100 - (sum(rate(service_errors{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m]) or on() vector(0)) / sum(rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m])) * 100)",
           "interval": "",
           "legendFormat": "availability",
           "refId": "C"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Service Availability (Based on Frontend Calls)",
       "tooltip": {
         "shared": true,
@@ -150,9 +160,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -183,7 +191,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -194,7 +201,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 2
       },
       "hiddenSeries": false,
       "id": 6,
@@ -212,11 +219,10 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -226,16 +232,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "100 - (sum (rate(persistence_errors{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]) OR on() vector(0)) /sum (rate(persistence_requests{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m])) * 100)",
+          "expr": "100 - (sum(rate(persistence_errors{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m]) or on() vector(0)) / sum(rate(persistence_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m])) * 100)",
           "interval": "",
           "legendFormat": "availability",
           "refId": "C"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Persistence Availability",
       "tooltip": {
         "shared": true,
@@ -244,9 +248,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -324,12 +326,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 10,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 11
       },
-      "id": 101,
+      "id": 102,
       "options": {
         "legend": {
           "calcs": [],
@@ -349,7 +351,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "code",
-          "expr": "sum by (namespace) (rate(service_authorization_latency_sum{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))/sum by (namespace) (rate(service_authorization_latency_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
+          "expr": "sum by(namespace) (rate(service_authorization_latency_sum{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])) / sum by(namespace) (rate(service_authorization_latency_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -369,7 +371,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -378,445 +379,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 10,
-        "w": 6,
-        "x": 0,
-        "y": 10
-      },
-      "hiddenSeries": false,
-      "id": 4,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true,
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pluginVersion": "8.3.4",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum by (operation) (rate(service_requests{operation=~\"StartWorkflowExecution|SignalWorkflowExecution|SignalWithStartWorkflowExecution\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "External Events",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${prometheusds}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 10,
-        "w": 6,
-        "x": 6,
-        "y": 10
-      },
-      "hiddenSeries": false,
-      "id": 7,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true,
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pluginVersion": "8.3.4",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(rate(service_requests{ operation=\"AddWorkflowTask\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "Scheduled",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(service_requests{ operation=\"RecordWorkflowTaskStarted\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "Started",
-          "refId": "B"
-        },
-        {
-          "expr": "sum(rate(service_requests{ operation=\"RespondWorkflowTaskCompleted\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "Completed",
-          "refId": "C"
-        },
-        {
-          "expr": "sum(rate(service_requests{ operation=\"RespondWorkflowTaskFailed\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "Failed",
-          "refId": "D"
-        },
-        {
-          "expr": "sum(rate(schedule_to_start_timeout{ operation=\"TimerActiveTaskWorkflowTimeout\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "Sticky Task Queue Timeout",
-          "refId": "E"
-        },
-        {
-          "expr": "sum(rate(start_to_close_timeout{ operation=\"TimerActiveTaskWorkflowTimeout\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "Workflow Task Timeout",
-          "refId": "F"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Workflow Tasks",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${prometheusds}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 10,
-        "w": 6,
-        "x": 12,
-        "y": 10
-      },
-      "hiddenSeries": false,
-      "id": 8,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true,
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pluginVersion": "8.3.4",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(rate(service_requests{operation=\"AddActivityTask\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "Scheduled",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(service_requests{operation=\"RecordActivityTaskStarted\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "Started",
-          "refId": "B"
-        },
-        {
-          "expr": "sum(rate(service_requests{operation=~\"RespondActivityTaskCompleted|RespondActivityTaskFailed|RespondActivityTaskCanceled\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "interval": "",
-          "legendFormat": "Completed",
-          "refId": "C"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Activities",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${prometheusds}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 20
-      },
-      "hiddenSeries": false,
-      "id": 63,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true,
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pluginVersion": "8.3.4",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(rate(membership_changed_count{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "membership_changed",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(sharditem_created_count{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "shard_item_created",
-          "refId": "B"
-        },
-        {
-          "expr": "sum(rate(sharditem_removed_count{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "shard_item_removed",
-          "refId": "C"
-        },
-        {
-          "expr": "sum(rate(shard_closed_count{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "shard_closed",
-          "refId": "D"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Shard Rebalancing",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${prometheusds}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
         "w": 12,
         "x": 12,
-        "y": 20
+        "y": 11
       },
       "hiddenSeries": false,
       "id": 65,
@@ -833,11 +398,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -847,7 +411,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "numshards_gauge{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}",
+          "expr": "numshards_gauge{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -857,9 +421,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Shard Distribution",
       "tooltip": {
         "shared": true,
@@ -868,9 +430,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -901,7 +461,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -909,13 +468,13 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
-        "w": 6,
+        "h": 10,
+        "w": 12,
         "x": 0,
-        "y": 28
+        "y": 21
       },
       "hiddenSeries": false,
-      "id": 54,
+      "id": 63,
       "legend": {
         "avg": false,
         "current": false,
@@ -929,11 +488,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -943,17 +501,37 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (temporal_service_type) (restarts{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"})",
+          "expr": "sum(rate(membership_changed_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m]))",
+          "hide": false,
           "interval": "",
-          "legendFormat": "{{ temporal_service_type }}",
+          "legendFormat": "membership_changed",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(sharditem_created_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "shard_item_created",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(sharditem_removed_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "shard_item_removed",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(shard_closed_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "shard_closed",
+          "refId": "D"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
-      "title": "Restarts",
+      "title": "Shard Rebalancing",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -961,9 +539,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -994,7 +570,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -1002,106 +577,13 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 6,
-        "y": 28
-      },
-      "hiddenSeries": false,
-      "id": 55,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true,
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pluginVersion": "8.3.4",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "num_goroutines{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}",
-          "interval": "",
-          "legendFormat": "{{type}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Goroutines",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${prometheusds}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
+        "h": 10,
         "w": 6,
         "x": 12,
-        "y": 28
+        "y": 21
       },
       "hiddenSeries": false,
-      "id": 56,
+      "id": 8,
       "legend": {
         "avg": false,
         "current": false,
@@ -1115,11 +597,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1129,17 +610,27 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "memory_allocated{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}",
+          "expr": "sum(rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"AddActivityTask\"}[2m]))",
           "interval": "",
-          "legendFormat": "{{type}}",
+          "legendFormat": "Scheduled",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"RecordActivityTaskStarted\"}[2m]))",
+          "interval": "",
+          "legendFormat": "Started",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=~\"RespondActivityTaskCompleted|RespondActivityTaskFailed|RespondActivityTaskCanceled\"}[2m]))",
+          "interval": "",
+          "legendFormat": "Completed",
+          "refId": "C"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
-      "title": "Memory Allocated",
+      "title": "Activities",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1147,15 +638,13 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
-          "format": "bytes",
+          "format": "short",
           "logBase": 1,
           "show": true
         },
@@ -1180,7 +669,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -1188,10 +676,10 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
+        "h": 10,
         "w": 6,
         "x": 18,
-        "y": 28
+        "y": 21
       },
       "hiddenSeries": false,
       "id": 58,
@@ -1208,11 +696,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1222,16 +709,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "memory_heap{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}",
+          "expr": "memory_heap{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "interval": "",
           "legendFormat": "{{type}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Memory Heap",
       "tooltip": {
         "shared": true,
@@ -1240,9 +725,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1273,7 +756,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -1281,13 +763,13 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 9,
+        "h": 10,
         "w": 6,
         "x": 0,
-        "y": 36
+        "y": 31
       },
       "hiddenSeries": false,
-      "id": 57,
+      "id": 4,
       "legend": {
         "avg": false,
         "current": false,
@@ -1301,11 +783,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1315,17 +796,15 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "memory_stack{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}",
+          "expr": "sum by(operation) (rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=~\"StartWorkflowExecution|SignalWorkflowExecution|SignalWithStartWorkflowExecution\"}[2m]))",
           "interval": "",
-          "legendFormat": "{{type}}",
+          "legendFormat": "",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
-      "title": "Memory Stack",
+      "title": "External Events",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1333,9 +812,211 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 10,
+        "w": 6,
+        "x": 6,
+        "y": 31
+      },
+      "hiddenSeries": false,
+      "id": 7,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.5.3",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"AddWorkflowTask\"}[2m]))",
+          "interval": "",
+          "legendFormat": "Scheduled",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"RecordWorkflowTaskStarted\"}[2m]))",
+          "interval": "",
+          "legendFormat": "Started",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"RespondWorkflowTaskCompleted\"}[2m]))",
+          "interval": "",
+          "legendFormat": "Completed",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"RespondWorkflowTaskFailed\"}[2m]))",
+          "interval": "",
+          "legendFormat": "Failed",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(rate(schedule_to_start_timeout{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"TimerActiveTaskWorkflowTimeout\"}[2m]))",
+          "interval": "",
+          "legendFormat": "Sticky Task Queue Timeout",
+          "refId": "E"
+        },
+        {
+          "expr": "sum(rate(start_to_close_timeout{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"TimerActiveTaskWorkflowTimeout\"}[2m]))",
+          "interval": "",
+          "legendFormat": "Workflow Task Timeout",
+          "refId": "F"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Workflow Tasks",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 10,
+        "w": 6,
+        "x": 12,
+        "y": 31
+      },
+      "hiddenSeries": false,
+      "id": 56,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.5.3",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "memory_allocated{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
+          "interval": "",
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Memory Allocated",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
         "show": true,
         "values": []
       },
@@ -1366,7 +1047,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -1374,197 +1054,10 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 9,
-        "w": 6,
-        "x": 6,
-        "y": 36
-      },
-      "hiddenSeries": false,
-      "id": 59,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true,
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pluginVersion": "8.3.4",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum by (type) (rate(memory_num_gc{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
-          "interval": "",
-          "legendFormat": "{{type}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "GC Counter",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${prometheusds}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 9,
-        "w": 6,
-        "x": 12,
-        "y": 36
-      },
-      "hiddenSeries": false,
-      "id": 61,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true,
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pluginVersion": "8.3.4",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(memory_gc_pause_ms_bucket{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m])) by (type, le))",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "{{ type }}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "GC Pause",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "dtdurations",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${prometheusds}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 9,
+        "h": 10,
         "w": 6,
         "x": 18,
-        "y": 36
+        "y": 31
       },
       "hiddenSeries": false,
       "id": 66,
@@ -1581,11 +1074,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1596,7 +1088,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(rate(state_transition_count_count{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[1m]))",
+          "expr": "sum(rate(state_transition_count_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[1m]))",
           "hide": false,
           "interval": "",
           "legendFormat": "state transition",
@@ -1604,21 +1096,21 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(rate(sharditem_created_count{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[1m]))",
+          "expr": "sum(rate(sharditem_created_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[1m]))",
           "hide": false,
           "interval": "",
           "legendFormat": "shard_item_created",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(sharditem_removed_count{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
+          "expr": "sum(rate(sharditem_removed_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m]))",
           "hide": false,
           "interval": "",
           "legendFormat": "shard_item_removed",
           "refId": "C"
         },
         {
-          "expr": "sum(rate(shard_closed_count{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[2m]))",
+          "expr": "sum(rate(shard_closed_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[2m]))",
           "hide": false,
           "interval": "",
           "legendFormat": "shard_closed",
@@ -1626,9 +1118,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "State Transition",
       "tooltip": {
         "shared": true,
@@ -1637,9 +1127,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1660,13 +1148,456 @@
       }
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 0,
+        "y": 41
+      },
+      "hiddenSeries": false,
+      "id": 54,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.5.3",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum by(temporal_service_type) (restarts{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
+          "interval": "",
+          "legendFormat": "{{ temporal_service_type }}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Restarts",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 6,
+        "y": 41
+      },
+      "hiddenSeries": false,
+      "id": 55,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.5.3",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "num_goroutines{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
+          "interval": "",
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Goroutines",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 12,
+        "y": 41
+      },
+      "hiddenSeries": false,
+      "id": 61,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.5.3",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by(type, le) (rate(memory_gc_pause_ms_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{ type }}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "GC Pause",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "dtdurations",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 18,
+        "y": 41
+      },
+      "hiddenSeries": false,
+      "id": 57,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.5.3",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "memory_stack{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
+          "interval": "",
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Memory Stack",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "bytes",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 0,
+        "y": 50
+      },
+      "hiddenSeries": false,
+      "id": 59,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.5.3",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "editorMode": "code",
+          "expr": "sum by(type) (rate(memory_num_gc_sum{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
+          "interval": "",
+          "legendFormat": "{{type}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Garbage Collection Counter",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:213",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:214",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
       "collapsed": false,
-      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 45
+        "y": 59
       },
       "id": 48,
       "panels": [],
@@ -1684,7 +1615,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -1694,7 +1625,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 60
       },
       "hiddenSeries": false,
       "id": 45,
@@ -1711,9 +1642,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1723,40 +1655,38 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(workflow_success{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum(rate(workflow_success{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "success",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(workflow_failed{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum(rate(workflow_failed{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "failed",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(workflow_timeout{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum(rate(workflow_timeout{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "timedout",
           "refId": "C"
         },
         {
-          "expr": "sum(rate(workflow_terminate{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum(rate(workflow_terminate{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "terminate",
           "refId": "D"
         },
         {
-          "expr": "sum(rate(workflow_cancel{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum(rate(workflow_cancel{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "cancelled",
           "refId": "E"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Workflow Completion Overview (Per 5 Minutes)",
       "tooltip": {
         "shared": true,
@@ -1765,9 +1695,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1798,7 +1726,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -1808,7 +1736,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 70
       },
       "hiddenSeries": false,
       "id": 52,
@@ -1825,9 +1753,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1837,16 +1766,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (namespace) (rate(workflow_success{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(namespace) (rate(workflow_success{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "{{ temporal_namespace }}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Workflow Success By Namespace (Per 5 Minutes)",
       "tooltip": {
         "shared": true,
@@ -1855,9 +1782,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1888,7 +1813,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -1898,7 +1823,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 70
       },
       "hiddenSeries": false,
       "id": 46,
@@ -1915,9 +1840,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1927,16 +1853,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (namespace) (rate(workflow_failed{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(namespace) (rate(workflow_failed{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "{{ temporal_namespace }}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Workflow Failed By Namespace  (Per 5 Minutes)",
       "tooltip": {
         "shared": true,
@@ -1945,9 +1869,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1978,7 +1900,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -1988,7 +1910,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 78
       },
       "hiddenSeries": false,
       "id": 49,
@@ -2005,9 +1927,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2017,16 +1940,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (namespace) (rate(workflow_timeout{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(namespace) (rate(workflow_timeout{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "{{ temporal_namespace }}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Workflow Timedout By Namespace (Per 5 Minutes)",
       "tooltip": {
         "shared": true,
@@ -2035,9 +1956,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2068,7 +1987,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -2078,7 +1997,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 78
       },
       "hiddenSeries": false,
       "id": 50,
@@ -2095,9 +2014,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2107,16 +2027,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (namespace) (rate(workflow_terminate{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(namespace) (rate(workflow_terminate{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "{{ temporal_namespace }}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Workflow Terminate By Namespace (Per 5 Minutes)",
       "tooltip": {
         "shared": true,
@@ -2125,9 +2043,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2158,7 +2074,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -2168,7 +2084,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 72
+        "y": 86
       },
       "hiddenSeries": false,
       "id": 51,
@@ -2185,9 +2101,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2197,16 +2114,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (namespace) (rate(workflow_cancel{ operation=\"CompletionStats\", juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(namespace) (rate(workflow_cancel{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\",operation=\"CompletionStats\"}[5m]))",
           "interval": "",
           "legendFormat": "{{ temporal_namespace }}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Workflow Cancelled By Namespace (Per 5 Minutes)",
       "tooltip": {
         "shared": true,
@@ -2215,9 +2130,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2239,12 +2152,11 @@
     },
     {
       "collapsed": false,
-      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 80
+        "y": 94
       },
       "id": 23,
       "panels": [],
@@ -2262,7 +2174,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -2272,7 +2184,7 @@
         "h": 9,
         "w": 6,
         "x": 0,
-        "y": 81
+        "y": 95
       },
       "hiddenSeries": false,
       "id": 21,
@@ -2289,9 +2201,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2301,22 +2214,20 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(service_requests{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum(rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "requests",
           "refId": "A"
         },
         {
-          "expr": "sum (rate(service_errors{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum(rate(service_errors{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "errors",
           "refId": "B"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Service RequestsVs Errors ($Service)",
       "tooltip": {
         "shared": true,
@@ -2325,9 +2236,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2358,7 +2267,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -2368,7 +2277,7 @@
         "h": 9,
         "w": 6,
         "x": 6,
-        "y": 81
+        "y": 95
       },
       "hiddenSeries": false,
       "id": 25,
@@ -2385,9 +2294,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2397,16 +2307,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (operation) (rate(service_requests{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(operation) (rate(service_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Service Requests Per Operation ($Service)",
       "tooltip": {
         "shared": true,
@@ -2415,9 +2323,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2448,7 +2354,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -2458,7 +2364,7 @@
         "h": 9,
         "w": 6,
         "x": 12,
-        "y": 81
+        "y": 95
       },
       "hiddenSeries": false,
       "id": 27,
@@ -2475,9 +2381,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2487,21 +2394,21 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(service_errors_entity_not_found{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]) OR on() vector(0))",
+          "expr": "sum(rate(service_errors_entity_not_found{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]) or on() vector(0))",
           "hide": false,
           "interval": "",
           "legendFormat": "Entity Not Found",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(service_errors_execution_already_started{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]) OR on() vector(0))",
+          "expr": "sum(rate(service_errors_execution_already_started{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]) or on() vector(0))",
           "hide": false,
           "interval": "",
           "legendFormat": "Execution Already Started",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(service_errors_resource_exhausted{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]) OR on() vector(0))",
+          "expr": "sum(rate(service_errors_resource_exhausted{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]) or on() vector(0))",
           "hide": false,
           "interval": "",
           "legendFormat": "Resource Exhausted",
@@ -2509,9 +2416,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Service Errors Break Down ($Service)",
       "tooltip": {
         "shared": true,
@@ -2520,9 +2425,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2553,7 +2456,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -2563,7 +2466,7 @@
         "h": 9,
         "w": 6,
         "x": 18,
-        "y": 81
+        "y": 95
       },
       "hiddenSeries": false,
       "id": 43,
@@ -2580,9 +2483,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2592,16 +2496,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (operation) (rate(service_errors[5m]))",
+          "expr": "sum by(operation) (rate(service_errors{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Service Errors By Operation ($Service)",
       "tooltip": {
         "shared": true,
@@ -2610,9 +2512,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2643,7 +2543,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -2653,7 +2553,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 90
+        "y": 104
       },
       "hiddenSeries": false,
       "id": 29,
@@ -2670,9 +2570,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2682,16 +2583,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(service_latency_bucket{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m])) by (operation, le))",
+          "expr": "histogram_quantile(0.95, sum by(operation, le) (rate(service_latency_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Service Latency ($Service)",
       "tooltip": {
         "shared": true,
@@ -2700,9 +2599,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2724,12 +2621,11 @@
     },
     {
       "collapsed": false,
-      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 99
+        "y": 113
       },
       "id": 15,
       "panels": [],
@@ -2747,7 +2643,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -2758,7 +2653,7 @@
         "h": 10,
         "w": 8,
         "x": 0,
-        "y": 100
+        "y": 114
       },
       "hiddenSeries": false,
       "id": 13,
@@ -2775,11 +2670,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.0.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2789,22 +2683,20 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(persistence_requests{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]) OR on() vector(0))",
+          "expr": "sum(rate(persistence_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]) or on() vector(0))",
           "interval": "",
           "legendFormat": "requests",
           "refId": "A"
         },
         {
-          "expr": "sum (rate(persistence_errors{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]) OR on() vector(0))",
+          "expr": "sum(rate(persistence_errors{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]) or on() vector(0))",
           "interval": "",
           "legendFormat": "errors",
           "refId": "B"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Persistence Requests Vs Errors ($Service)",
       "tooltip": {
         "shared": true,
@@ -2813,9 +2705,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2846,7 +2736,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -2857,7 +2746,7 @@
         "h": 10,
         "w": 8,
         "x": 8,
-        "y": 100
+        "y": 114
       },
       "hiddenSeries": false,
       "id": 16,
@@ -2874,11 +2763,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.0.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2888,16 +2776,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": " sum by (operation) (rate(persistence_requests{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(operation) (rate(persistence_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Persistence Requests Per Operation ($Service)",
       "tooltip": {
         "shared": true,
@@ -2906,9 +2792,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2939,7 +2823,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -2950,7 +2833,7 @@
         "h": 10,
         "w": 8,
         "x": 16,
-        "y": 100
+        "y": 114
       },
       "hiddenSeries": false,
       "id": 17,
@@ -2967,11 +2850,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.0.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2981,16 +2863,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (operation) (rate(persistence_errors{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(operation) (rate(persistence_errors{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Persistence Errors By Operation ($Service)",
       "tooltip": {
         "shared": true,
@@ -2999,9 +2879,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3032,7 +2910,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -3043,7 +2920,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 110
+        "y": 124
       },
       "hiddenSeries": false,
       "id": 19,
@@ -3060,11 +2937,10 @@
       "linewidth": 1,
       "nullPointMode": "connected",
       "options": {
-        "alertThreshold": true,
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.0.4",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3074,17 +2950,21 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(persistence_latency_bucket{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[1m])) by (operation, le))",
+          "expr": "sum by(namespace) (rate(persistence_latency_sum{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])) / sum by(namespace) (rate(persistence_latency_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "{{operation}}",
+          "range": true,
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Persistence Latency ($Service)",
       "tooltip": {
         "shared": true,
@@ -3093,19 +2973,19 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
+          "$$hashKey": "object:266",
           "format": "dtdurations",
           "logBase": 1,
           "show": true
         },
         {
+          "$$hashKey": "object:267",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -3117,12 +2997,11 @@
     },
     {
       "collapsed": false,
-      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 120
+        "y": 134
       },
       "id": 33,
       "panels": [],
@@ -3140,7 +3019,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -3150,7 +3029,7 @@
         "h": 9,
         "w": 9,
         "x": 0,
-        "y": 121
+        "y": 135
       },
       "hiddenSeries": false,
       "id": 31,
@@ -3167,9 +3046,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3179,22 +3059,20 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(client_requests{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum(rate(client_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "requests",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(client_errors{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum(rate(client_errors{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "errors",
           "refId": "B"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Requests Vs Errors ($Service -> $Client)",
       "tooltip": {
         "shared": true,
@@ -3203,9 +3081,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3236,7 +3112,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -3246,7 +3122,7 @@
         "h": 9,
         "w": 7,
         "x": 9,
-        "y": 121
+        "y": 135
       },
       "hiddenSeries": false,
       "id": 35,
@@ -3263,9 +3139,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3275,16 +3152,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (operation) (rate(client_requests{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(operation) (rate(client_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Client Requests Per Operation ($Service -> $Client)",
       "tooltip": {
         "shared": true,
@@ -3293,9 +3168,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3326,7 +3199,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -3336,7 +3209,7 @@
         "h": 9,
         "w": 8,
         "x": 16,
-        "y": 121
+        "y": 135
       },
       "hiddenSeries": false,
       "id": 37,
@@ -3353,9 +3226,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3365,16 +3239,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (operation) (rate(client_errors{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m]))",
+          "expr": "sum by(operation) (rate(client_errors{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Errors By Operation ($Service -> $Client)",
       "tooltip": {
         "shared": true,
@@ -3383,9 +3255,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3416,7 +3286,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "links": []
         },
         "overrides": []
       },
@@ -3426,7 +3296,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 130
+        "y": 144
       },
       "hiddenSeries": false,
       "id": 39,
@@ -3443,9 +3313,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3455,16 +3326,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(client_latency_bucket{juju_application=\"$juju_application\",juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_unit=\"$juju_unit\"}[5m])) by (operation, le))",
+          "expr": "histogram_quantile(0.95, sum by(operation, le) (rate(client_latency_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Client Latency ($Service -> $Client)",
       "tooltip": {
         "shared": true,
@@ -3473,9 +3342,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3497,13 +3364,172 @@
     }
   ],
   "refresh": "10s",
-  "schemaVersion": 37,
+  "schemaVersion": 38,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
-        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Loki datasource",
+        "multi": true,
+        "name": "lokids",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Prometheus datasource",
+        "multi": true,
+        "name": "prometheusds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju unit",
+        "multi": true,
+        "name": "juju_unit",
+        "options": [],
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju application",
+        "multi": true,
+        "name": "juju_application",
+        "options": [],
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju model uuid",
+        "multi": true,
+        "name": "juju_model_uuid",
+        "options": [],
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up,juju_model)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju model",
+        "multi": true,
+        "name": "juju_model",
+        "options": [],
+        "query": {
+          "query": "label_values(up,juju_model)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
         "current": {
           "selected": true,
           "text": "All",
@@ -3511,7 +3537,6 @@
         },
         "hide": 0,
         "includeAll": true,
-        "label": null,
         "multi": false,
         "name": "Service",
         "options": [
@@ -3547,7 +3572,6 @@
         "type": "custom"
       },
       {
-        "allValue": null,
         "current": {
           "selected": true,
           "text": "All",
@@ -3555,7 +3579,6 @@
         },
         "hide": 0,
         "includeAll": true,
-        "label": null,
         "multi": false,
         "name": "Client",
         "options": [
