@@ -11,7 +11,7 @@ import logging
 import os
 import re
 
-from charms.data_platform_libs.v0.database_requires import DatabaseRequires
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
@@ -209,7 +209,7 @@ class TemporalK8SCharm(CharmBase):
             raise ValueError("database relation not ready")
 
         for rel_name, db_conn in self._state.database_connections.items():
-            if db_conn is None:
+            if db_conn == {}:
                 raise ValueError(f"{rel_name}:pgsql relation: no database connection available")
             database_connections[rel_name] = dict(db_conn)
         return database_connections
@@ -267,6 +267,11 @@ class TemporalK8SCharm(CharmBase):
         try:
             self._validate()
         except ValueError:
+            return
+
+        should_update = self.postgresql.update_db_relation_data_in_state()
+        if should_update:
+            self._update(event)
             return
 
         container = self.unit.get_container(self.name)
