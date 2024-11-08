@@ -80,6 +80,12 @@ class Postgresql(framework.Object):
         Returns:
             True if the charm should update its pebble layer, False otherwise.
         """
+        if not self.charm.unit.is_leader():
+            return False
+
+        if not self.charm._state.is_ready():
+            return False
+
         should_update = False
         for rel_name in ["db", "visibility"]:
             if self.charm.model.get_relation(rel_name) is None:
@@ -109,10 +115,7 @@ class Postgresql(framework.Object):
                 "tls": relation_data.get("tls") or self.charm.config["db-tls-enabled"],
             }
 
-            if None in (
-                db_conn["user"],
-                db_conn["password"]
-            ):
+            if None in (db_conn["user"], db_conn["password"]):
                 continue
 
             if self.charm._state.database_connections.get(rel_name, {}).get("host", "") != db_conn["host"]:
