@@ -93,7 +93,12 @@ class Postgresql(framework.Object):
                 relation_data = self.charm.visibility.fetch_relation_data()[relation_id]
 
             endpoints = relation_data.get("endpoints", "").split(",")
+            if len(endpoints) < 1:
+                continue
+
             primary_endpoint = endpoints[0].split(":")
+            if len(primary_endpoint) < 2:
+                continue
 
             db_conn = {
                 "dbname": DB_NAME if rel_name == "db" else VISIBILITY_DB_NAME,
@@ -103,6 +108,12 @@ class Postgresql(framework.Object):
                 "user": relation_data.get("username"),
                 "tls": relation_data.get("tls") or self.charm.config["db-tls-enabled"],
             }
+
+            if None in (
+                db_conn["user"],
+                db_conn["password"]
+            ):
+                continue
 
             if self.charm._state.database_connections.get(rel_name, {}).get("host", "") != db_conn["host"]:
                 should_update = True
