@@ -32,10 +32,13 @@ async def deploy(ops_test: OpsTest):
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, APP_NAME_ADMIN, APP_NAME_UI], status="blocked", raise_on_blocked=False, timeout=600
+            apps=[APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, "pgbouncer-k8s"],
+            status="blocked",
+            raise_on_blocked=False,
+            timeout=600,
         )
         await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s", "pgbouncer-k8s"], status="active", raise_on_blocked=False, timeout=600
+            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
         )
 
         await ops_test.model.integrate("pgbouncer-k8s", "postgresql-k8s")
