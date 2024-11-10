@@ -118,7 +118,11 @@ class Postgresql(framework.Object):
             if None in (db_conn["user"], db_conn["password"]):
                 continue
 
-            if self.charm._state.database_connections.get(rel_name, {}).get("host", "") != db_conn["host"]:
+            fields_to_check = ["host", "user", "password", "tls"]
+            if any(
+                self.charm._state.database_connections.get(rel_name, {}).get(field, "") != db_conn[field]
+                for field in fields_to_check
+            ):
                 should_update = True
 
             self._update_db_connections(rel_name, db_conn)

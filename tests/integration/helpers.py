@@ -121,13 +121,15 @@ async def simulate_charm_crash(ops_test: OpsTest):
     Args:
         ops_test: PyTest object.
     """
+    logger.info("simulating charm crash, removing temporal-k8s application")
     await ops_test.model.applications[APP_NAME].destroy()
     await ops_test.model.block_until(lambda: APP_NAME not in ops_test.model.applications)
 
+    logger.info("rebuilding temporal-k8s application")
     charm = await ops_test.build_charm(".")
     resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
 
-    # Deploy temporal server, temporal admin and postgresql charms.
+    logger.info("re-deploying temporal-k8s application")
     await ops_test.model.deploy(
         charm,
         resources=resources,
@@ -139,6 +141,7 @@ async def simulate_charm_crash(ops_test: OpsTest):
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", raise_on_blocked=False, timeout=600)
 
+        logger.info("performing temporal charm integrations")
         await perform_temporal_integrations(ops_test)
 
 
