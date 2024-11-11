@@ -101,6 +101,34 @@ class TestCharm(TestCase):
             BlockedStatus("database relation not ready"),
         )
 
+    def test_remove_db_relation(self):
+        """The db relation is removed successfully."""
+        harness = self.harness
+
+        # Simulate peer relation readiness.
+        harness.add_relation("peer", "temporal")
+
+        harness.update_config({"num-history-shards": 1})
+
+        # Simulate pebble readiness.
+        container = harness.model.unit.get_container("temporal")
+        harness.charm.on.temporal_pebble_ready.emit(container)
+
+        # Simulate db readiness.
+        db_relation_id = simulate_db_relation(harness, "db")
+
+        # No plans are set yet.
+        got_plan = harness.get_container_pebble_plan("temporal").to_dict()
+        self.assertEqual(got_plan, {})
+
+        harness.remove_relation(db_relation_id)
+
+        # The BlockStatus is set with a message.
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus("database relation not ready"),
+        )
+
     def test_blocked_by_visibility(self):
         """The charm is blocked without a visibility:pgsql relation with a ready master."""
         harness = self.harness
@@ -672,6 +700,9 @@ def simulate_db_relation(harness, rel_name):
     Args:
         harness: ops.testing.Harness object used to simulate charm lifecycle.
         rel_name: name of DB relation.
+
+    Returns:
+        DB relation ID.
     """
     db_relation_id = harness.add_relation(rel_name, "postgresql")
 
@@ -687,6 +718,8 @@ def simulate_db_relation(harness, rel_name):
         "postgresql",
         relation_data,
     )
+
+    return db_relation_id
 
 
 def simulate_auth_lifecycle(harness, include_auth_model=True):

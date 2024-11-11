@@ -52,7 +52,7 @@ class Postgresql(framework.Object):
 
         self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
         if self.charm._state.database_connections is None:
-            self.charm._state.database_connections = {"db": {}, "visibility": {}}
+            self.charm._state.database_connections = {"db": None, "visibility": None}
 
         self.update_db_relation_data_in_state()
         self.charm._update(event)
@@ -119,9 +119,9 @@ class Postgresql(framework.Object):
                 continue
 
             fields_to_check = ["host", "user", "password", "tls"]
+            database_connections = self.charm._state.database_connections or {}
             if any(
-                self.charm._state.database_connections.get(rel_name, {}).get(field, "") != db_conn[field]
-                for field in fields_to_check
+                (database_connections.get(rel_name) or {}).get(field, "") != db_conn[field] for field in fields_to_check
             ):
                 should_update = True
 
@@ -138,7 +138,7 @@ class Postgresql(framework.Object):
             db_conn: Database connection dict.
         """
         if self.charm._state.database_connections is None:
-            self.charm._state.database_connections = {}
+            self.charm._state.database_connections = {"db": None, "visibility": None}
 
         database_connections = self.charm._state.database_connections
         database_connections[rel_name] = db_conn

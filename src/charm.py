@@ -205,11 +205,14 @@ class TemporalK8SCharm(CharmBase):
         # and its values (of type ops.framework.StoredDict) are not serializable.
         database_connections = {}
 
-        if self._state.database_connections is None:
+        if self._state.database_connections is None or self._state.database_connections == {
+            "db": None,
+            "visibility": None,
+        }:
             raise ValueError("database relation not ready")
 
         for rel_name, db_conn in self._state.database_connections.items():
-            if db_conn == {}:
+            if db_conn is None:
                 raise ValueError(f"{rel_name}:pgsql relation: no database connection available")
             database_connections[rel_name] = dict(db_conn)
         return database_connections
