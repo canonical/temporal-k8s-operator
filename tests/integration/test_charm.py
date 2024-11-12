@@ -40,7 +40,7 @@ class TestDeployment:
 
     async def test_basic_client(self, ops_test: OpsTest):
         """Connects a client and runs a basic Temporal workflow."""
-        await run_sample_workflow(ops_test)
+        await run_sample_workflow(ops_test, count=1000)
 
     async def test_charm_crash(self, ops_test: OpsTest):
         """Test backup and restore functionality.
