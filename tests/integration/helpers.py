@@ -5,6 +5,7 @@
 """Temporal charm integration test helpers."""
 
 import logging
+import time
 from pathlib import Path
 
 import yaml
@@ -45,11 +46,12 @@ async def scale(ops_test: OpsTest, app, units):
     assert len(ops_test.model.applications[app].units) == units
 
 
-async def run_sample_workflow(ops_test: OpsTest):
+async def run_sample_workflow(ops_test: OpsTest, count=1):
     """Connects a client and runs a basic Temporal workflow.
 
     Args:
         ops_test: PyTest object.
+        count: Number of workflows to run.
     """
     url = await get_application_url(ops_test, application=APP_NAME, port=7233)
     logger.info("running workflow on app address: %s", url)
@@ -57,11 +59,17 @@ async def run_sample_workflow(ops_test: OpsTest):
     client = await Client.connect(url)
 
     # Run a worker for the workflow
+    start_time = time.time()
     async with Worker(client, task_queue="my-task-queue", workflows=[SayHello], activities=[say_hello]):
         name = "Jean-luc"
-        result = await client.execute_workflow(SayHello.run, name, id="my-workflow-id", task_queue="my-task-queue")
-        logger.info(f"result: {result}")
+        for i in range(count):
+            logger.info(f"running workflow #{i+1}")
+            result = await client.execute_workflow(SayHello.run, name, id="my-workflow-id", task_queue="my-task-queue")
+            logger.info(f"result: {result}")
         assert result == f"Hello, {name}!"
+
+    end_time = time.time()
+    logger.info(f"Finished executing {count} workflows in {end_time - start_time} seconds")
 
 
 async def create_default_namespace(ops_test: OpsTest):
