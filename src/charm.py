@@ -11,7 +11,7 @@ import logging
 import os
 import re
 
-from charms.data_platform_libs.v0.database_requires import DatabaseRequires
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
@@ -205,7 +205,10 @@ class TemporalK8SCharm(CharmBase):
         # and its values (of type ops.framework.StoredDict) are not serializable.
         database_connections = {}
 
-        if self._state.database_connections is None:
+        if self._state.database_connections is None or self._state.database_connections == {
+            "db": None,
+            "visibility": None,
+        }:
             raise ValueError("database relation not ready")
 
         for rel_name, db_conn in self._state.database_connections.items():
@@ -267,6 +270,11 @@ class TemporalK8SCharm(CharmBase):
         try:
             self._validate()
         except ValueError:
+            return
+
+        should_update = self.postgresql.update_db_relation_data_in_state(event)
+        if should_update:
+            self._update(event)
             return
 
         container = self.unit.get_container(self.name)

@@ -5,11 +5,10 @@
 
 import logging
 
-from charms.data_platform_libs.v0.database_requires import DatabaseEvent
 from ops import framework
 from ops.model import WaitingStatus
 
-from literals import DB_NAME, VISIBILITY_DB_NAME
+from literals import DB_NAME, DEFAULT_DB_DICT, VISIBILITY_DB_NAME
 from log import log_event_handler
 
 logger = logging.getLogger(__name__)
@@ -38,7 +37,7 @@ class Postgresql(framework.Object):
         charm.framework.observe(charm.on.visibility_relation_broken, self._on_database_relation_broken)
 
     @log_event_handler(logger)
-    def _on_database_changed(self, event: DatabaseEvent) -> None:
+    def _on_database_changed(self, event) -> None:
         """Handle database creation/change events.
 
         Args:
@@ -53,26 +52,13 @@ class Postgresql(framework.Object):
 
         self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
         if self.charm._state.database_connections is None:
-            self.charm._state.database_connections = {"db": None, "visibility": None}
-        host, port = event.endpoints.split(",", 1)[0].split(":")
-        rel_name = event.relation.name
+            self.charm._state.database_connections = DEFAULT_DB_DICT
 
-        db_conn = {
-            "dbname": DB_NAME if rel_name == "db" else VISIBILITY_DB_NAME,
-            "host": host,
-            "port": port,
-            "password": event.password,
-            "user": event.username,
-            "tls": self.charm.config["db-tls-enabled"],
-        }
-
-        self._update_db_connections(rel_name, db_conn)
-
-        self.charm.admin._provide_db_info()
+        self.update_db_relation_data_in_state(event)
         self.charm._update(event)
 
     @log_event_handler(logger)
-    def _on_database_relation_broken(self, event: DatabaseEvent) -> None:
+    def _on_database_relation_broken(self, event) -> None:
         """Handle broken relations with the database.
 
         Args:
@@ -88,6 +74,70 @@ class Postgresql(framework.Object):
         self._update_db_connections(event.relation.name, None)
         self.charm._update(event)
 
+    # flake8: noqa: C901
+    def update_db_relation_data_in_state(self, event) -> bool:
+        """Update database data from relation into peer relation databag.
+
+        Args:
+            event: The event triggering the DB update.
+
+        Returns:
+            True if the charm should update its pebble layer, False otherwise.
+        """
+        if not self.charm.unit.is_leader():
+            return False
+
+        if not self.charm._state.is_ready():
+            logger.info("charm peer state not ready, deferring db update event")
+            event.defer()
+            return False
+
+        should_update = False
+        for rel_name in ["db", "visibility"]:
+            if self.charm.model.get_relation(rel_name) is None:
+                continue
+
+            if rel_name == "db":
+                relation_id = self.charm.db.relations[0].id
+                relation_data = self.charm.db.fetch_relation_data()[relation_id]
+            elif rel_name == "visibility":
+                relation_id = self.charm.visibility.relations[0].id
+                relation_data = self.charm.visibility.fetch_relation_data()[relation_id]
+            else:
+                return False
+
+            endpoints = relation_data.get("endpoints", "").split(",")
+            if len(endpoints) < 1:
+                continue
+
+            primary_endpoint = endpoints[0].split(":")
+            if len(primary_endpoint) < 2:
+                continue
+
+            db_conn = {
+                "dbname": DB_NAME if rel_name == "db" else VISIBILITY_DB_NAME,
+                "host": primary_endpoint[0],
+                "port": primary_endpoint[1],
+                "password": relation_data.get("password"),
+                "user": relation_data.get("username"),
+                "tls": relation_data.get("tls") or self.charm.config["db-tls-enabled"],
+            }
+
+            if None in (db_conn["user"], db_conn["password"]):
+                continue
+
+            fields_to_check = ["host", "user", "password", "tls"]
+            database_connections = self.charm._state.database_connections or {}
+            if any(
+                (database_connections.get(rel_name) or {}).get(field, "") != db_conn[field] for field in fields_to_check
+            ):
+                should_update = True
+
+            self._update_db_connections(rel_name, db_conn)
+            self.charm.admin._provide_db_info()
+
+        return should_update
+
     def _update_db_connections(self, rel_name, db_conn):
         """Assign nested value in peer relation.
 
@@ -96,7 +146,7 @@ class Postgresql(framework.Object):
             db_conn: Database connection dict.
         """
         if self.charm._state.database_connections is None:
-            self.charm._state.database_connections = {}
+            self.charm._state.database_connections = DEFAULT_DB_DICT
 
         database_connections = self.charm._state.database_connections
         database_connections[rel_name] = db_conn
