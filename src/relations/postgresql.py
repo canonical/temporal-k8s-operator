@@ -8,7 +8,7 @@ import logging
 from ops import framework
 from ops.model import WaitingStatus
 
-from literals import DB_NAME, VISIBILITY_DB_NAME
+from literals import DB_NAME, DEFAULT_DB_DICT, VISIBILITY_DB_NAME
 from log import log_event_handler
 
 logger = logging.getLogger(__name__)
@@ -52,9 +52,9 @@ class Postgresql(framework.Object):
 
         self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
         if self.charm._state.database_connections is None:
-            self.charm._state.database_connections = {"db": None, "visibility": None}
+            self.charm._state.database_connections = DEFAULT_DB_DICT
 
-        self.update_db_relation_data_in_state()
+        self.update_db_relation_data_in_state(event)
         self.charm._update(event)
 
     @log_event_handler(logger)
@@ -74,8 +74,12 @@ class Postgresql(framework.Object):
         self._update_db_connections(event.relation.name, None)
         self.charm._update(event)
 
-    def update_db_relation_data_in_state(self) -> bool:
+    # flake8: noqa: C901
+    def update_db_relation_data_in_state(self, event) -> bool:
         """Update database data from relation into peer relation databag.
+
+        Args:
+            event: The event triggering the DB update.
 
         Returns:
             True if the charm should update its pebble layer, False otherwise.
@@ -84,6 +88,8 @@ class Postgresql(framework.Object):
             return False
 
         if not self.charm._state.is_ready():
+            logger.info("charm peer state not ready, deferring db update event")
+            event.defer()
             return False
 
         should_update = False
@@ -94,9 +100,11 @@ class Postgresql(framework.Object):
             if rel_name == "db":
                 relation_id = self.charm.db.relations[0].id
                 relation_data = self.charm.db.fetch_relation_data()[relation_id]
-            else:
+            elif rel_name == "visibility":
                 relation_id = self.charm.visibility.relations[0].id
                 relation_data = self.charm.visibility.fetch_relation_data()[relation_id]
+            else:
+                return False
 
             endpoints = relation_data.get("endpoints", "").split(",")
             if len(endpoints) < 1:
@@ -138,7 +146,7 @@ class Postgresql(framework.Object):
             db_conn: Database connection dict.
         """
         if self.charm._state.database_connections is None:
-            self.charm._state.database_connections = {"db": None, "visibility": None}
+            self.charm._state.database_connections = DEFAULT_DB_DICT
 
         database_connections = self.charm._state.database_connections
         database_connections[rel_name] = db_conn

@@ -272,7 +272,7 @@ class TemporalK8SCharm(CharmBase):
         except ValueError:
             return
 
-        should_update = self.postgresql.update_db_relation_data_in_state()
+        should_update = self.postgresql.update_db_relation_data_in_state(event)
         if should_update:
             self._update(event)
             return
