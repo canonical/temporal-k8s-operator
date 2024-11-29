@@ -1,6 +1,6 @@
 # Security
 
-Temporalio proivdes an array of features that enable an operator to secure their
+Temporalio provides an array of features that enable an operator to secure their
 deployment. This guide describes the implementation of security features such as
 client-side encryption, authentication and authorization.
 

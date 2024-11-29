@@ -52,7 +52,7 @@ manner for production purposes.
 | 2     | r-actions           | [Actions](https://charmhub.io/temporal-k8s/actions)                                                                                       |
 | 2     | r-configurations    | [Configurations](https://charmhub.io/temporal-k8s/configure)                                                                              |
 | 2     | r-integrations      | [Integrations](https://charmhub.io/temporal-k8s/integrations)                                                                             |
-| 2     | r-security          | [Security](TODO)                                                                                                                          |
+| 2     | r-security          | [Security](https://discourse.charmhub.io/t/charmed-temporal-k8s-reference-security/16052)                                                 |
 | 1     | e-architecture      | [Architecture](https://discourse.charmhub.io/t/charmed-temporal-k8s-explanations-architecture/11789)                                      |
 
 # Redirects
