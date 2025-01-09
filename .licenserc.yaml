@@ -2,6 +2,7 @@ header:
   license:
     spdx-id: Apache-2.0
     copyright-owner: Canonical Ltd.
+    copyright-year: 2024
     content: |
       Copyright [year] [owner]
       See LICENSE file for licensing details.
