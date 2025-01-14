@@ -114,7 +114,7 @@ class Postgresql(framework.Object):
             if len(primary_endpoint) < 2:
                 continue
 
-            logger.info(f"relation_data is {relation_data} and tls is {relation_data.get("tls")}")
+            logger.info(f"relation_data is {relation_data} and tls is {relation_data.get('tls')}")
 
             db_conn = {
                 "dbname": DB_NAME if rel_name == "db" else VISIBILITY_DB_NAME,
