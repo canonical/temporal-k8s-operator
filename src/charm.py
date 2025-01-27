@@ -514,6 +514,7 @@ class TemporalK8SCharm(CharmBase):
         dynamic_context = {
             "GLOBAL_RPS_LIMIT": self.config["global-rps-limit"],
             "NAMESPACE_RPS_LIMIT": self.config["namespace-rps-limit"],
+            "LONG_POLL_INTERVAL": self.config["long-poll-interval"],
         }
         dynamic_config = render("dynamic_config.jinja", dynamic_context)
         container.push("/etc/temporal/config/dynamicconfig/docker.yaml", dynamic_config, make_dirs=True)

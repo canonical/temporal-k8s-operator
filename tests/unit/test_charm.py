@@ -653,12 +653,16 @@ class TestCharm(TestCase):
         - value: 200
           constraints:
             namespace: "namespaceC"
+
+        matching.longPollExpirationInterval:
+          - value: 50s
         """
         ).strip()
 
         dynamic_context = {
             "GLOBAL_RPS_LIMIT": 500,
             "NAMESPACE_RPS_LIMIT": "namespaceA:50|namespaceB:100|namespaceC:200",
+            "LONG_POLL_INTERVAL": "50s",
         }
 
         dynamic_config = render("dynamic_config.jinja", dynamic_context).strip()
