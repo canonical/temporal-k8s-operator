@@ -121,6 +121,6 @@ options:
     type: string
 
   db-tls-enabled:
-    description: Where TLS is enabled on the database.
+    description: (Deprecated as of postgresql-k8s revision 462) Whether or not TLS is enabled on the database.
     default: False
     type: boolean

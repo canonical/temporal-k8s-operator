@@ -120,7 +120,7 @@ class Postgresql(framework.Object):
                 "port": primary_endpoint[1],
                 "password": relation_data.get("password"),
                 "user": relation_data.get("username"),
-                "tls": relation_data.get("tls") or self.charm.config["db-tls-enabled"],
+                "tls": relation_data.get("tls") == "True" or self.charm.config["db-tls-enabled"],
             }
 
             if None in (db_conn["user"], db_conn["password"]):
