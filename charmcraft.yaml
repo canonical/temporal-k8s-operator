@@ -19,5 +19,5 @@ parts:
     charm-python-packages: [setuptools, pip]
     charm-binary-python-packages:
       - openfga-sdk==0.6.0
-      - cosl==0.0.6
+      - cosl==0.0.51
       - requests==2.31.0
