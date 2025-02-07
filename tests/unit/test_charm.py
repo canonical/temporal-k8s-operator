@@ -655,7 +655,7 @@ class TestCharm(TestCase):
             namespace: "namespaceC"
 
         matching.longPollExpirationInterval:
-          - value: 50s
+          - value: "50s"
         """
         ).strip()
 
