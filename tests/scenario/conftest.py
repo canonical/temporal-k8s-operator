@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2025 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import json
@@ -10,10 +9,13 @@ import pytest
 from charm import TemporalK8SCharm
 
 
-def pytest_configure(config):
+def pytest_configure(config):  # noqa: DCO020
     """Flags that can be configured to modify fixture behavior.
 
     Used to determine how _state in the peer relation app databag is populated.
+
+    Args:
+        config: the pytest config object
     """
     config.addinivalue_line("markers", "peer_relation_skipped")
     config.addinivalue_line("markers", "config_skipped")
@@ -26,7 +28,11 @@ def pytest_configure(config):
 
 
 def pytest_runtest_setup(item):
-    """Supports the ability to skip tests based on the leader parameter."""
+    """Supports the ability to skip tests based on the leader parameter.
+
+    Args:
+        item: the test invocation item
+    """
     skip_funcs = [mark.args[0] for mark in item.iter_markers(name="parametrize_skip_if")]
     if any(f(leader=item.callspec.params["state"]) for f in skip_funcs):
         pytest.skip()
