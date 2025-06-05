@@ -40,34 +40,49 @@ async def deploy(ops_test: OpsTest):
             charm,
             resources=resources,
             application_name=ALL_SERVICES[i],
-            config={"services": ALL_CONFIG[i], "num-history-shards": 1},
+            config={
+                "services": ALL_CONFIG[i],
+                "num-history-shards": 1,
+                "persistence-max-conns": 15,
+                "visibility-max-conns": 5,
+            },
         )
 
     await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
     await ops_test.model.deploy(APP_NAME_UI, channel="edge")
     await ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True)
+    await ops_test.model.deploy("pgbouncer-k8s", channel="1/stable", trust=True, config={"max_db_connections": 200})
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME_ADMIN, APP_NAME_UI] + ALL_SERVICES, status="blocked", raise_on_blocked=False, timeout=1200
+            apps=[APP_NAME_ADMIN, APP_NAME_UI, "pgbouncer-k8s"] + ALL_SERVICES,
+            status="blocked",
+            raise_on_blocked=False,
+            timeout=1200,
         )
         await ops_test.model.wait_for_idle(
             apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=1200
+        )
+
+        await ops_test.model.integrate("pgbouncer-k8s", "postgresql-k8s")
+
+        await ops_test.model.wait_for_idle(
+            apps=["postgresql-k8s", "pgbouncer-k8s"], status="active", raise_on_blocked=False, timeout=600
         )
 
         for service in ALL_SERVICES:
             assert ops_test.model.applications[service].units[0].workload_status == "blocked"
 
         # Must integrate temporal-k8s frontend service first
-        await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
-        await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
+        await ops_test.model.integrate(f"{APP_NAME}:db", "pgbouncer-k8s:database")
+        await ops_test.model.integrate(f"{APP_NAME}:visibility", "pgbouncer-k8s:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
         for service in ALL_SERVICES:
             if service != "temporal-k8s":
-                await ops_test.model.integrate(f"{service}:db", "postgresql-k8s:database")
-                await ops_test.model.integrate(f"{service}:visibility", "postgresql-k8s:database")
+                await ops_test.model.integrate(f"{service}:db", "pgbouncer-k8s:database")
+                await ops_test.model.integrate(f"{service}:visibility", "pgbouncer-k8s:database")
 
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
 
@@ -94,11 +109,11 @@ class TestScaling:
         for service in ALL_SERVICES:
             await scale(ops_test, app=service, units=2)
 
-        await run_sample_workflow(ops_test)
+        await run_sample_workflow(ops_test, count=1000)
 
     async def test_scaling_down(self, ops_test: OpsTest):
         """Scale Temporal charm down to 1 unit."""
         for service in ALL_SERVICES:
             await scale(ops_test, app=service, units=1)
 
-        await run_sample_workflow(ops_test)
+        await run_sample_workflow(ops_test, count=1000)
