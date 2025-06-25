@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - track/**
+
+jobs:
+  test-charm:
+    uses: ./.github/workflows/integration_tests.yaml
+
+  release-charm:
+    name: Release the charm
+    needs:
+      - ci-tests
+    uses: canonical/observability/.github/workflows/_charm-release.yaml@v1
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      release-channel: "latest/edge"
+      charm-path: "."
+      charmcraft-channel: "3.x/candidate"
