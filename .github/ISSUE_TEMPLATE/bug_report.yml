@@ -1,6 +1,6 @@
 name: Bug Report
 description: File a bug report
-labels: ["Type: Bug", "Status: Triage"]
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
@@ -46,7 +46,7 @@ body:
       description: >
         Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
         Fetch the logs using `juju debug-log --replay` and `kubectl logs ...`. Additional details available in the juju docs 
-        at https://juju.is/docs/olm/juju-logs
+        at https://documentation.ubuntu.com/juju/latest/howto/manage-logs/
       render: shell
     validations:
       required: true
