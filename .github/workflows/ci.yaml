@@ -13,7 +13,7 @@ jobs:
   release-charm:
     name: Release the charm
     needs:
-      - ci-tests
+      - test-charm
     uses: canonical/observability/.github/workflows/_charm-release.yaml@v1
     permissions:
       contents: write
