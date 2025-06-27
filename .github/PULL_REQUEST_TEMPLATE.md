@@ -1,30 +1,22 @@
 ## Description
+<!-- Summary of the changes in this PR -->
 
-The what and why - include a summary of the change, describe what it does, and include relevant motivation and context.
+<!-- Reference the issue this PR addresses (e.g., Closes #123) -->
 
-Fixes _JIRA/GitHub issue number_
+---
+## Testing instructions
+<!-- Steps to manually test the changes and the expected results, only if applicable -->
+<!-- Example:
+1. Build charm
+2. Configure X with abc value
+3. Integrate with Y charm
+-->
 
-## Engineering checklist
-_Check only items that apply_
+## Notes for Reviewers (optional)
+<!-- Any specific areas to focus on, known issues, or extra context -->
 
+---
+## Checklist (all that apply)
+- [ ] Unit tests added or updated
+- [ ] Integration tests added or updated
 - [ ] Documentation updated
-- [ ] Covered by unit tests
-- [ ] Covered by integration tests
-- [ ] Independent change*
-
- _* This is an independent change if it can be merged and released independently without any related service deployments._
-
-## Merging instructions
-
-The preferred way of merging:
-- [ ] Merge
-- [ ] Squash and Merge
-- [ ] Rebase and Merge
-
-## Test instructions
-
-_(optional)_ Describe any non-standard test instructions and configuration settings. Delete this section if not applicable.
-
-## Notes for code reviewers
-
-_(optional)_ Mention any relevant information for code reviewers. Delete this section if not applicable.
