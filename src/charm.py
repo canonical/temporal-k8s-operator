@@ -55,6 +55,7 @@ from relations.openfga import OpenFGA
 from relations.postgresql import Postgresql
 from relations.s3_archival import S3Integrator
 from relations.ui import UI
+from relations.host_info import HostInfo
 from state import State
 
 CERTIFICATE_NAME = "temporal-frontend.pem"
@@ -197,6 +198,9 @@ class TemporalK8SCharm(CharmBase):
             self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
             self._update,
         )
+
+        # Host Info
+        self._host_info = HostInfo(self, SERVICE_PORTS["frontend"]["grpc"])
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):
