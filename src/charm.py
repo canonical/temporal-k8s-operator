@@ -51,11 +51,11 @@ from log import log_event_handler
 
 # import relations
 from relations.admin import Admin
+from relations.host_info import HostInfo
 from relations.openfga import OpenFGA
 from relations.postgresql import Postgresql
 from relations.s3_archival import S3Integrator
 from relations.ui import UI
-from relations.host_info import HostInfo
 from state import State
 
 CERTIFICATE_NAME = "temporal-frontend.pem"
