@@ -18,6 +18,11 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.traefik_k8s.v2.ingress import (
+    IngressPerAppReadyEvent,
+    IngressPerAppRequirer,
+    IngressPerAppRevokedEvent,
+)
 from jinja2 import Environment, FileSystemLoader
 from ops import main, pebble
 from ops.charm import CharmBase
@@ -131,7 +136,7 @@ class TemporalK8SCharm(CharmBase):
         self.s3_client = S3Requirer(self, "s3-parameters")
         self.s3_relation = S3Integrator(self)
 
-        # Handle Ingress
+        # Handle Ingress (Nginx)
         self._require_nginx_route()
 
         # Prometheus
@@ -147,6 +152,23 @@ class TemporalK8SCharm(CharmBase):
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
+
+        # Handle Ingress (Traefik)
+        # Only handle ingress for the Frontend service
+        # It is assumed that one application per deployment will be set to Frontend
+        if self.model.get_relation("ingress"):
+            if "frontend" not in self.config["services"]:
+                self.unit.status = BlockedStatus("Not a frontend service, please remove ingress integration.")
+            else:
+                self.ingress = IngressPerAppRequirer(self, port=SERVICE_PORTS["frontend"]["grpc"], scheme=lambda: "h2c")
+                self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
+                self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+
+    def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
+        logger.info("This app's ingress URL: %s", event.url)
+
+    def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent):
+        logger.info("This app no longer has ingress")
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
