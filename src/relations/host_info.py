@@ -5,7 +5,7 @@
 
 import logging
 
-from ops import framework
+from ops import framework, RelationJoinedEvent, RelationChangedEvent
 from ops.charm import CharmBase
 
 from log import log_event_handler
@@ -23,8 +23,7 @@ class HostInfo(framework.Object):
         charm.framework.observe(charm.on.leader_elected, self._on_host_info_relation_changed)
 
     @log_event_handler(logger)
-    def _on_host_info_relation_changed(self, event):
+    def _on_host_info_relation_changed(self, event: RelationChangedEvent | RelationJoinedEvent):
         if self.charm.unit.is_leader():
-            for relation in self.charm.model.relations.get("host_info", ()):
-                host = self.charm.config["external-hostname"] or self.model.get_binding(relation).bind_address
-                relation.data[self.charm.app]["host"] = f"{host}:{self.port}"
+            host = self.charm.config["external-hostname"] or self.model.get_binding("host-info").network.bind_address
+            event.relation.data[self.charm.app]["host"] = f"{host}:{self.port}"
