@@ -62,7 +62,6 @@ CERTS_DIR_PATH = "/etc/temporal"
 FRONTEND_CERTIFICATE_COMMON_NAME = "frontend.temporal"
 FRONTEND_CERTIFICATES_RELATION_NAME = "frontend-certificates"
 PRIVATE_KEY_NAME = "temporal-frontend.key"
-SEND_CA_CERT_RELATION_NAME = "send-frontend-ca"
 FRONTEND_TLS_CONFIGURATION = {
     "TEMPORAL_TLS_REQUIRE_CLIENT_AUTH": "false",
     "TEMPORAL_TLS_FRONTEND_CERT": f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}",
@@ -201,26 +200,6 @@ class TemporalK8SCharm(CharmBase):
             self._on_frontend_certificates_relation_broken,
         )
 
-        # Frontend TLS certificate transfer
-        self.certificate_transfer = CertificateTransferProvides(
-            charm=self, relationship_name=SEND_CA_CERT_RELATION_NAME
-        )
-        self.framework.observe(
-            self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
-            self._on_send_frontend_ca_relation_joined,
-        )
-
-    # Frontend certificate transfer handler
-    def _on_send_frontend_ca_relation_joined(self, event: RelationJoinedEvent):
-        """Adds relevant certificates to the relation."""
-        with self.container.pull(f"{CERTS_DIR_PATH}/ca.pem") as ca_cert_file:
-            if ca_cert := ca_cert_file.read().strip():
-                for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
-                    self.certificate_transfer.add_certificates(
-                        certificates={ca_cert}, relation_id=relation.id
-                    )
-                    logger.info("Sent CA certificate to relation %s", relation.id)
-
     # Frontend TLS handler
     def _handle_frontend_tls(self, event: EventBase):
         # Block if the unit is not configured as a frontend service but has the relation
@@ -265,7 +244,7 @@ class TemporalK8SCharm(CharmBase):
 
         self._delete_certificate()
         self._delete_private_key()
-        self._update()
+        self._update(event)
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
