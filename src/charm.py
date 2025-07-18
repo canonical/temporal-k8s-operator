@@ -31,7 +31,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     TLSCertificatesRequiresV4,
 )
 from jinja2 import Environment, FileSystemLoader
-from ops import EventBase, RelationJoinedEvent,main, pebble
+from ops import EventBase, RelationJoinedEvent, main, pebble
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import CheckStatus
@@ -58,7 +58,7 @@ from relations.ui import UI
 from state import State
 
 CERTIFICATE_NAME = "temporal-frontend.pem"
-CERTS_DIR_PATH = "/etc/temporal/"
+CERTS_DIR_PATH = "/etc/temporal"
 FRONTEND_CERTIFICATE_COMMON_NAME = "frontend.temporal"
 FRONTEND_CERTIFICATES_RELATION_NAME = "frontend-certificates"
 PRIVATE_KEY_NAME = "temporal-frontend.key"
@@ -190,7 +190,9 @@ class TemporalK8SCharm(CharmBase):
             certificate_requests=[self._get_certificate_request_attributes()],
             mode=Mode.UNIT,
         )
-        self.framework.observe(self.certificates.on.certificate_available, self._handle_frontend_tls)
+        self.framework.observe(
+            self.certificates.on.certificate_available, self._handle_frontend_tls
+        )
         self.framework.observe(
             self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined, self._handle_frontend_tls
         )
@@ -260,6 +262,11 @@ class TemporalK8SCharm(CharmBase):
         if not self.container.can_connect():
             event.defer()
             return
+
+        # Remove the frontend TLS configuration from the config file
+        for config in FRONTEND_TLS_CONFIGURATION.keys():
+            self._extra_context.pop(config)
+
         self._delete_certificate()
         self._delete_private_key()
 
