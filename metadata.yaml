@@ -36,6 +36,9 @@ requires:
   db:
     interface: postgresql_client
     limit: 1
+  frontend-certificates:
+    interface: tls-certificates
+    limit: 1
   visibility:
     interface: postgresql_client
     limit: 1
@@ -62,7 +65,11 @@ provides:
   metrics-endpoint:
     interface: prometheus_scrape
   grafana-dashboard:
-    interface: grafana_dashboard  
+    interface: grafana_dashboard
+  send-frontend-ca:
+    interface: certificate_transfer
+    description: |
+      Send the frontend server CA certificate so clients can trust the CA by means of forming a relation.
 
 containers:
   temporal:

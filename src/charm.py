@@ -10,7 +10,11 @@ import functools
 import logging
 import os
 import re
+from typing import Optional
 
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
+    CertificateTransferProvides,
+)
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -18,8 +22,16 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    Certificate,
+    CertificateRequestAttributes,
+    Mode,
+    PrivateKey,
+    ProviderCertificate,
+    TLSCertificatesRequiresV4,
+)
 from jinja2 import Environment, FileSystemLoader
-from ops import main, pebble
+from ops import EventBase, RelationJoinedEvent,main, pebble
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import CheckStatus
@@ -45,6 +57,17 @@ from relations.s3_archival import S3Integrator
 from relations.ui import UI
 from state import State
 
+CERTIFICATE_NAME = "temporal-frontend.pem"
+CERTS_DIR_PATH = "/etc/temporal/"
+FRONTEND_CERTIFICATE_COMMON_NAME = "frontend.temporal"
+FRONTEND_CERTIFICATES_RELATION_NAME = "frontend-certificates"
+PRIVATE_KEY_NAME = "temporal-frontend.key"
+SEND_CA_CERT_RELATION_NAME = "send-frontend-ca"
+FRONTEND_TLS_CONFIGURATION = {
+    "TEMPORAL_TLS_REQUIRE_CLIENT_AUTH": "false",
+    "TEMPORAL_TLS_FRONTEND_CERT": f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}",
+    "TEMPORAL_TLS_FRONTEND_KEY": f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -60,7 +83,9 @@ def render(template_name, context):
     """
     charm_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     loader = FileSystemLoader(os.path.join(charm_dir, "templates"))
-    return Environment(loader=loader, autoescape=True).get_template(template_name).render(**context)
+    return (
+        Environment(loader=loader, autoescape=True).get_template(template_name).render(**context)
+    )
 
 
 def is_valid_time_duration(duration_str):
@@ -103,6 +128,8 @@ class TemporalK8SCharm(CharmBase):
         super().__init__(*args)
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal"
+        self.container = self.unit.get_container("temporal")
+        self._extra_context = {}
 
         # Handle basic charm lifecycle.
         self.framework.observe(self.on.install, self._on_install)
@@ -113,9 +140,14 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.update_status, self._on_update_status)
 
         # Handle postgresql relation.
-        self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME, extra_user_roles="admin")
+        self.db = DatabaseRequires(
+            self, relation_name="db", database_name=DB_NAME, extra_user_roles="admin"
+        )
         self.visibility = DatabaseRequires(
-            self, relation_name="visibility", database_name=VISIBILITY_DB_NAME, extra_user_roles="admin"
+            self,
+            relation_name="visibility",
+            database_name=VISIBILITY_DB_NAME,
+            extra_user_roles="admin",
         )
         self.postgresql = Postgresql(self)
 
@@ -146,7 +178,90 @@ class TemporalK8SCharm(CharmBase):
         self._log_forwarder = LogForwarder(self, relation_name="logging")
 
         # Grafana
-        self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
+        self._grafana_dashboards = GrafanaDashboardProvider(
+            self, relation_name="grafana-dashboard"
+        )
+
+        # Frontend TLS certificates
+        # Only frontend TLS will be configured
+        self.certificates = TLSCertificatesRequiresV4(
+            charm=self,
+            relationship_name=FRONTEND_CERTIFICATES_RELATION_NAME,
+            certificate_requests=[self._get_certificate_request_attributes()],
+            mode=Mode.UNIT,
+        )
+        self.framework.observe(self.certificates.on.certificate_available, self._handle_frontend_tls)
+        self.framework.observe(
+            self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined, self._handle_frontend_tls
+        )
+        self.framework.observe(
+            self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
+            self._on_frontend_certificates_relation_broken,
+        )
+
+        # Frontend TLS certificate transfer
+        self.certificate_transfer = CertificateTransferProvides(
+            charm=self, relationship_name=SEND_CA_CERT_RELATION_NAME
+        )
+        self.framework.observe(
+            self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
+            self._on_send_frontend_ca_relation_joined,
+        )
+
+    # Frontend certificate transfer handler
+    def _on_send_frontend_ca_relation_joined(self, event: RelationJoinedEvent):
+        """Adds relevant certificates to the relation."""
+        with self.container.pull(f"{CERTS_DIR_PATH}/ca.pem") as ca_cert_file:
+            if ca_cert := ca_cert_file.read().strip():
+                for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
+                    self.certificate_transfer.add_certificates(
+                        certificates={ca_cert}, relation_id=relation.id
+                    )
+                    logger.info("Sent CA certificate to relation %s", relation.id)
+
+    # Frontend TLS handler
+    def _handle_frontend_tls(self, event: EventBase):
+        # Block if the unit is not configured as a frontend service but has the relation
+        if "frontend" not in self.config["services"] and self.model.get_relation(
+            FRONTEND_CERTIFICATES_RELATION_NAME
+        ):
+            self.unit.status = BlockedStatus(
+                f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
+            )
+            return
+
+        # Pre-flight checks
+        if not self.container.can_connect():
+            return
+
+        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+            return
+
+        # Fetch the assigned certificate and key
+        provider_certificate, private_key = self.certificates.get_assigned_certificate(
+            certificate_request=self._get_certificate_request_attributes()
+        )
+
+        # Set unit to WaitingStatus if certificate or key is not yet available
+        if not provider_certificate or not private_key:
+            logger.info("The certificate is not available yet.")
+            self.unit.status = WaitingStatus("Waiting for certificates to be available")
+            return
+
+        # If either the certificate or key is outdated or missing, update both
+        if self._update_certificates_required(provider_certificate, private_key):
+            self._store_certificate(certificate=provider_certificate.certificate)
+            self._store_private_key(private_key=private_key)
+            self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
+            self._update(event)
+
+    def _on_frontend_certificates_relation_broken(self, _: EventBase):
+        """Handle the frontend-certificates relation broken."""
+        if not self.container.can_connect():
+            event.defer()
+            return
+        self._delete_certificate()
+        self._delete_private_key()
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
@@ -344,7 +459,10 @@ class TemporalK8SCharm(CharmBase):
 
         num_history_shards = self._state.num_history_shards
         if num_history_shards is None:
-            if self.config.get("num-history-shards", "") == "" or self.config.get("num-history-shards") <= 0:
+            if (
+                self.config.get("num-history-shards", "") == ""
+                or self.config.get("num-history-shards") <= 0
+            ):
                 raise ValueError(
                     "value of 'num-history-shards' config must be set to a positive power of 2 (e.g. 1, 2, 4)"
                 )
@@ -367,7 +485,9 @@ class TemporalK8SCharm(CharmBase):
             if self.config[f"{db_type}-max-idle-conns"] < 1:
                 raise ValueError(f"value of '{db_type}-max-idle-conns' must be >= 1")
             if not is_valid_time_duration(self.config[f"{db_type}-max-conn-time"]):
-                raise ValueError(f"value of '{db_type}-max-conn-time' must be a valid time duration e.g. 1h")
+                raise ValueError(
+                    f"value of '{db_type}-max-conn-time' must be a valid time duration e.g. 1h"
+                )
 
         # Validate admin relation.
         self.database_connections()
@@ -454,7 +574,9 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_PORT": visibility_conn["port"],
                 "VISIBILITY_USER": visibility_conn["user"],
                 "VISIBILITY_PSWD": visibility_conn["password"],
-                "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.bind_address),
+                "TEMPORAL_BROADCAST_ADDRESS": str(
+                    self.model.get_binding("peer").network.bind_address
+                ),
                 "NUM_HISTORY_SHARDS": self._state.num_history_shards,
                 "SQL_MAX_CONNS": self.config["persistence-max-conns"],
                 "SQL_MAX_IDLE_CONNS": self.config["persistence-max-idle-conns"],
@@ -508,6 +630,7 @@ class TemporalK8SCharm(CharmBase):
                 }
             )
 
+        context.update(self._extra_context)
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
 
@@ -517,7 +640,9 @@ class TemporalK8SCharm(CharmBase):
             "LONG_POLL_INTERVAL": self.config["long-poll-interval"],
         }
         dynamic_config = render("dynamic_config.jinja", dynamic_context)
-        container.push("/etc/temporal/config/dynamicconfig/docker.yaml", dynamic_config, make_dirs=True)
+        container.push(
+            "/etc/temporal/config/dynamicconfig/docker.yaml", dynamic_config, make_dirs=True
+        )
 
         logger.info("planning temporal execution")
         services = self.config["services"].split(",")
@@ -553,6 +678,127 @@ class TemporalK8SCharm(CharmBase):
         container.replan()
 
         self.unit.status = MaintenanceStatus("replanning application")
+
+    # Helpers for frontend TLS
+    def _relation_created(self, relation_name: str) -> bool:
+        return bool(self.model.relations.get(relation_name))
+
+    def _certificate_is_available(self) -> bool:
+        cert, key = self.certificates.get_assigned_certificate(
+            certificate_request=self._get_certificate_request_attributes()
+        )
+        return bool(cert and key)
+
+    def _get_certificate_request_attributes(self) -> CertificateRequestAttributes:
+        """Returns the attributes of the certificate this charm will request."""
+        return CertificateRequestAttributes(
+            common_name=FRONTEND_CERTIFICATE_COMMON_NAME,
+            sans_dns=frozenset([FRONTEND_CERTIFICATE_COMMON_NAME]),
+        )
+
+    def _check_and_update_certificate(self) -> bool:
+        """Check if the certificate or private key needs an update and perform the update.
+
+        This method retrieves the currently assigned certificate and private key associated with
+        the charm's TLS relation. It checks whether the certificate or private key has changed
+        or needs to be updated. If an update is necessary, the new certificate or private key is
+        stored.
+
+        Returns:
+            bool: True if either the certificate or the private key was updated, False otherwise.
+        """
+        provider_certificate, private_key = self.certificates.get_assigned_certificate(
+            certificate_request=self._get_certificate_request_attributes()
+        )
+        if not provider_certificate or not private_key:
+            logger.debug("Certificate or private key is not available")
+            return False
+        if certificate_update_required := self._is_certificate_update_required(
+            provider_certificate.certificate
+        ):
+            self._store_certificate(certificate=provider_certificate.certificate)
+        if private_key_update_required := self._is_private_key_update_required(private_key):
+            self._store_private_key(private_key=private_key)
+        return certificate_update_required or private_key_update_required
+
+    def _update_certificates_required(
+        self, provider_certificate: ProviderCertificate, private_key: PrivateKey
+    ) -> bool:
+        """Check if the certificate or private key needs an update.
+
+        This method retrieves the currently assigned certificate and private key associated with
+        the charm's TLS relation. It checks whether the certificate or private key has changed
+        or needs to be updated.
+
+        Args:
+            provider_certificate: the provider certificate given by the TLS provider.
+            private_key: the private key given by the TLS provider.
+
+        Returns:
+            bool: True if either the certificate or the private key need to be updated,
+                  False otherwise.
+        """
+        if not provider_certificate or not private_key:
+            logger.debug("Certificate or private key is not available")
+            return False
+
+        certificate_update_required = self._is_certificate_update_required(
+            provider_certificate.certificate
+        )
+        private_key_update_required = self._is_private_key_update_required(private_key)
+
+        return certificate_update_required or private_key_update_required
+
+    def _is_certificate_update_required(self, certificate: Certificate) -> bool:
+        return self._get_existing_certificate() != certificate
+
+    def _is_private_key_update_required(self, private_key: PrivateKey) -> bool:
+        return self._get_existing_private_key() != private_key
+
+    def _get_existing_certificate(self) -> Optional[Certificate]:
+        return self._get_stored_certificate() if self._certificate_is_stored() else None
+
+    def _get_existing_private_key(self) -> Optional[PrivateKey]:
+        return self._get_stored_private_key() if self._private_key_is_stored() else None
+
+    def _certificate_is_stored(self) -> bool:
+        return self.container.exists(path=f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}")
+
+    def _private_key_is_stored(self) -> bool:
+        return self.container.exists(path=f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}")
+
+    def _get_stored_certificate(self) -> Certificate:
+        cert_string = str(self.container.pull(path=f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}").read())
+        return Certificate.from_string(cert_string)
+
+    def _get_stored_private_key(self) -> PrivateKey:
+        key_string = str(self.container.pull(path=f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}").read())
+        return PrivateKey.from_string(key_string)
+
+    def _store_certificate(self, certificate: Certificate) -> None:
+        """Store certificate in workload."""
+        self.container.push(path=f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}", source=str(certificate))
+        logger.info("Pushed certificate pushed to workload")
+
+    def _store_private_key(self, private_key: PrivateKey) -> None:
+        """Store private key in workload."""
+        self.container.push(
+            path=f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}",
+            source=str(private_key),
+        )
+        logger.info("Pushed private key to workload")
+
+    def _delete_certificate(self):
+        """Delete certificate from workload container."""
+        if self._certificate_is_stored():
+            self.container.remove_path(path=f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}")
+            logger.info("Removed certificate from workload")
+
+    def _delete_private_key(self):
+        """Delete private key from workload container."""
+        if self._private_key_is_stored():
+            self.container.remove_path(path=f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}")
+            logger.info("Removed private key from workload")
 
 
 if __name__ == "__main__":
