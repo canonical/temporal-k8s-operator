@@ -263,12 +263,9 @@ class TemporalK8SCharm(CharmBase):
             event.defer()
             return
 
-        # Remove the frontend TLS configuration from the config file
-        for config in FRONTEND_TLS_CONFIGURATION.keys():
-            self._extra_context.pop(config)
-
         self._delete_certificate()
         self._delete_private_key()
+        self._update()
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
