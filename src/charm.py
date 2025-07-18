@@ -10,6 +10,7 @@ import functools
 import logging
 import os
 import re
+import socket
 from typing import Optional
 
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
@@ -188,6 +189,7 @@ class TemporalK8SCharm(CharmBase):
             relationship_name=FRONTEND_CERTIFICATES_RELATION_NAME,
             certificate_requests=[self._get_certificate_request_attributes()],
             mode=Mode.UNIT,
+            refresh_events=[self.on.upgrade_charm],
         )
         self.framework.observe(
             self.certificates.on.certificate_available, self._handle_frontend_tls
@@ -242,6 +244,8 @@ class TemporalK8SCharm(CharmBase):
             event.defer()
             return
 
+        # These operations delete the files on upgrade
+        # Certificates are updated on upgrade events, though
         self._delete_certificate()
         self._delete_private_key()
         self._update(event)
@@ -673,10 +677,29 @@ class TemporalK8SCharm(CharmBase):
         return bool(cert and key)
 
     def _get_certificate_request_attributes(self) -> CertificateRequestAttributes:
-        """Returns the attributes of the certificate this charm will request."""
+        """Return the attributes of the certificate this charm will request."""
+        # Generate SANS IP - use the unit ip in case any clients try to reach
+        # the frontend server using it
+        unit_hostname = socket.getfqdn()
+        sans_ip = frozenset(("127.0.0.1", "0.0.0.0", socket.gethostbyname(unit_hostname)))
+
+        # Generate SANS_DNS - set to the k8s service name. If integrated with traefik,
+        # use the URL it provides.
+        k8s_svc_dns = f"{self.app.name}.{self.model.name}.svc.cluster.local"
+        sans_dns_list = [k8s_svc_dns, unit_hostname]
+
+        # Uncomment after canonical/temporal-k8s-operator/pull/73 is merged
+        # Add the URL provided by traefik when the frontend is behind ingress
+        # if self.model.get_relation("ingress"):
+        #    url = self.ingress.url()
+        #    url[len("http://") :].rstrip("/")
+        #    sans_dns_list.append(url)
+        sans_dns = frozenset(sans_dns_list)
+
         return CertificateRequestAttributes(
             common_name=FRONTEND_CERTIFICATE_COMMON_NAME,
-            sans_dns=frozenset([FRONTEND_CERTIFICATE_COMMON_NAME]),
+            sans_ip=sans_ip,
+            sans_dns=sans_dns,
         )
 
     def _check_and_update_certificate(self) -> bool:
