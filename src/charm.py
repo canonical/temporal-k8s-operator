@@ -658,7 +658,7 @@ class TemporalK8SCharm(CharmBase):
         # Generate SANS IP - use the unit ip in case any clients try to reach
         # the frontend server using it
         unit_hostname = socket.getfqdn()
-        sans_ip = frozenset((socket.gethostbyname(unit_hostname)))
+        sans_ip = frozenset((socket.gethostbyname(unit_hostname),))
 
         # Generate SANS_DNS - set to the k8s service name. If integrated with traefik,
         # use the URL it provides.
