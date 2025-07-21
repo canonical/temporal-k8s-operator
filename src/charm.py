@@ -231,6 +231,7 @@ class TemporalK8SCharm(CharmBase):
 
         # These operations delete the files on upgrade
         # Certificates are updated on upgrade events, though
+        self.unit.status = MaintenanceStatus("Removing certificates")
         self._delete_certificate()
         self._delete_private_key()
         self._update(event)

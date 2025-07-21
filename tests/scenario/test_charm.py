@@ -34,7 +34,6 @@ def all_required_relations(
     nginx_route_relation,
     openfga_relation,
     s3_relation,
-    frontend_certificates_relation,
 ):
     return [
         peer_relation,
@@ -44,7 +43,6 @@ def all_required_relations(
         nginx_route_relation,
         openfga_relation,
         s3_relation,
-        frontend_certificates_relation,
     ]
 
 
@@ -217,13 +215,21 @@ def test_frontend_certificates_relation_broken(
     temporal_container_initialized,
     admin_relation,
     frontend_certificates_relation,
+    all_required_relations,
 ):
+    # Add frontend-certificates relation
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
     # Add initial relations
     new_state = context.run(context.on.pebble_ready(temporal_container), state)
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
 
+    # Break the relation
     new_state = context.run(context.on.relation_broken(frontend_certificates_relation), new_state)
+
+    # Check the pebble layer service does not contain any TLS variables
     assert (
         not FRONTEND_TLS_CONFIGURATION.items()
         <= new_state.get_container("temporal").plan.services["temporal"].environment.items()
@@ -238,7 +244,12 @@ def test_frontend_certificates_relation_blocked_on_not_frontend(
     temporal_container_initialized,
     admin_relation,
     frontend_certificates_relation,
+    all_required_relations,
 ):
+    # Add frontend-certificates relation
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
     # Add initial relations
     new_state = context.run(context.on.pebble_ready(temporal_container), state)
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
@@ -266,7 +277,12 @@ def test_frontend_certificates_relation(
     temporal_container_initialized,
     admin_relation,
     frontend_certificates_relation,
+    all_required_relations,
 ):
+    # Add frontend-certificates relation
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
     # Add initial relations
     new_state = context.run(context.on.pebble_ready(temporal_container), state)
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
