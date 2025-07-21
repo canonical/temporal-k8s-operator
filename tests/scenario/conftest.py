@@ -260,6 +260,11 @@ def visibility_relation(postgres_visibility_data):
 
 
 @pytest.fixture(scope="function")
+def traefik_ingress_relation():
+    return ops.testing.Relation("ingress")
+
+
+@pytest.fixture(scope="function")
 def nginx_route_relation():
     return ops.testing.Relation("nginx-route")
 
