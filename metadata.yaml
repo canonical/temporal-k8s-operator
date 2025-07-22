@@ -39,6 +39,8 @@ requires:
   frontend-certificates:
     interface: tls-certificates
     optional: true
+  ingress:
+    interface: ingress
     limit: 1
   visibility:
     interface: postgresql_client
