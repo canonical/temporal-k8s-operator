@@ -57,7 +57,6 @@ from state import State
 
 CERTIFICATE_NAME = "temporal-frontend.pem"
 CERTS_DIR_PATH = "/etc/temporal"
-FRONTEND_CERTIFICATE_COMMON_NAME = "frontend.temporal"
 FRONTEND_CERTIFICATES_RELATION_NAME = "frontend-certificates"
 PRIVATE_KEY_NAME = "temporal-frontend.key"
 FRONTEND_TLS_CONFIGURATION = {
@@ -125,6 +124,9 @@ class TemporalK8SCharm(CharmBase):
         self.name = "temporal"
         self.container = self.unit.get_container("temporal")
         self._extra_context = {}
+        self._dns_entries = [
+            dns.strip() for dns in self.config.get("frontend_csr_sans_dns", "").split(",") if dns.strip()
+        ]
 
         # Handle basic charm lifecycle.
         self.framework.observe(self.on.install, self._on_install)
@@ -180,7 +182,7 @@ class TemporalK8SCharm(CharmBase):
             relationship_name=FRONTEND_CERTIFICATES_RELATION_NAME,
             certificate_requests=[self._get_certificate_request_attributes()],
             mode=Mode.UNIT,
-            refresh_events=[self.on.upgrade_charm],
+            refresh_events=[self.on.upgrade_charm, self.on.config_changed],
         )
         self.framework.observe(self.certificates.on.certificate_available, self._handle_frontend_tls)
         self.framework.observe(self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined, self._handle_frontend_tls)
@@ -331,6 +333,13 @@ class TemporalK8SCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
+        # Validate the frontend_csr_sans_dns configuration before proceeding
+        invalid_dns = [dns for dns in self._dns_entries if not self._valid_dns(dns)]
+        if invalid_dns:
+            self.unit.status = BlockedStatus("Invalid frontend_csr_sans_dns, please correct the value(s).")
+            logger.info(f"Invalid frontend_csr_sans_dns: {invalid_dns}")
+            return
+
         self.unit.status = WaitingStatus("configuring temporal")
         self._update(event)
 
@@ -653,22 +662,37 @@ class TemporalK8SCharm(CharmBase):
         )
         return bool(cert and key)
 
+    def _valid_dns(self, dns: str) -> bool:
+        """Return True if the DNS is RFC compliant, False otherwise.
+
+        Args:
+          dns: a SANS DNS to validate.
+        """
+        # Immediately return False if the SANS DNS does not exist or is larger than 253 chars
+        import pdb; pdb.set_trace()
+        if not dns or len(dns) > 253:
+            return False
+
+        # Check the labels (each part of the domain between the dots)
+        for label in dns.rstrip(".").split("."):
+            if len(label) == 0 or len(label) > 63:
+                return False
+            if not re.fullmatch(r"[A-Za-z0-9-]{1,63}", label):
+                return False
+            if label.startswith("-") or label.endswith("-"):
+                return False
+
+        # If everything is alright, return True
+        return True
+
     def _get_certificate_request_attributes(self) -> CertificateRequestAttributes:
         """Return the attributes of the certificate this charm will request."""
-        # Generate SANS IP - use the unit ip in case any clients try to reach
-        # the frontend server using it
-        unit_hostname = socket.getfqdn()
-        sans_ip = frozenset((socket.gethostbyname(unit_hostname),))
-
-        # Generate SANS_DNS - set to the k8s service name. If integrated with traefik,
-        # use the URL it provides.
-        k8s_svc_dns = f"{self.app.name}.{self.model.name}.svc.cluster.local"
-        sans_dns = frozenset([k8s_svc_dns, unit_hostname])
+        # Generate SANS_DNS - set to the unit hostname if not set in configuration
+        sans_dns = self._dns_entries or [socket.getfqdn()]
 
         return CertificateRequestAttributes(
-            common_name=FRONTEND_CERTIFICATE_COMMON_NAME,
-            sans_ip=sans_ip,
-            sans_dns=sans_dns,
+            common_name=self.config["frontend_csr_common_name"],
+            sans_dns=frozenset(sans_dns),
         )
 
     def _check_and_update_certificate(self) -> bool:

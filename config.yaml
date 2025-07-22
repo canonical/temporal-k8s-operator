@@ -130,3 +130,19 @@ options:
         The long poll expiration interval in the matching service.
     default: 50s
     type: string
+
+  frontend_csr_common_name:
+    description: |
+      The common name that will be used by this charm in the CSR to a certificate provider.
+      This will appear in the certificate's subject common name.
+      If not set, this charm will use the unit hostname.
+    default: "frontend.temporal"
+    type: string
+
+  frontend_csr_sans_dns:
+    description: |
+      A list of comma separated values of the SANS DNS this charm will use in the CSR to a certificate provider. This value will appear in the certificate's SAN DNS field.
+      Please note that DNS names must be RFC compliant.
+      If not set, this charm will use the unit hostname.
+    default: ""
+    type: string
