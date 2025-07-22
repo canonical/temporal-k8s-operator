@@ -663,15 +663,7 @@ class TemporalK8SCharm(CharmBase):
         # Generate SANS_DNS - set to the k8s service name. If integrated with traefik,
         # use the URL it provides.
         k8s_svc_dns = f"{self.app.name}.{self.model.name}.svc.cluster.local"
-        sans_dns_list = [k8s_svc_dns, unit_hostname]
-
-        # Uncomment after canonical/temporal-k8s-operator/pull/73 is merged
-        # Add the URL provided by traefik when the frontend is behind ingress
-        # if self.model.get_relation("ingress"):
-        #    url = self.ingress.url()
-        #    url[len("http://") :].rstrip("/")
-        #    sans_dns_list.append(url)
-        sans_dns = frozenset(sans_dns_list)
+        sans_dns = frozenset([k8s_svc_dns, unit_hostname])
 
         return CertificateRequestAttributes(
             common_name=FRONTEND_CERTIFICATE_COMMON_NAME,
