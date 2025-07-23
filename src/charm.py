@@ -28,6 +28,11 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     ProviderCertificate,
     TLSCertificatesRequiresV4,
 )
+from charms.traefik_k8s.v2.ingress import (
+    IngressPerAppReadyEvent,
+    IngressPerAppRequirer,
+    IngressPerAppRevokedEvent,
+)
 from jinja2 import Environment, FileSystemLoader
 from ops import EventBase, main, pebble
 from ops.charm import CharmBase
@@ -158,7 +163,7 @@ class TemporalK8SCharm(CharmBase):
         self.s3_client = S3Requirer(self, "s3-parameters")
         self.s3_relation = S3Integrator(self)
 
-        # Handle Ingress
+        # Handle Ingress (Nginx)
         self._require_nginx_route()
 
         # Prometheus
@@ -190,6 +195,17 @@ class TemporalK8SCharm(CharmBase):
             self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
             self._on_frontend_certificates_relation_broken,
         )
+
+        # Handle Ingress (Traefik)
+        # Only handle ingress for the Frontend service
+        # It is assumed that one application per deployment will be set to Frontend
+        if self.model.get_relation("ingress"):
+            if "frontend" not in self.config["services"]:
+                self.unit.status = BlockedStatus("Not a frontend service, please remove ingress integration.")
+            else:
+                self.ingress = IngressPerAppRequirer(self, port=SERVICE_PORTS["frontend"]["grpc"], scheme=lambda: "h2c")
+                self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
+                self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
 
     # Frontend TLS handler
     def _handle_frontend_tls(self, event: EventBase):
@@ -236,7 +252,13 @@ class TemporalK8SCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Removing certificates")
         self._delete_certificate()
         self._delete_private_key()
-        self._update(event)
+        self._update(event)                
+
+    def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
+        logger.info("This app's ingress URL: %s", event.url)
+
+    def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent):
+        logger.info("This app no longer has ingress")
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
@@ -253,6 +275,11 @@ class TemporalK8SCharm(CharmBase):
 
     def _require_nginx_route(self):
         """Require nginx-route relation based on current configuration."""
+        if self.model.get_relation("ingress") and self.model.get_relation("nginx-route"):
+            self.unit.status = BlockedStatus(
+                "Only one ingress solution is allowed - remove the ingress or the nginx-route relation."
+            )
+            return
         require_nginx_route(
             charm=self,
             service_hostname=self.external_hostname,

@@ -447,7 +447,35 @@ def test_database_connections(
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-def test_ingress(context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation):
+def test_blocked_on_two_ingresses(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    traefik_ingress_relation,
+    all_required_relations,
+):
+
+    all_required_relations.append(traefik_ingress_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    # Add initial relations
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    # Add the traefik relation
+    new_state = context.run(context.on.relation_changed(traefik_ingress_relation), new_state)
+    assert new_state.unit_status == ops.BlockedStatus(
+        "Only one ingress solution is allowed - remove the ingress or the nginx-route relation."
+    )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_ingress_with_nginx(
+    context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
+):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
