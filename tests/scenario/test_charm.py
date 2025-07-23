@@ -264,10 +264,11 @@ def test_frontend_certificates_relation_blocked_on_not_frontend(
         state_out, containers=[temporal_container_initialized], relations=all_required_relations
     )
 
-    new_state = context.run(context.on.relation_joined(frontend_certificates_relation), state=new_state)
-    assert new_state.unit_status == ops.BlockedStatus(
-        f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
-    )
+    with context(context.on.relation_joined(frontend_certificates_relation), state=new_state) as manager:
+        manager.charm._handle_frontend_tls()
+        assert manager.charm.unit.status == ops.BlockedStatus(
+            f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
+        )
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -289,6 +290,7 @@ def test_frontend_certificates_relation(
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
 
+    # Mocks for certificates
     mocked_certificate = MagicMock()
     client_provider_certificate = MagicMock(ProviderCertificate)
     client_provider_certificate.certificate = mocked_certificate
@@ -297,17 +299,19 @@ def test_frontend_certificates_relation(
     with context(
         context.on.relation_changed(frontend_certificates_relation), state=new_state
     ) as manager, unittest.mock.patch(
-        "charm.TLSCertificatesRequiresV4.get_assigned_certificate",
-        return_value=(client_provider_certificate, requirer_private_key),
-    ), unittest.mock.patch(
         "charm.TemporalK8SCharm._update_certificates_required", return_value=True
     ), unittest.mock.patch(
         "charm.TemporalK8SCharm._store_certificate"
     ), unittest.mock.patch(
         "charm.TemporalK8SCharm._store_private_key"
     ):
+        # Required mocks
+        manager.charm.certificates.get_assigned_certificate = MagicMock(
+            return_value=(client_provider_certificate, requirer_private_key)
+        )
         certificate_available_event = MagicMock(spec=CertificateAvailableEvent)
-        manager.charm._handle_frontend_tls(certificate_available_event)
+
+        manager.charm._update(certificate_available_event)
 
         assert FRONTEND_TLS_CONFIGURATION.items() <= manager.charm._extra_context.items()
         assert (

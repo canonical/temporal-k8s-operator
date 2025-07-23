@@ -237,7 +237,7 @@ class TemporalK8SCharm(CharmBase):
             self._store_certificate(certificate=provider_certificate.certificate)
             self._store_private_key(private_key=private_key)
 
-    def _remove_certificates(event: EventBase) -> None:
+    def _remove_certificates(self, event: EventBase) -> None:
         """Remove frontend certificates from the workload container.
 
         Args:
@@ -247,7 +247,6 @@ class TemporalK8SCharm(CharmBase):
             return
         self._delete_certificate()
         self._delete_private_key()
-
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("This app's ingress URL: %s", event.url)
@@ -627,7 +626,12 @@ class TemporalK8SCharm(CharmBase):
                 }
             )
 
+        # Handle frontend TLS
+        self._handle_frontend_tls()
+        # If the relation is broken, remove certificates
+        self._remove_certificates(event)
         context.update(self._extra_context)
+
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
 
@@ -644,11 +648,6 @@ class TemporalK8SCharm(CharmBase):
         services_args = " ".join(f"--service={service}" for service in services)
         if ValidServiceTypes.FRONTEND.value in services:
             services_args += " --service=internal-frontend"
-
-        # Handle frontend TLS
-        self._handle_frontend_tls()
-        # If the relation is broken, remove certificates
-        self._remove_certificates(event)
 
         pebble_layer = {
             "summary": "temporal server layer",
