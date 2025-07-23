@@ -46,7 +46,7 @@ nginx            k8s.io/ingress-nginx        <none>       12d
 juju config temporal-server-ingress ingress-class nginx
 ```
 
-4. Configure the `backend-protocol` - Temporal (the server, speficially the `frontend`) is a gRPC server
+4. Configure the `backend-protocol` - Temporal (the server, specifically the `frontend`) is a gRPC server
 
 ```
 juju config temporal-server-ingress backend-protocol GRPC
@@ -95,7 +95,7 @@ nginx            k8s.io/ingress-nginx        <none>       12d
 juju config temporal-ui-ingress ingress-class nginx
 ```
 
-4. Configure the `backend-protocol` - Temporal (the server, speficially the `frontend`) is a gRPC server
+4. Configure the `backend-protocol` - Temporal (the server, specifically the `frontend`) is a gRPC server
 
 ```
 juju config temporal-ui-ingress backend-protocol HTTP
