@@ -150,3 +150,12 @@ options:
       This configuration option is only used when the charm is integrated with the frontend-certificates relation.
     default: ""
     type: string
+
+  bootstrap-db-extra-user-roles:
+    description: |
+        Enumeration of extra database roles that should be requested to the 
+        database. This cannot be changed after deployment.
+
+        This should be set to `charmed_admin` for postgresql version 16.
+    default: admin
+    type: string
