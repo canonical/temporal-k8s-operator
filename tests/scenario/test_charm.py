@@ -256,17 +256,18 @@ def test_frontend_certificates_relation_blocked_on_not_frontend(
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
 
     # Change the services configuration to just worker
+    new_state = context.run(context.on.relation_joined(frontend_certificates_relation), state=new_state)
     state_modified_config = dataclasses.replace(new_state, config={"services": "worker", "num-history-shards": 1})
     state_modified_config = dataclasses.replace(state_modified_config, containers=[temporal_container_initialized])
     state_out = context.run(context.on.config_changed(), state_modified_config)
-    new_state = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    new_state = dataclasses.replace(
+        state_out, containers=[temporal_container_initialized], relations=all_required_relations
+    )
 
-    with context(context.on.relation_changed(frontend_certificates_relation), state=new_state) as manager:
-        certificate_available_event = MagicMock(spec=CertificateAvailableEvent)
-        manager.charm._handle_frontend_tls(certificate_available_event)
-        assert manager.charm.unit.status == ops.BlockedStatus(
-            f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
-        )
+    new_state = context.run(context.on.relation_joined(frontend_certificates_relation), state=new_state)
+    assert new_state.unit_status == ops.BlockedStatus(
+        f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
+    )
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)

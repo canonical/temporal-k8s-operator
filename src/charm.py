@@ -125,7 +125,7 @@ class TemporalK8SCharm(CharmBase):
         self.container = self.unit.get_container("temporal")
         self._extra_context = {}
         self._dns_entries = [
-            dns.strip() for dns in self.config.get("frontend_csr_sans_dns", "").split(",") if dns.strip()
+            dns.strip() for dns in self.config.get("frontend-csr-sans-dns", "").split(",") if dns.strip()
         ]
 
         # Handle basic charm lifecycle.
@@ -333,11 +333,11 @@ class TemporalK8SCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
-        # Validate the frontend_csr_sans_dns configuration before proceeding
+        # Validate the frontend-csr-sans-dns configuration before proceeding
         invalid_dns = [dns for dns in self._dns_entries if not self._valid_dns(dns)]
         if invalid_dns:
-            self.unit.status = BlockedStatus("Invalid frontend_csr_sans_dns, please correct the value(s).")
-            logger.info(f"Invalid frontend_csr_sans_dns: {invalid_dns}")
+            self.unit.status = BlockedStatus("Invalid frontend-csr-sans-dns, please correct the value(s).")
+            logger.info(f"Invalid frontend-csr-sans-dns: {invalid_dns}")
             return
 
         self.unit.status = WaitingStatus("configuring temporal")
@@ -669,7 +669,6 @@ class TemporalK8SCharm(CharmBase):
           dns: a SANS DNS to validate.
         """
         # Immediately return False if the SANS DNS does not exist or is larger than 253 chars
-        import pdb; pdb.set_trace()
         if not dns or len(dns) > 253:
             return False
 
@@ -691,7 +690,7 @@ class TemporalK8SCharm(CharmBase):
         sans_dns = self._dns_entries or [socket.getfqdn()]
 
         return CertificateRequestAttributes(
-            common_name=self.config["frontend_csr_common_name"],
+            common_name=self.config["frontend-csr-common-name"],
             sans_dns=frozenset(sans_dns),
         )
 
