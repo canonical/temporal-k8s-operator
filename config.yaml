@@ -136,6 +136,7 @@ options:
       The common name that will be used by this charm in the CSR to a certificate provider.
       This will appear in the certificate's subject common name.
       If not set, this charm will use the unit hostname.
+      If set, services must contain frontend and be related to a TLS certificates provider.
     default: "frontend.temporal"
     type: string
 
@@ -144,5 +145,6 @@ options:
       A list of comma separated values of the SANS DNS this charm will use in the CSR to a certificate provider. This value will appear in the certificate's SAN DNS field.
       Please note that DNS names must be RFC compliant.
       If not set, this charm will use the unit hostname.
+      If set, services must contain frontend and be related to a TLS certificates provider.
     default: ""
     type: string
