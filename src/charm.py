@@ -713,11 +713,15 @@ class TemporalK8SCharm(CharmBase):
 
     def _get_certificate_request_attributes(self) -> CertificateRequestAttributes:
         """Return the attributes of the certificate this charm will request."""
+        # Generate common name - set to unit hostname if not set in configuration
+        unit_domain_name = socket.getfqdn()
+        common_name = self.config["frontend-csr-common-name"] or unit_domain_name
+
         # Generate SANS_DNS - set to the unit hostname if not set in configuration
-        sans_dns = self._dns_entries or [socket.getfqdn()]
+        sans_dns = self._dns_entries or [unit_domain_name]
 
         return CertificateRequestAttributes(
-            common_name=self.config["frontend-csr-common-name"],
+            common_name=common_name,
             sans_dns=frozenset(sans_dns),
         )
 
