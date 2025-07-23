@@ -130,7 +130,7 @@ class TemporalK8SCharm(CharmBase):
         self.container = self.unit.get_container("temporal")
         self._extra_context = {}
         self._dns_entries = [
-            dns.strip() for dns in self.config.get("frontend-csr-sans-dns", "").split(",") if dns.strip()
+            dns.strip() for dns in self.config.get("frontend-cert-sans-dns", "").split(",") if dns.strip()
         ]
 
         # Handle basic charm lifecycle.
@@ -360,11 +360,11 @@ class TemporalK8SCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
-        # Validate the frontend-csr-sans-dns configuration before proceeding
+        # Validate the frontend-cert-sans-dns configuration before proceeding
         invalid_dns = [dns for dns in self._dns_entries if not self._valid_dns(dns)]
         if invalid_dns:
-            self.unit.status = BlockedStatus("Invalid frontend-csr-sans-dns, please correct the value(s).")
-            logger.info(f"Invalid frontend-csr-sans-dns: {invalid_dns}")
+            self.unit.status = BlockedStatus("Invalid frontend-cert-sans-dns, please correct the value(s).")
+            logger.info(f"Invalid frontend-cert-sans-dns: {invalid_dns}")
             return
 
         self.unit.status = WaitingStatus("configuring temporal")
@@ -715,7 +715,7 @@ class TemporalK8SCharm(CharmBase):
         """Return the attributes of the certificate this charm will request."""
         # Generate common name - set to unit hostname if not set in configuration
         unit_domain_name = socket.getfqdn()
-        common_name = self.config["frontend-csr-common-name"] or unit_domain_name
+        common_name = self.config["frontend-cert-common-name"] or unit_domain_name
 
         # Generate SANS_DNS - set to the unit hostname if not set in configuration
         sans_dns = self._dns_entries or [unit_domain_name]

@@ -131,7 +131,7 @@ options:
     default: 50s
     type: string
 
-  frontend-csr-common-name:
+  frontend-cert-common-name:
     description: |
       The common name that will be used by this charm in the CSR to a certificate provider.
       This will appear in the certificate's subject common name.
@@ -141,7 +141,7 @@ options:
     default: ""
     type: string
 
-  frontend-csr-sans-dns:
+  frontend-cert-sans-dns:
     description: |
       A list of comma separated values of the SANS DNS this charm will use in the CSR to a certificate provider. This value will appear in the certificate's SAN DNS field.
       Please note that DNS names must be RFC compliant.
