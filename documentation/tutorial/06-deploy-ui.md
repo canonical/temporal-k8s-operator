@@ -82,5 +82,5 @@ Workflows Found" as seen below.
 
 ![Temporal Web UI](../media/temporal-web-ui.png)
 
-> **See next:
-> [Deploy Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783)**
+-> **See next:
+-> [Deploy Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)**
