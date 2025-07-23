@@ -35,7 +35,7 @@ from charms.traefik_k8s.v2.ingress import (
 )
 from jinja2 import Environment, FileSystemLoader
 from ops import EventBase, main, pebble
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationBrokenEvent
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import CheckStatus
 
@@ -189,11 +189,11 @@ class TemporalK8SCharm(CharmBase):
             mode=Mode.UNIT,
             refresh_events=[self.on.upgrade_charm, self.on.config_changed],
         )
-        self.framework.observe(self.certificates.on.certificate_available, self._handle_frontend_tls)
-        self.framework.observe(self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined, self._handle_frontend_tls)
+        self.framework.observe(self.certificates.on.certificate_available, self._update)
+        self.framework.observe(self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined, self._update)
         self.framework.observe(
             self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
-            self._on_frontend_certificates_relation_broken,
+            self._update,
         )
 
         # Handle Ingress (Traefik)
@@ -208,7 +208,7 @@ class TemporalK8SCharm(CharmBase):
                 self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
 
     # Frontend TLS handler
-    def _handle_frontend_tls(self, event: EventBase):
+    def _handle_frontend_tls(self):
         # Block if the unit is not configured as a frontend service but has the relation
         if "frontend" not in self.config["services"] and self.model.get_relation(FRONTEND_CERTIFICATES_RELATION_NAME):
             self.unit.status = BlockedStatus(
@@ -217,9 +217,6 @@ class TemporalK8SCharm(CharmBase):
             return
 
         # Pre-flight checks
-        if not self.container.can_connect():
-            return
-
         if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
             return
 
@@ -239,20 +236,18 @@ class TemporalK8SCharm(CharmBase):
             self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
             self._store_certificate(certificate=provider_certificate.certificate)
             self._store_private_key(private_key=private_key)
-            self._update(event)
 
-    def _on_frontend_certificates_relation_broken(self, event: EventBase):
-        """Handle the frontend-certificates relation broken."""
-        if not self.container.can_connect():
-            event.defer()
+    def _remove_certificates(event: EventBase) -> None:
+        """Remove frontend certificates from the workload container.
+
+        Args:
+          event: an event to verify if it is RelationBroken before proceeding with the removal.
+        """
+        if not isinstance(event, RelationBrokenEvent) or not event.relation.name == FRONTEND_CERTIFICATES_RELATION_NAME:
             return
-
-        # These operations delete the files on upgrade
-        # Certificates are updated on upgrade events, though
-        self.unit.status = MaintenanceStatus("Removing certificates")
         self._delete_certificate()
         self._delete_private_key()
-        self._update(event)                
+
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("This app's ingress URL: %s", event.url)
@@ -649,6 +644,11 @@ class TemporalK8SCharm(CharmBase):
         services_args = " ".join(f"--service={service}" for service in services)
         if ValidServiceTypes.FRONTEND.value in services:
             services_args += " --service=internal-frontend"
+
+        # Handle frontend TLS
+        self._handle_frontend_tls()
+        # If the relation is broken, remove certificates
+        self._remove_certificates(event)
 
         pebble_layer = {
             "summary": "temporal server layer",
