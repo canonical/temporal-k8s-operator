@@ -33,7 +33,7 @@ juju integrate temporal-k8s:ui temporal-ui-k8s:ui
 ## Access the UI on a web browser
 
 Depending on the local configuration, the Temporal Web UI can be accessesed
-uisng:
+using:
 
 * The unit IP directly
 
