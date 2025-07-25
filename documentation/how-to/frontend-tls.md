@@ -1,4 +1,4 @@
-# Configure Frontend TLS
+# Configure frontend TLS
 
 This guide provides instructions for configuring frontend TLS in Charmed Temporal.
 
