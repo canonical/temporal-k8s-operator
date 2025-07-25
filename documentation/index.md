@@ -36,13 +36,13 @@ manner for production purposes.
 | 2     | t-deploy-db         | [4. Deploy PostgreSQL Database](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)           |
 | 2     | t-deploy-admin      | [5. Deploy Temporal Admin](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)                     |
 | 2     | t-deploy-ui         | [6. Deploy Temporal Web UI](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)                   |
-| 2     | t-deploy-ingress    | [7. Deploy Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783) |
-| 2     | t-deploy-worker     | [8. Deploy Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)                   |
-| 2     | t-run-workflow      | [9. Run Your First Workflow](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)                 |
-| 2     | t-cleanup           | [10. Cleanup and Extra Info](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)                  |
+| 2     | t-deploy-worker     | [7. Deploy Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)                   |
+| 2     | t-run-workflow      | [8. Run Your First Workflow](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)                 |
+| 2     | t-cleanup           | [9. Cleanup and Extra Info](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)                  |
 | 1     | how-to              | [How to](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-index/13740)                                                         |
 | 2     | h-authentication    | [Authentication](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authentication/12586)                                        |
 | 2     | h-authorization     | [Authorization](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authorization/12587)                                          |
+| 2     | h-deploy-ingress    | [Configure Ingress with Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783) |
 | 2     | h-observability     | [Observability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787)                                          |
 | 2     | h-scaling           | [Scaling](https://discourse.charmhub.io/t/10840)                                                                                          |
 | 2     | h-tctl              | [TCTL](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-tctl/11788)                                                            |
