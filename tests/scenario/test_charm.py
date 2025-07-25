@@ -5,19 +5,35 @@ import dataclasses
 import logging
 import textwrap
 import unittest.mock
+from unittest.mock import MagicMock
 
 import ops
 import ops.testing
 import pytest
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    CertificateAvailableEvent,
+    PrivateKey,
+    ProviderCertificate,
+)
 
-from charm import render
+from charm import (
+    FRONTEND_CERTIFICATES_RELATION_NAME,
+    FRONTEND_TLS_CONFIGURATION,
+    render,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
 def all_required_relations(
-    peer_relation, admin_relation, db_relation, visibility_relation, nginx_route_relation, openfga_relation, s3_relation
+    peer_relation,
+    admin_relation,
+    db_relation,
+    visibility_relation,
+    nginx_route_relation,
+    openfga_relation,
+    s3_relation,
 ):
     return [
         peer_relation,
@@ -189,6 +205,119 @@ def test_blocked_by_setting_new_num_history_shards(context, state):
     assert state_out.unit_status == ops.BlockedStatus(
         "value of 'num-history-shards' config cannot be changed after deployment. Value should be 1"
     )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_frontend_certificates_relation_broken(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # Add frontend-certificates relation
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    # Add initial relations
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    # Break the relation
+    new_state = context.run(context.on.relation_broken(frontend_certificates_relation), new_state)
+
+    # Check the pebble layer service does not contain any TLS variables
+    assert (
+        not FRONTEND_TLS_CONFIGURATION.items()
+        <= new_state.get_container("temporal").plan.services["temporal"].environment.items()
+    )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_frontend_certificates_relation_blocked_on_not_frontend(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # Add frontend-certificates relation
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    # Add initial relations
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    # Change the services configuration to just worker
+    new_state = context.run(context.on.relation_joined(frontend_certificates_relation), state=new_state)
+    state_modified_config = dataclasses.replace(new_state, config={"services": "worker", "num-history-shards": 1})
+    state_modified_config = dataclasses.replace(state_modified_config, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.config_changed(), state_modified_config)
+    new_state = dataclasses.replace(
+        state_out, containers=[temporal_container_initialized], relations=all_required_relations
+    )
+
+    with context(context.on.relation_joined(frontend_certificates_relation), state=new_state) as manager:
+        manager.charm._handle_frontend_tls()
+        assert manager.charm.unit.status == ops.BlockedStatus(
+            f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
+        )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_frontend_certificates_relation(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # Add frontend-certificates relation
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    # Add initial relations
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    # Mocks for certificates
+    mocked_certificate = MagicMock()
+    client_provider_certificate = MagicMock(ProviderCertificate)
+    client_provider_certificate.certificate = mocked_certificate
+    requirer_private_key = MagicMock(PrivateKey)
+
+    with context(
+        context.on.relation_changed(frontend_certificates_relation), state=new_state
+    ) as manager, unittest.mock.patch(
+        "charm.TemporalK8SCharm._update_certificates_required", return_value=True
+    ), unittest.mock.patch(
+        "charm.TemporalK8SCharm._store_certificate"
+    ), unittest.mock.patch(
+        "charm.TemporalK8SCharm._store_private_key"
+    ):
+        # Required mocks
+        manager.charm.certificates.get_assigned_certificate = MagicMock(
+            return_value=(client_provider_certificate, requirer_private_key)
+        )
+        certificate_available_event = MagicMock(spec=CertificateAvailableEvent)
+
+        manager.charm._update(certificate_available_event)
+
+        assert FRONTEND_TLS_CONFIGURATION.items() <= manager.charm._extra_context.items()
+        assert (
+            FRONTEND_TLS_CONFIGURATION.items()
+            <= manager.charm.container.get_plan().services["temporal"].environment.items()
+        )
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)

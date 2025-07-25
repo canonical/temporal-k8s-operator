@@ -183,6 +183,22 @@ def postgres_visibility_data():
 
 
 @pytest.fixture(scope="function")
+def tls_certificates_data():
+    return {
+        "certificates": json.dumps(
+            [
+                {
+                    "ca": "some-ca-cert",
+                    "certificate_signing_request": "some-csr",
+                    "certificate": "some-cert",
+                    "chain": ["some-chain", "some-other-val"],
+                }
+            ]
+        )
+    }
+
+
+@pytest.fixture(scope="function")
 def peer_relation(request, s3_config, openfga_store_id, openfga_secret):
     if request.node.get_closest_marker("peer_relation_skipped"):
         return ops.testing.Relation(endpoint="peer")
@@ -247,6 +263,11 @@ def peer_relation(request, s3_config, openfga_store_id, openfga_secret):
 @pytest.fixture(scope="function")
 def admin_relation():
     return ops.testing.Relation("admin", remote_app_data={"schema_status": "ready"})
+
+
+@pytest.fixture(scope="function")
+def frontend_certificates_relation():
+    return ops.testing.Relation("frontend-certificates")
 
 
 @pytest.fixture(scope="function")
