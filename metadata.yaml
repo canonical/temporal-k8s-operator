@@ -79,4 +79,4 @@ resources:
     type: oci-image
     description: OCI image for Temporal
     # Included for simplicity in integration tests.
-    upstream-source: ghcr.io/canonical/temporal-server:latest
+    upstream-source: ubuntu/temporal-server:1.23.1-24.04_edge@sha256:9cb05815c868bdf566b6a5a822d4d338709a96c3bd7b9ba0de0932773458266f

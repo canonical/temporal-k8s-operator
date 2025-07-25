@@ -152,7 +152,7 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
         "services": {
             "temporal": {
                 "summary": "temporal server",
-                "command": "temporal-server --env charm start "
+                "command": "temporal-server --env charm --config /etc/temporal/config start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                 "startup": "enabled",
                 "override": "replace",
@@ -183,7 +183,7 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
         },
         "checks": {
             "up": {
-                "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
                 "level": "alive",
                 "override": "replace",
                 "period": "300s",
@@ -342,7 +342,7 @@ def test_s3_archival_relation(
             "services": {
                 "temporal": {
                     "summary": "temporal server",
-                    "command": "temporal-server --env charm start "
+                    "command": "temporal-server --env charm --config /etc/temporal/config start "
                     "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                     "startup": "enabled",
                     "override": "replace",
@@ -379,7 +379,7 @@ def test_s3_archival_relation(
             },
             "checks": {
                 "up": {
-                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
                     "level": "alive",
                     "override": "replace",
                     "period": "300s",
@@ -599,7 +599,7 @@ def test_authorization_ready(
         "services": {
             "temporal": {
                 "summary": "temporal server",
-                "command": "temporal-server --env charm start "
+                "command": "temporal-server --env charm --config /etc/temporal/config start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                 "startup": "enabled",
                 "override": "replace",
@@ -640,7 +640,7 @@ def test_authorization_ready(
         },
         "checks": {
             "up": {
-                "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
                 "level": "alive",
                 "override": "replace",
                 "period": "300s",

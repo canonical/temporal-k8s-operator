@@ -654,7 +654,7 @@ class TemporalK8SCharm(CharmBase):
             "services": {
                 self.name: {
                     "summary": "temporal server",
-                    "command": "temporal-server --env charm start " + services_args,
+                    "command": "temporal-server --env charm --config /etc/temporal/config start " + services_args,
                     "startup": "enabled",
                     "override": "replace",
                     # Including config values here so that a change in the
@@ -669,7 +669,7 @@ class TemporalK8SCharm(CharmBase):
                     "level": "alive",
                     "period": "300s",
                     # curl cluster health of internal-frontend service
-                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
                 }
             },
         }
