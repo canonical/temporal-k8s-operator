@@ -15,7 +15,7 @@ Temporal workflows and activities.
 juju deploy temporal-ui-k8s
 ```
 
-2. Wait for the application to require the `ui:temporal` relation relation:
+2. Wait for the application to require the `ui:temporal` relation:
 
 ```
 Unit                Workload  Agent  Address     Ports  Message
