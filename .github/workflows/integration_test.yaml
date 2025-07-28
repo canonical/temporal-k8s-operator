@@ -10,7 +10,7 @@ on:
 
 jobs:
   integration-tests:
-    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
+    uses: dnplas/operator-workflows/.github/workflows/integration_test.yaml@dnplas-generic-integration-tests-733
     secrets: inherit
     with:
       channel: 1.28-strict/stable

@@ -62,6 +62,7 @@ from state import State
 
 CERTIFICATE_NAME = "temporal-frontend.pem"
 CERTS_DIR_PATH = "/etc/temporal"
+CHANGE_VAR="i-am-a-var"
 FRONTEND_CERTIFICATES_RELATION_NAME = "frontend-certificates"
 PRIVATE_KEY_NAME = "temporal-frontend.key"
 FRONTEND_TLS_CONFIGURATION = {
