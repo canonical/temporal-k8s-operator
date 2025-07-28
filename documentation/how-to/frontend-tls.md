@@ -1,16 +1,23 @@
 # Configure frontend TLS
 
-This guide provides instructions for configuring frontend TLS in Charmed Temporal.
+This guide provides instructions for configuring frontend Transport Layer Security (TLS) termination in Charmed Temporal.
 
 In the context of Temporal, frontend TLS refers to the use of TLS to secure network communication between Temporal clients (SDKs, CLI, or Web UI) and the Temporal Frontend Service. The Temporal Frontend Service acts as the API gateway for client requests to the Temporal Server.
 
 See [TLS configuration reference](https://docs.temporal.io/references/configuration#tls) for more details.
 
+There are two ways to handle TLS in your deployment:
+
+* Frontend TLS – TLS termination is managed directly by the Temporal frontend.
+
+* Ingress TLS Termination – TLS is terminated at the ingress level (e.g., with NGINX).
+
+If you need TLS termination at the ingress, see [Configure Ingress with Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783).
+
 [note]
 
-Frontend TLS is different from TLS termination at ingress. In the former case, TLS termination is handled by the Temporal frontend. If your setup requires TLS termination at ingress, see [Configure Ingress with Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783) guide.
+Important: While it's technically possible to enable end-to-end encryption by letting Temporal handle TLS termination and having the ingress forward unencrypted traffic, this setup is not supported yet. You’ll need to choose one approach: either handle TLS at the frontend or at the ingress, but not both.
 
-While it is technically possible to have end-to-end encryption with Temporal handling TLS termination and the ingress bypassing encrypted requests, this setup is not currently supported.
 [/note]
 
 ## Requirements
