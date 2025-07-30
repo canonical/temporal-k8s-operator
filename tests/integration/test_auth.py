@@ -39,7 +39,7 @@ class TestAuth:
         )
 
         # Deploy openfga and add required relations
-        await ops_test.model.deploy("openfga-k8s", channel="2.0/stable")
+        await ops_test.model.deploy("openfga-k8s", channel="latest/stable")
         await ops_test.model.integrate("openfga-k8s:database", "postgresql-k8s:database")
         await ops_test.model.wait_for_idle(
             apps=["openfga-k8s"],
