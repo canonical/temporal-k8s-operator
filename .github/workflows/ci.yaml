@@ -19,6 +19,6 @@ jobs:
       contents: write
     secrets: inherit
     with:
-      release-channel: "latest/edge"
+      release-channel: "1.23/edge"
       charm-path: "."
       charmcraft-channel: "3.x/candidate"
