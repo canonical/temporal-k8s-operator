@@ -22,3 +22,4 @@ jobs:
       release-channel: "latest/edge"
       charm-path: "."
       charmcraft-channel: "3.x/candidate"
+      runners: '["ubuntu-latest"]'
