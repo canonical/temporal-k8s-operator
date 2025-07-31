@@ -8,8 +8,8 @@ Now that we have a Temporal Server up and running with a Temporal Worker
 connected to it, we can trigger a workflow execution and observe its result in
 the Web UI.
 
-To do so, we can create the following simple client, which triggers the named
-workflow `GreetingWorkflow` defined in the worker.
+1. Create simple client to trigger the workflow as defined in the worker.
+For instance, if using the Python SDK, this would be:
 
 ```python
 from temporallib.client import Client, Options
@@ -17,50 +17,50 @@ import asyncio
 
 async def main():
     client_opt = Options(
-        host="10.1.232.64:7233", # Replace with your Temporal Server unit IP address
-        queue="test-queue",
-        namespace="default",
+        host="<temporal-host-name>:7233",
+        queue="<your-queue>",
+        namespace="<your-namespace>",
     )
 
     client = await Client.connect(client_opt=client_opt)
-    workflow_name = "GreetingWorkflow"
-    workflow_id = "hello-activity-workflow-id"
+    workflow_name = "<workflow-name>"
+    workflow_id = "<workflow-id>"
 
     greeting = await client.execute_workflow(
         workflow_name,
-        "World",
         id=workflow_id,
-        task_queue="test-queue",
+        task_queue="<your-queue>",
     )
-
-    logger.info(f"Greeting: {greeting}")
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Install the necessary packages and run the script above using:
+2. Install the necessary packages and run the script above using:
 
 ```bash
 pip install temporal-lib-py
 
 python workflow.py
-
-# Output:
-Greeting: Hello, World!
 ```
 
-Further details on the workflow execution can be viewed on the web UI.
+3. Further details on the workflow execution can be viewed on the web UI.
 
-Note: Workflow and activity payloads can be encrypted by setting the same key in
-the `encryption-key` config of the Temporal worker and the `client_opt` in the
-code above.
+[note]
 
-If using a TLS connection through ingress, you must provide the certificate
-generated in the ingress step of this tutorial as part of your
-[TLSConfig](https://python.temporal.io/temporalio.service.TLSConfig.html) when
-making requests to the Temporal server.
+Workflow and activity payloads can be encrypted by setting the same key in
+the `auth-secret-id` config of the Temporal worker and the Client configurations
+provided by the various Temporal SDKs.
+See [`auth-secret-id`](https://charmhub.io/temporal-worker-k8s/configurations#auth-secret-id) for details.
 
-> **See next:
-> [Cleanup your environment](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)**
+[/note]
+
+[note]
+
+If TLS termination on ingress is configured, the Certificate Authority (CA) certificate must be also
+provided to the Client. See [Temporal SDKs](https://docs.temporal.io/develop/) for configuration details.
+
+[/note]
+
+> **See next: [Cleanup your environment](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-cleanup-and-extra-info/11786)**
