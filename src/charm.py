@@ -401,7 +401,7 @@ class TemporalK8SCharm(CharmBase):
             self._update(event)
             return
 
-        check = container.get_check("up")
+        check = container.get_check("temporal-server-running")
         if check.status != CheckStatus.UP:
             self.unit.status = MaintenanceStatus("Status check: DOWN")
             return
@@ -422,7 +422,7 @@ class TemporalK8SCharm(CharmBase):
         """
         try:
             plan = container.get_plan().to_dict()
-            return bool(plan["services"][self.name]["on-check-failure"])
+            return bool(plan["services"]["temporal-server"]["on-check-failure"])
         except (KeyError, pebble.ConnectionError):
             return False
 
@@ -652,7 +652,7 @@ class TemporalK8SCharm(CharmBase):
         pebble_layer = {
             "summary": "temporal server layer",
             "services": {
-                self.name: {
+                "temporal-server": {
                     "summary": "temporal server",
                     "command": "temporal-server --env charm start " + services_args,
                     "startup": "enabled",
@@ -660,16 +660,18 @@ class TemporalK8SCharm(CharmBase):
                     # Including config values here so that a change in the
                     # config forces replanning to restart the service.
                     "environment": context,
-                    "on-check-failure": {"up": "ignore"},
+                    "on-check-failure": {"temporal-server-running": "ignore"},
+                    "user": "ubuntu",
+                    "working-dir": "/etc/temporal",
                 }
             },
             "checks": {
-                "up": {
+                "temporal-server-running": {
                     "override": "replace",
                     "level": "alive",
                     "period": "300s",
                     # curl cluster health of internal-frontend service
-                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
                 }
             },
         }
