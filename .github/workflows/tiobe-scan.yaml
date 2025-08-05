@@ -22,10 +22,14 @@ jobs:
       - name: Install dependencies
         run: |
           pip install tox
-          pip install pylint flake8
+          pip install pylint flake8 coverage
 
       - name: Run tox tests to create coverage.xml
         run: tox run -e unit
+
+      - name: Generate coverage.xml
+        run: |
+          coverage xml -o coverage.xml
 
       - name: Move results to necessary folder for TICS
         run: |
