@@ -1,0 +1,24 @@
+name: TICS run self-hosted test (github-action)
+
+on:
+  workflow_dispatch:  # allows manual trigger
+  schedule:
+    - cron: '0 4 * * 1'  # every Monday at 4 AM UTC
+
+jobs:
+  run-tics-analysis:
+    runs-on: [self-hosted, amd64, tiobe, noble]
+
+    steps:
+      - name: Checkout the project
+        uses: actions/checkout@v4
+
+      - name: Run TICS analysis with github-action
+        uses: tiobe/tics-github-action@v3
+        with:
+          mode: qserver
+          project: temporal-k8s-operator
+          branchdir: .
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
