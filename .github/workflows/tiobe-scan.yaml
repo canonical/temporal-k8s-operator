@@ -1,3 +1,4 @@
+#Force github to re-register workflow
 name: TICS run self-hosted test (github-action)
 
 on:
