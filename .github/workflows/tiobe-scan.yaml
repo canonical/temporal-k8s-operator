@@ -20,7 +20,7 @@ jobs:
         with:
           mode: qserver
           project: temporal-k8s-operator
-          branchname: track/1.23
+          branchname: main
           branchdir: .
           viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
           ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
