@@ -1,27 +1,14 @@
 #Force github to re-register workflow
-name: TICS run self-hosted test (github-action)
+name: Tiobe TiCS Analysis
 
 on:
-  workflow_dispatch:  # allows manual trigger
+  workflow_dispatch:  # Manual trigger
   pull_request:
   schedule:
-    - cron: '0 4 * * 1'  # every Monday at 4 AM UTC
+    - cron: '0 4 * * 1'  # Every Monday at 4 AM UTC
 
 jobs:
-  run-tics-analysis:
-    runs-on: [self-hosted, amd64, tiobe, noble]
-
-    steps:
-      - name: Checkout the project
-        uses: actions/checkout@v4
-
-      - name: Run TICS analysis with github-action
-        uses: tiobe/tics-github-action@v3
-        with:
-          mode: qserver
-          project: temporal-k8s-operator
-          branchname: main
-          branchdir: .
-          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
-          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
-          installTics: true
+  tics:
+    name: TiCS
+    uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@v1
+    secrets: inherit
