@@ -1,4 +1,3 @@
-#Force github to re-register workflow
 name: Tiobe TiCS Analysis
 
 on:
@@ -9,6 +8,35 @@ on:
 
 jobs:
   tics:
-    name: TiCS
-    uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@v1
-    secrets: inherit
+    name: TiCS Analysis
+    runs-on: [self-hosted, amd64, tiobe, noble]
+
+    steps:
+      - name: Checkout the project
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Install test dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install coverage
+
+      - name: Run unit tests and generate coverage report
+        run: |
+          mkdir -p .cover
+          coverage run -m unittest discover tests/
+          coverage xml -o .cover/cobertura.xml
+
+      - name: Run TICS analysis with github-action
+        uses: tiobe/tics-github-action@v3
+        with:
+          mode: qserver
+          project: temporal-k8s-operator
+          branchdir: .
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
