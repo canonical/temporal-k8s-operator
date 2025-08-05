@@ -9,7 +9,7 @@ on:
 jobs:
   tics:
     name: TiCS Analysis
-    runs-on: [self-hosted, amd64, tiobe, noble]
+    runs-on: [self-hosted, linus, amd64, tiobe, jammy]
 
     steps:
       - name: Checkout the project
