@@ -1,0 +1,48 @@
+name: TICS run self-hosted test (github-action)
+
+on:
+  workflow_dispatch: # Allows manual triggering
+  #pull_request:
+  schedule:
+    - cron: "0 2 * * 1" # Every Monday 2:00 AM UTC
+
+jobs:
+  build:
+    runs-on: [self-hosted, linux, amd64, tiobe, jammy]
+
+    steps:
+      - name: Checkout the project
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install dependencies
+        run: |
+          pip install tox
+          pip install pylint flake8 coverage
+
+      - name: Run tox tests to create coverage.xml
+        run: tox run -e unit
+
+      - name: Generate coverage.xml
+        run: |
+          coverage xml -o coverage.xml
+
+      - name: Move results to necessary folder for TICS
+        run: |
+          mkdir -p .cover
+          mv coverage.xml .cover/coverage.xml
+
+      - name: Run TICS analysis with github-action
+        uses: tiobe/tics-github-action@v3
+        with:
+          mode: qserver
+          project: temporal-k8s-operator
+          branchdir: .
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
+          filelist: .github/tics-filelist.txt
