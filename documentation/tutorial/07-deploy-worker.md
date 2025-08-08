@@ -8,37 +8,36 @@ The [Temporal worker](https://docs.temporal.io/workers) is the entity that
 listens and polls a specific task queue, and executes code in response to the
 task.
 
-## Explanation
-
-The Temporal worker charm allows users to upload and automatically run custom worker scripts (regardless of the SDK of choice).
+The Temporal worker charm allows users to upload and automatically run custom worker scripts, independent of the chosen SDK.
 This is achieved by creating a rock with all runtime dependencies, worker scripts, and workflows, that is used at deployment time.
 
-Because of this, deploying the worker goes in two parts:
+Because of this, deploying the worker involves two steps:
 
-1. Creating a custom worker rock
-2. Deploying the worker charm using the worker rock
+1. Creating a custom container image for the worker using [rocks](https://documentation.ubuntu.com/server/explanation/virtualisation/about-rock-images/).
+2. Deploying the worker charm using the custom container image.
 
 [note]
 
-In a production environment, a Temporal worker can be deployed in a separate
-environment from the Temporal server, for simplicity, this guide will assume
+In a production setting, a Temporal worker can be deployed in a separate
+environment from the Temporal server. For simplicity, this guide assumes
 the server and worker belong to the same network, and can be connected directly.
 
 It this is not the case, an ingress can be considered. See [Configure Ingress with Nginx Ingress Integrator](https://charmhub.io/temporal-k8s/docs/h-deploy-ingress) for more details.
 
 [/note]
 
-## Custom worker rock
-
 ### Requirements
 
-* [`rockcraft`](https://snapcraft.io/rockcraft) installed
-* A local OCI images registry to push images to or access to a public one
+* [`rockcraft`](https://snapcraft.io/rockcraft) installed.
+* A local OCI images registry to push images to or access to a public one.
 
+## Custom container image for the worker
 
-1. Create a `rockcraft` project, you can use the [`rockcraft.yaml`](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample_py) as template.
+You will need to build and publish a container image using rockcraft. The steps below guide you through creating a rock-based image that includes your worker script and associated workflows.
 
-2. Make sure the `command` of the rock runs the worker script directly. For example, if `command: "./app/scripts/start-worker.sh"`:
+1. Create a `rockcraft` project. You can use the [`rockcraft.yaml`](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample_py) as template.
+
+2. Ensure the `command` of the rock runs the worker script directly. For example, if `command: "./app/scripts/start-worker.sh"`:
 
 ```
 $ cat start-worker.sh
@@ -46,7 +45,7 @@ $ cat start-worker.sh
 python3 app/resource_sample/worker.py
 ```
 
-3. Make sure your activities and workflows are also included in the rock as the worker script needs access to them.
+3. Ensure your activities and workflows are also included in the rock as the worker script needs access to them.
 
 4. Build the rock with `rockcraft pack`.
 
@@ -54,7 +53,16 @@ python3 app/resource_sample/worker.py
 
 ## Deploy and configure Temporal worker
 
+Once the rock is ready and available, you will deploy the worker charm.
+
 1. (optional) Add a model where worker charms will be deployed:
+
+[note]
+
+Deploying the charm in a dedicated juju model allows a logic separation between the
+Charmed Temporal server components and the workers.
+
+[/note]
 
 ```
 juju add-model temporal-workers-model
