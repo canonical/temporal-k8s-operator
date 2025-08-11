@@ -10,7 +10,7 @@ on:
 
 jobs:
   integration-tests:
-    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@32e092f570377a8d139d8b94bf6643174f5546cf
+    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
       channel: 1.28-strict/stable
