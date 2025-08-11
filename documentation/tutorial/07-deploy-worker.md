@@ -14,7 +14,7 @@ This is achieved by creating a rock with all runtime dependencies, worker script
 Because of this, deploying the worker involves two steps:
 
 1. Creating a custom container image for the worker using [rocks](https://documentation.ubuntu.com/server/explanation/virtualisation/about-rock-images/).
-2. Deploying the worker charm using the custom container image.
+2. Deploying the worker charm using a custom container image.
 
 [note]
 
