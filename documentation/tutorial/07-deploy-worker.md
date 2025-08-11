@@ -33,7 +33,7 @@ It this is not the case, an ingress can be considered. See [Configure Ingress wi
 
 ## Custom container image for the worker
 
-You will need to build and publish a container image using rockcraft. The steps below guide you through creating a rock-based image that includes your worker script and associated workflows.
+To create a custom container image for the worker, you need to build and publish it using Rockcraft. The steps below guide you through creating a rock-based image that includes your worker script and associated workflows.
 
 1. Create a `rockcraft` project. You can use the [`rockcraft.yaml`](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample_py) as template.
 
@@ -55,12 +55,12 @@ python3 app/resource_sample/worker.py
 
 Once the rock is ready and available, you will deploy the worker charm.
 
-1. (optional) Add a model where worker charms will be deployed:
+1. Add a model where worker charms will be deployed:
 
 [note]
 
-Deploying the charm in a dedicated juju model allows a logic separation between the
-Charmed Temporal server components and the workers.
+Deploying the worker charms in a dedicated Juju model allows a logic separation
+between the Charmed Temporal server components and the workers.
 
 [/note]
 
