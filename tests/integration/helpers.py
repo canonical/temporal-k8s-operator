@@ -4,6 +4,7 @@
 
 """Temporal charm integration test helpers."""
 
+import datetime
 import logging
 import time
 from pathlib import Path
@@ -64,7 +65,13 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
         name = "Jean-luc"
         for i in range(count):
             logger.info(f"running workflow #{i+1}")
-            result = await client.execute_workflow(SayHello.run, name, id="my-workflow-id", task_queue="my-task-queue")
+            result = await client.execute_workflow(
+                SayHello.run,
+                name,
+                id="my-workflow-id",
+                task_queue="my-task-queue",
+                execution_timeout=datetime.timedelta(seconds=60),
+            )
             logger.info(f"result: {result}")
         assert result == f"Hello, {name}!"
 
