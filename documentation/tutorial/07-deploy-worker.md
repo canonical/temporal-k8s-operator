@@ -1,5 +1,10 @@
 # Deploy Temporal worker
 
+## Requirements
+
+* [`rockcraft`](https://snapcraft.io/rockcraft) installed.
+* A local OCI images registry to push images to or access to a public one.
+
 This is part of the
 [Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
 Please refer to this page for more information and the overview of the content.
@@ -25,11 +30,6 @@ the server and worker belong to the same network, and can be connected directly.
 It this is not the case, an ingress can be considered. See [Configure Ingress with Nginx Ingress Integrator](https://charmhub.io/temporal-k8s/docs/h-deploy-ingress) for more details.
 
 [/note]
-
-### Requirements
-
-* [`rockcraft`](https://snapcraft.io/rockcraft) installed.
-* A local OCI images registry to push images to or access to a public one.
 
 ## Custom container image for the worker
 
