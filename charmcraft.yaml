@@ -14,10 +14,16 @@ bases:
       channel: "22.04"
 parts:
   charm:
+    build-packages:
+      - cargo
+      - libffi-dev
+      - libssl-dev
+      - pkg-config
+      - rustc
     # Fixes jinja install during pack.
     # See <https://github.com/canonical/charmcraft/issues/551>.
     charm-python-packages: [setuptools, pip]
     charm-binary-python-packages:
       - openfga-sdk==0.6.0
-      - cosl==0.0.6
+      - cosl==0.0.51
       - requests==2.31.0

@@ -1,6 +1,6 @@
 name: Enhancement Proposal
 description: File an enhancement proposal
-labels: ["Type: Enhancement", "Status: Triage"]
+labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
@@ -8,10 +8,26 @@ body:
         Thanks for taking the time to fill out this enhancement proposal! Before submitting your issue, please make
         sure there isn't already a prior issue concerning this. If there is, please join that discussion instead.
   - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem statement
+      description: >
+        State the problem and motivations with as much detail as possible.
+    validations:
+      required: true
+  - type: textarea
     id: enhancement-proposal
     attributes:
       label: Enhancement Proposal
       description: >
-        Describe the enhancement you would like to see in as much detail as needed.      
+        Describe the enhancement you would like to see that solves the problem stated before.
     validations:
       required: true
+  - type: textarea
+    id: what-needs-to-get-done
+    attributes:
+      label: What needs to get done?
+      description: >
+        Please provide a list of actions that need to get done for this enhancement.
+    validations:
+      required: false
