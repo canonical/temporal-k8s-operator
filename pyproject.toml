@@ -1,24 +1,6 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-[project]
-name = "temporal-k8s-operator-ci"  
-version = "0.0.0"
-requires-python = ">=3.10"
-
-[project.optional-dependencies]
-dev = [
-  "pylint",
-  "flake8",
-  "pytest",
-  "coverage"
-]
-
-[tool.bandit]
-exclude_dirs = ["/venv/"]
-[tool.bandit.assert_used]
-skips = ["*/*test.py", "*/test_*.py", "*tests/*.py"]
-
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
