@@ -1,13 +1,40 @@
-name: Tiobe TiCS Analysis
-
 on:
-    pull_request:
-    workflow_dispatch:
-    schedule:
-    - cron: "17 2 * * 1"  # Runs at 2:17 UTC every Monday
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * 1'  # every Monday 02:17 UTC
 
 jobs:
-    tics:
-        name: TiCs
-        uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@main
-        secrets: inherit
+  build:
+    runs-on: [self-hosted, linux, amd64, tiobe, jammy]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install deps
+        run: |
+          pip install tox pylint flake8 coverage
+      - name: Run unit & coverage
+        run: |
+          tox -e unit
+      - name: Generate coverage.xml
+        run: |
+          coverage xml -o coverage.xml
+      - name: Prep coverage for TICS
+        run: |
+          mkdir -p .cover
+          mv coverage.xml .cover/coverage.xml
+      - name: TICS analysis
+        uses: tiobe/tics-github-action@v3
+        with:
+          mode: qserver
+          project: temporal-worker-k8s-operator
+          branchdir: .
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
