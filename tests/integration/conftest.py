@@ -50,8 +50,8 @@ async def deploy(ops_test: OpsTest, charm: str):
                 "namespace-rps-limit": "default:50|test:40",
             },
         ),
-        ops_test.model.deploy(APP_NAME_ADMIN, channel="edge"),
-        ops_test.model.deploy(APP_NAME_UI, channel="edge"),
+        ops_test.model.deploy(APP_NAME_ADMIN, channel="1.23/edge"),
+        ops_test.model.deploy(APP_NAME_UI, channel="1.23/edge"),
         ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True),
         ops_test.model.deploy("self-signed-certificates", channel="latest/stable"),
     )

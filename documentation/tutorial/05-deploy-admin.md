@@ -72,7 +72,7 @@ You can run the following command to create the initial Temporal namespace:
 
 ```bash
 # Create default namespace:
-juju run temporal-admin-k8s/0 tctl args="--ns default namespace register -rd 3" --wait 1m
+juju run temporal-admin-k8s/0 cli args="operator namespace create --namespace default --retention 3d" --wait 1m
 
 # Output:
 Running operation 19 with 1 task
@@ -80,8 +80,6 @@ Running operation 19 with 1 task
 
 Waiting for task 20...
 output: |
-  creating config dir: /root/.config/temporalio
-  creating config file: /root/.config/temporalio/tctl.yaml
   Namespace default successfully registered.
 result: command succeeded
 ```
