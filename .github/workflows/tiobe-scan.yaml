@@ -19,16 +19,20 @@ jobs:
       - name: Install deps
         run: |
           pip install tox pylint flake8 coverage
+          
       - name: Run unit & coverage
         run: |
-          tox -e unit
+          COVERAGE_FILE=.coverage tox -e unit
+
       - name: Generate coverage.xml
         run: |
-          coverage xml -o coverage.xml
+          coverage xml -o coverage.xml --omit '*/lib/*'
+          
       - name: Prep coverage for TICS
         run: |
           mkdir -p .cover
           mv coverage.xml .cover/coverage.xml
+          
       - name: TICS analysis
         uses: tiobe/tics-github-action@v3
         with:
