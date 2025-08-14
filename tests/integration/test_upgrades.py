@@ -30,8 +30,8 @@ async def deploy(ops_test: OpsTest):
     """The app is up and running."""
     # Deploy temporal server, temporal admin and postgresql charms.
     await ops_test.model.deploy(APP_NAME, channel="edge", config={"num-history-shards": 1})
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
-    await ops_test.model.deploy(APP_NAME_UI, channel="edge")
+    await ops_test.model.deploy(APP_NAME_ADMIN, channel="1.23/edge")
+    await ops_test.model.deploy(APP_NAME_UI, channel="1.23/edge")
     await ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True, revision=381)
 
     async with ops_test.fast_forward():
