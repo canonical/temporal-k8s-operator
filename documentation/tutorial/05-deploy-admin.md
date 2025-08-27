@@ -9,8 +9,11 @@ and support the Temporal server.
 
 ## Prerequisites
 
-- You have completed [Deploy Temporal Server](./03-deploy-server.md) and [Deploy PostgreSQL Database](./04-deploy-db.md).
-- `temporal-k8s` is related to `postgresql-k8s` on both `db` and `visibility`.
+- You have completed [Deploy PostgreSQL Database](./04-deploy-db.md).
+- A controller, `temporal-controller`, and a model, `temporal-model`, are available.
+- The application `temporal-k8s` (Temporal Server) is deployed to `temporal-model`.
+- The application `postgresql-k8s` (PostgreSQL) is deployed to `temporal-model`.
+- `temporal-k8s` is related to `postgresql-k8s` on the `db` and `visibility` endpoints.
 
 ## Deploy
 
@@ -47,11 +50,11 @@ Relate the admin interface:
 ```
 juju relate temporal-k8s:admin temporal-admin-k8s:admin
 ```
-Watch relations settle:
+Monitor relations until they settle:
 ```
 juju status --relations
 ```
-After a short while, all applications should become active:
+After a short while, all applications should be active:
 ```
 Model           Controller           Cloud/Region  Version  SLA          Timestamp
 temporal-model  temporal-controller  ck8s          3.6.9    unsupported  22:37:09Z
