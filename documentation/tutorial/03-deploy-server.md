@@ -9,10 +9,10 @@ group of four independently scalable services (frontend, history, matching and
 worker). It is responsible for state management and task synchronization among
 other functionalities.
 
-## Prerequisites
+## Requirements
 
 - You have completed [Environment Setup](./02-environment.md).
-- A controller (`temporal-controller`) and model (`temporal-model`) are available.
+- A controller, `temporal-controller` and a model ,`temporal-model`, are available.
 
 ## Deploy
 
@@ -25,11 +25,11 @@ juju deploy temporal-k8s --config num-history-shards=4
 ```
 ## Check status
 
-Watch the model while the application is brought up:
+Monitor the model while the application starts up:
 ```
 juju status --watch 1s
 ```
-Wait until the application settles. At this point, it is expected to be blocked, awaiting a database:
+Wait until the application stabilizes. At this point, it should be blocked, waiting for a database:
 ```
 App           Version  Status   Scale  Charm         Channel        Rev  Address         Exposed  Message
 temporal-k8s           blocked      1  temporal-k8s  latest/stable   43  10.152.183.120  no       database relation not ready
@@ -38,12 +38,10 @@ Unit             Workload  Agent  Address     Ports  Message
 temporal-k8s/0*  blocked   idle   10.1.0.152         database relation not ready
 ```
 Press Ctrl+C to exit the watch.
-> **Note**  
-> `num-history-shards`=4 is a good default for development. You can adjust later if needed. More information can be found about history shards in the official Temporalio documentation.
 
-
-
-See next: Deploy PostgreSQL Database
+[note]  
+Setting `num-history-shards` to four is a reasonable default for development. You can adjust it later if needed. For more information about history shards, see the [official Temporal documentation](https://docs.temporal.io/temporal-service/temporal-server#history-shard).  
+[/note]
 
 
 > **See next:
