@@ -7,7 +7,7 @@ Please refer to this page for more information and the overview of the content.
 The Temporal Admin Tools are a set of command-line utilities used to configure
 and support the Temporal server.
 
-## Prerequisites
+## Requirements
 
 - You have completed [Deploy PostgreSQL Database](./04-deploy-db.md).
 - A controller, `temporal-controller`, and a model, `temporal-model`, are available.
