@@ -9,6 +9,7 @@ import time
 
 import pytest
 import pytest_asyncio
+from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -39,10 +40,12 @@ async def deploy(ops_test: OpsTest):
             config={"num-history-shards": "1"},
         ),
         ops_test.model.deploy(
-            APP_NAME_ADMIN, channel="edge", resources={"temporal-admin-image": "temporalio/admin-tools:1.20.0"}
+            APP_NAME_ADMIN,
+            channel=TEMPORAL_CHANNEL,
+            resources={"temporal-admin-image": "temporalio/admin-tools:1.20.0"},
         ),
-        ops_test.model.deploy(APP_NAME_UI, channel="edge"),
-        ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True),
+        ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL),
+        ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True),
     )
 
     async with ops_test.fast_forward():
@@ -79,7 +82,9 @@ class TestServerUpgrade:
         await ops_test.model.applications[APP_NAME_ADMIN].destroy()
         await ops_test.model.block_until(lambda: APP_NAME_ADMIN not in ops_test.model.applications)
         await ops_test.model.deploy(
-            APP_NAME_ADMIN, channel="edge", resources={"temporal-admin-image": "temporalio/admin-tools:1.21.2"}
+            APP_NAME_ADMIN,
+            channel=TEMPORAL_CHANNEL,
+            resources={"temporal-admin-image": "temporalio/admin-tools:1.21.2"},
         )
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME_ADMIN], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600

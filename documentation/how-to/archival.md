@@ -121,7 +121,7 @@ Temporal event histories archival.
 ## Enable Namespace Archival
 
 Once the S3 relation is set up, namespace archival can be enabled using
-[temporal cli](https://snapcraft.io/temporal)
+[Temporal CLI](https://snapcraft.io/temporal)
 as follows:
 
 ```bash
