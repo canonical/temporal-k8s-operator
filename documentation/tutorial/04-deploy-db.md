@@ -44,7 +44,7 @@ temporal-k8s/0*    blocked   idle   10.1.0.152         database relation not rea
 ```
 ## Create relations
 
-Temporal requires two PostgreSQL connections: `db` and `visibility`.
+Temporal requires two PostgreSQL relations: `db` and `visibility`.
 ```
 juju relate temporal-k8s:db postgresql-k8s:database
 juju relate temporal-k8s:visibility postgresql-k8s:database
