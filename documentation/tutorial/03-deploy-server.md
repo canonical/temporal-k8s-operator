@@ -12,7 +12,6 @@ other functionalities.
 ## Requirements
 
 - You have completed [Environment Setup](./02-environment.md).
-- A controller, `temporal-controller` and a model ,`temporal-model`, are available.
 
 ## Deploy
 
