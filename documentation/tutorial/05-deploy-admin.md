@@ -9,11 +9,9 @@ and support the Temporal server.
 
 ## Requirements
 
+- You have completed [Environment Setup](./02-environment.md).
+- You have completed [Deploy Temporal Server](./03-deploy-server.md).
 - You have completed [Deploy PostgreSQL Database](./04-deploy-db.md).
-- A controller, `temporal-controller`, and a model, `temporal-model`, are available.
-- The application `temporal-k8s` (Temporal Server) is deployed to `temporal-model`.
-- The application `postgresql-k8s` (PostgreSQL) is deployed to `temporal-model`.
-- `temporal-k8s` is related to `postgresql-k8s` using the `db` and `visibility` endpoints.
 
 ## Deploy
 
