@@ -13,7 +13,7 @@ and support the Temporal server.
 - A controller, `temporal-controller`, and a model, `temporal-model`, are available.
 - The application `temporal-k8s` (Temporal Server) is deployed to `temporal-model`.
 - The application `postgresql-k8s` (PostgreSQL) is deployed to `temporal-model`.
-- `temporal-k8s` is related to `postgresql-k8s` on the `db` and `visibility` endpoints.
+- `temporal-k8s` is related to `postgresql-k8s` using the `db` and `visibility` endpoints.
 
 ## Deploy
 
@@ -98,6 +98,12 @@ output: |
   Namespace default successfully registered.
 result: command succeeded
 ```
+
+[note]
+
+The command above will only work for Charmed Temporal above or equal to 1.23/stable
+
+[/note]
 
 > **See next:
 > [Deploy Temporal Web UI](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782)**
