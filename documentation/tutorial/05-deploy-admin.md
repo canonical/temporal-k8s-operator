@@ -101,7 +101,7 @@ result: command succeeded
 
 [note]
 
-The command above will only work for Charmed Temporal above or equal to 1.23/stable
+The command above only works for Charmed Temporal version 1.23/stable or later.
 
 [/note]
 
