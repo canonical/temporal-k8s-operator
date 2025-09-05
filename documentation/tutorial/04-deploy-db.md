@@ -11,9 +11,9 @@ PostgreSQL K8s charm can be deployed and related to the Temporal server.
 
 ## Requirements
 
+- You have completed [Environment Setup](./02-environment.md).
 - You have completed [Deploy Temporal Server](./03-deploy-server.md).
-- A controller, `temporal-controller`, and a model, `temporal-model`, are available.
-- The application `temporal-k8s` is deployed to `temporal-model` and is currently in `blocked` state, awaiting a database relation.
+  
 
 ## Deploy PostgreSQL
 
