@@ -449,7 +449,7 @@ def _validate_event_params(event, valid_combinations):
     if not valid:
         valid_combination_strings = []
         for i, combination in enumerate(valid_combinations):
-            valid_combination_strings.append(f"{i+1}. '{', '.join(combination)}'")
+            valid_combination_strings.append(f"{i + 1}. '{', '.join(combination)}'")
 
         valid_combinations_message = "\n".join(valid_combination_strings)
         event.fail(
