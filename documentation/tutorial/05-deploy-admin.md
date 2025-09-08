@@ -83,7 +83,7 @@ You can run the following command to create the initial Temporal namespace:
 
 ```bash
 # Create default namespace:
-juju run temporal-admin-k8s/0 tctl args="--ns default namespace register -rd 3" --wait 1m
+juju run temporal-admin-k8s/0 cli args="operator namespace create --namespace default --retention 3d"
 
 # Output:
 Running operation 19 with 1 task
