@@ -1,11 +1,13 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
+[project]
+name = "temporal-k8s-operator"
+version = "0.0"
 
 [tool.bandit]
 exclude_dirs = ["/venv/"]
 [tool.bandit.assert_used]
 skips = ["*/*test.py", "*/test_*.py", "*tests/*.py"]
-
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
