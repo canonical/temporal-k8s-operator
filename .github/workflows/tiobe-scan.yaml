@@ -9,7 +9,7 @@ on:
 jobs:
     tics:
         name: TiCs
-        uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@main
+        uses: arjun11-malik/observability/.github/workflows/charm-tiobe-scan.yaml@main
         with: 
             coverage-folder: ".cover"
         secrets: inherit
