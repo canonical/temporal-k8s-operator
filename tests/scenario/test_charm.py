@@ -150,7 +150,7 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
 
     expected_plan = {
         "services": {
-            "temporal": {
+            "temporal-server": {
                 "summary": "temporal server",
                 "command": "temporal-server --env charm start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
@@ -178,12 +178,14 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
                     "SQL_VIS_MAX_IDLE_CONNS": 10,
                     "SQL_VIS_MAX_CONN_TIME": "1h",
                 },
-                "on-check-failure": {"up": "ignore"},
+                "on-check-failure": {"temporal-server-running": "ignore"},
+                "user": "ubuntu",
+                "working-dir": "/etc/temporal",
             },
         },
         "checks": {
-            "up": {
-                "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+            "temporal-server-running": {
+                "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
                 "level": "alive",
                 "override": "replace",
                 "period": "300s",
@@ -191,7 +193,7 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
         },
     }
     assert state_final.get_container("temporal").plan.to_dict() == expected_plan
-    assert state_final.get_container("temporal").service_statuses["temporal"] == ops.pebble.ServiceStatus.ACTIVE
+    assert state_final.get_container("temporal").service_statuses["temporal-server"] == ops.pebble.ServiceStatus.ACTIVE
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -232,7 +234,7 @@ def test_frontend_certificates_relation_broken(
     # Check the pebble layer service does not contain any TLS variables
     assert (
         not FRONTEND_TLS_CONFIGURATION.items()
-        <= new_state.get_container("temporal").plan.services["temporal"].environment.items()
+        <= new_state.get_container("temporal").plan.services["temporal-server"].environment.items()
     )
 
 
@@ -316,7 +318,7 @@ def test_frontend_certificates_relation(
         assert FRONTEND_TLS_CONFIGURATION.items() <= manager.charm._extra_context.items()
         assert (
             FRONTEND_TLS_CONFIGURATION.items()
-            <= manager.charm.container.get_plan().services["temporal"].environment.items()
+            <= manager.charm.container.get_plan().services["temporal-server"].environment.items()
         )
 
 
@@ -340,7 +342,7 @@ def test_s3_archival_relation(
 
         expected_plan = {
             "services": {
-                "temporal": {
+                "temporal-server": {
                     "summary": "temporal server",
                     "command": "temporal-server --env charm start "
                     "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
@@ -374,12 +376,14 @@ def test_s3_archival_relation(
                         "AWS_ACCESS_KEY_ID": "access",
                         "AWS_SECRET_ACCESS_KEY": "secret",
                     },
-                    "on-check-failure": {"up": "ignore"},
+                    "on-check-failure": {"temporal-server-running": "ignore"},
+                    "user": "ubuntu",
+                    "working-dir": "/etc/temporal",
                 },
             },
             "checks": {
-                "up": {
-                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                "temporal-server-running": {
+                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
                     "level": "alive",
                     "override": "replace",
                     "period": "300s",
@@ -387,7 +391,9 @@ def test_s3_archival_relation(
             },
         }
         assert state_final.get_container("temporal").plan.to_dict() == expected_plan
-        assert state_final.get_container("temporal").service_statuses["temporal"] == ops.pebble.ServiceStatus.ACTIVE
+        assert (
+            state_final.get_container("temporal").service_statuses["temporal-server"] == ops.pebble.ServiceStatus.ACTIVE
+        )
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -597,7 +603,7 @@ def test_authorization_ready(
 
     expected_plan = {
         "services": {
-            "temporal": {
+            "temporal-server": {
                 "summary": "temporal server",
                 "command": "temporal-server --env charm start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
@@ -635,12 +641,14 @@ def test_authorization_ready(
                     "OFGA_SECRETS_BEARER_TOKEN": openfga_secret.id,
                     "OFGA_API_PORT": "8080",
                 },
-                "on-check-failure": {"up": "ignore"},
+                "on-check-failure": {"temporal-server-running": "ignore"},
+                "user": "ubuntu",
+                "working-dir": "/etc/temporal",
             }
         },
         "checks": {
-            "up": {
-                "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+            "temporal-server-running": {
+                "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
                 "level": "alive",
                 "override": "replace",
                 "period": "300s",
@@ -669,7 +677,8 @@ def test_update_status_down(context, state, temporal_container, temporal_contain
     state_out = context.run(context.on.update_status(), state_out)
 
     temporal_container_unsuccessful_check = dataclasses.replace(
-        temporal_container_initialized, check_infos=[ops.testing.CheckInfo("up", status=ops.pebble.CheckStatus.DOWN)]
+        temporal_container_initialized,
+        check_infos=[ops.testing.CheckInfo("temporal-server-running", status=ops.pebble.CheckStatus.DOWN)],
     )
     state_out = dataclasses.replace(state_out, containers=[temporal_container_unsuccessful_check])
 

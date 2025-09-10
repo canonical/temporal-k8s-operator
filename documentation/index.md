@@ -45,7 +45,7 @@ manner for production purposes.
 | 2     | h-deploy-ingress    | [Configure Ingress with Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783) |
 | 2     | h-observability     | [Observability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787)                                          |
 | 2     | h-scaling           | [Scaling](https://discourse.charmhub.io/t/10840)                                                                                          |
-| 2     | h-tctl              | [TCTL](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-tctl/11788)                                                            |
+| 2     | h-cli              | [CLI](https://discourse.charmhub.io/t/11788)                                                            |
 | 2     | h-server-upgrades   | [Server Upgrades](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-server-upgrades/13105)                                      |
 | 2     | h-archival          | [Enable Archival](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-enable-archival/13106)                                      |
 | 1     | reference           | [Reference](https://discourse.charmhub.io/t/charmed-temporal-k8s-reference-index/13741)                                                   |

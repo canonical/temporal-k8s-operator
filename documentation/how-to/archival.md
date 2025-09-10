@@ -121,10 +121,10 @@ Temporal event histories archival.
 ## Enable Namespace Archival
 
 Once the S3 relation is set up, namespace archival can be enabled using
-[tctl](https://github.com/canonical/charmed-temporal-image/tree/main/tctl-snap)
+[Temporal CLI](https://snapcraft.io/temporal)
 as follows:
 
 ```bash
-tctl namespace update --history_archival_state enabled <namespace>
-tctl namespace update --visibility_archival_state enabled <namespace>
+temporal operator namespace update --namespace <namespace> --history_archival_state enabled
+temporal operator namespace update --namespace <namespace> --visibility_archival_state enabled
 ```
