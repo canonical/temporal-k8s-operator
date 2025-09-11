@@ -28,33 +28,33 @@ variable "channel" {
 }
 
 variable "services" {
-  type = string
+  type        = string
   description = "Comma separated list of Temporal services to run"
-  default = "frontend,history,matching,worker"
+  default     = "frontend,history,matching,worker"
 }
 
 variable "num_history_shards" {
-  type = number
+  type        = number
   description = "Number of concurrent database operations that can occur for a Temporal Cluster"
-  default = 1
+  default     = 1
 }
 
 variable "external_hostname" {
-  type = string
+  type        = string
   description = "The DNS listing used for external connections"
-  default = ""
+  default     = ""
 }
 
 variable "log_level" {
-  type = string
+  type        = string
   description = "Temporal server logging level"
-  default = "info"
+  default     = "info"
 }
 
 variable "tls_secret_name" {
-  type = string
+  type        = string
   description = "Name of the k8s secret which contains the TLS certificate to be used by ingress"
-  default = "temporal-tls"
+  default     = "temporal-tls"
 }
 
 variable "auth" {
