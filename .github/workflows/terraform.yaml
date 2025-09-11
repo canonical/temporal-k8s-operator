@@ -1,0 +1,101 @@
+name: Terraform checks
+
+on:
+  pull_request:
+
+jobs:
+  format:
+    name: Terraform format
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Setup Terraform
+        run: |
+          sudo snap install terraform --classic
+
+      - name: Initialize Terraform module
+        run: terraform init
+
+      - name: Validate Terraform Module
+        run: terraform validate -no-color
+
+      - name: Validate Terraform fmt
+        run: |
+          set +e
+          terraform fmt -recursive -check -diff
+          FMT_STATUS="$?"
+          if [[ "$FMT_STATUS" -ne 0 ]]; then
+            echo "❌ terraform fmt failed" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$FMT_STATUS"
+
+  lint:
+    name: Terraform lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set +e
+          sudo snap install terraform --classic
+          sudo snap install tflint
+
+      - name: Run tflint
+        run: tflint --chdir ./terraform/
+
+  apply:
+    name: Terraform apply
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up operator environment
+        run: |
+          set +e
+
+          sudo apt-get purge $(dpkg -l | grep -i docker | awk '{print $2}')
+          sudo apt-get purge containerd.io
+          sudo rm -r /run/containerd
+
+          sudo snap install concierge --classic
+          sudo concierge prepare -p k8s
+
+      - name: Add juju model
+        run: juju add-model terraform
+
+      - name: Install dependencies
+        run: |
+          sudo snap install terraform --classic
+
+      - name: Apply terraform
+        working-directory: terraform
+        run: |
+          set +e
+
+          terraform init
+
+          terraform apply -auto-approve -var 'model=terraform'
+
+      - name: Wait for application
+        run: |
+          juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked'))"
+      
+      - name: Juju status
+        run: juju status
+
+      - name: Dump logs
+        if: failure()
+        uses: canonical/charming-actions/dump-logs@2.6.3
