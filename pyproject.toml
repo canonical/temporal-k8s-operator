@@ -3,7 +3,7 @@
 [project]
 name = "temporal-k8s-operator"
 version = "0.0"
-
+requires-python = ">=3.12,<3.13"
 [tool.bandit]
 exclude_dirs = ["/venv/"]
 [tool.bandit.assert_used]
@@ -22,7 +22,7 @@ log_cli_level = "INFO"
 # Formatting tools configuration
 [tool.black]
 line-length = 120
-target-version = ["py38"]
+target-version = ["py312"]
 
 [tool.isort]
 profile = "black"
