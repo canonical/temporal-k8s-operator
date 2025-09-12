@@ -59,46 +59,33 @@ variable "tls_secret_name" {
 
 variable "auth" {
   type = object({
-    enabled                = optional(bool)
-    google_client_id       = optional(string)
-    admin_groups           = optional(string)
-    open_access_namespaces = optional(string)
+    enabled                = optional(bool, false)
+    google_client_id       = optional(string, "")
+    admin_groups           = optional(string, "")
+    open_access_namespaces = optional(string, "")
   })
   description = "Authentication related configurations"
-  default = {
-    enabled                = false
-    google_client_id       = ""
-    admin_groups           = ""
-    open_access_namespaces = ""
-  }
+  default     = {}
 }
 
 variable "persistence" {
   type = object({
-    max_connections      = optional(number),
-    max_idle_connections = optional(number),
-    max_connection_time  = optional(string),
+    max_connections      = optional(number, 20),
+    max_idle_connections = optional(number, 20),
+    max_connection_time  = optional(string, "1h"),
   })
   description = "Persistence database configurations"
-  default = {
-    max_connections      = 20,
-    max_idle_connections = 20,
-    max_connection_time  = "1h"
-  }
+  default     = {}
 }
 
 variable "visibility" {
   type = object({
-    max_connections      = optional(number),
-    max_idle_connections = optional(number),
-    max_connection_time  = optional(string),
+    max_connections      = optional(number, 10),
+    max_idle_connections = optional(number, 10),
+    max_connection_time  = optional(string, "1h"),
   })
   description = "Visibility database configurations"
-  default = {
-    max_connections      = 10,
-    max_idle_connections = 10,
-    max_connection_time  = "1h"
-  }
+  default     = {}
 }
 
 variable "global_rps_limit" {
@@ -121,12 +108,9 @@ variable "long_poll_interval" {
 
 variable "frontend_cert" {
   type = object({
-    common_name = optional(string),
-    sans_dns    = optional(string)
+    common_name = optional(string, ""),
+    sans_dns    = optional(string, "")
   })
   description = "Frontend certitifactes related configuration"
-  default = {
-    common_name = "",
-    sans_dns    = ""
-  }
+  default     = {}
 }
