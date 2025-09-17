@@ -77,8 +77,8 @@ def render(template_name, context):
     Returns:
         A dict containing the rendered template.
     """
-    template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "templates"))
-    loader = FileSystemLoader(template_dir)
+    charm_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    loader = FileSystemLoader(os.path.join(charm_dir, "templates"))
     return Environment(loader=loader, autoescape=True).get_template(template_name).render(**context)
 
 

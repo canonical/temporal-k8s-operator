@@ -22,3 +22,10 @@ parts:
       - rustc
     build-snaps:
       - astral-uv
+  templates:
+    plugin: dump
+    source: ./templates
+    organize:
+      '*': templates/
+    prime:
+      - templates/**
