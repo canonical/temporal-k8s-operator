@@ -1,4 +1,4 @@
-output "name" {
+output "app_name" {
   value = juju_application.temporal_k8s.name
 }
 

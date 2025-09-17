@@ -1,0 +1,55 @@
+set export := true # Just variables are exported into environment variables
+
+[private]
+default:
+    just --list
+
+[private]
+initialize:
+    #!/usr/bin/bash
+    if [ ! -d ".terraform" ]; then
+        terraform init
+    fi
+
+[private]
+destroy-model:
+    juju destroy-model --no-prompt --destroy-storage terraform || true
+
+[private]
+add-model: (destroy-model)
+    juju add-model terraform
+
+# Run terraform format
+fmt: (initialize)
+    terraform fmt
+
+# Run terraform validate
+validate: (initialize)
+    terraform validate
+
+# Run tflint
+lint:
+    tflint
+
+# Apply the terraform plan with the provided variables file
+apply variables_file: (initialize)
+    terraform apply -auto-approve -var-file="${variables_file}"
+
+# Destroy the terraform plan with the provided variables file
+destroy variables_file:
+    terraform destroy -auto-approve -var-file="${variables_file}"
+
+    just destroy-model
+
+test:
+    #!/usr/bin/bash
+    set -euxo pipefail
+
+    trap 'just destroy "./test/test.tfvars"' EXIT
+
+    just add-model
+
+    just apply "./test/test.tfvars"
+
+    juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked'))"
+
