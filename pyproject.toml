@@ -112,3 +112,7 @@ fmt = [
     "black==23.12.1",
     "isort==5.12.0",
 ]
+
+dev = [
+  "temporal-k8s-operator[charm,unit,integration,lint,fmt]",
+]
