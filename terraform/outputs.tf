@@ -14,7 +14,6 @@ output "requires" {
     admin                 = "admin"
     db                    = "db"
     frontend_certificates = "frontend-certificates"
-    ingress               = "ingress"
     visibility            = "visibility"
     nginx_route           = "nginx-route"
     ui                    = "ui"
