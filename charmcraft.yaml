@@ -6,8 +6,9 @@
 
 type: "charm"
 
+
 platforms:
-  ubuntu@24.04:amd64:
+  ubuntu@22.04:amd64:
 
 parts:
   charm:
@@ -20,12 +21,11 @@ parts:
       - libssl-dev
       - pkg-config
       - rustc
+      - python3-venv
     build-snaps:
       - astral-uv
-  templates:
+  extras:
     plugin: dump
     source: ./templates
     organize:
       '*': templates/
-    prime:
-      - templates/**

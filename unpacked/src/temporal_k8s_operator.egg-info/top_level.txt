@@ -1,0 +1,7 @@
+charm
+grafana_dashboards
+literals
+log
+prometheus_alert_rules
+relations
+state

@@ -1,0 +1,82 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# For a complete list of supported options, see:
+# https://juju.is/docs/sdk/metadata-reference
+
+name: temporal-k8s
+display-name: Temporal Server
+summary: Temporal server operator
+description: |
+  Temporal is a developer-first, open source platform that ensures
+  the successful execution of services and applications (using workflows).
+maintainers: 
+  - Commercial Systems <jaas-crew@lists.canonical.com>
+source: https://github.com/canonical/temporal-k8s-operator
+docs: https://discourse.charmhub.io/t/temporal-server-documentation-overview/8948
+tags:
+  - temporal
+  - workflow
+  - task
+  - activities
+  - development
+issues: https://github.com/canonical/temporal-k8s-operator/issues
+assumes:
+  - juju >= 3.1
+  - k8s-api
+
+peers:
+  peer:
+    interface: temporal
+
+requires:
+  admin:
+    interface: temporal
+    limit: 1
+  db:
+    interface: postgresql_client
+    limit: 1
+  frontend-certificates:
+    interface: tls-certificates
+    limit: 1
+  ingress:
+    interface: ingress
+    limit: 1
+  visibility:
+    interface: postgresql_client
+    limit: 1
+  nginx-route:
+    interface: nginx-route
+    limit: 1
+  ui:
+    interface: temporal
+    optional: true
+    limit: 1
+  logging:
+    interface: loki_push_api
+    optional: true
+    limit: 1
+  openfga:
+    interface: openfga
+    limit: 1
+  s3-parameters:
+    interface: s3
+    limit: 1
+    optional: true
+
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+  grafana-dashboard:
+    interface: grafana_dashboard
+
+containers:
+  temporal:
+    resource: temporal-server-image
+
+resources:
+  temporal-server-image:
+    type: oci-image
+    description: OCI image for Temporal
+    # Included for simplicity in integration tests.
+    upstream-source: ubuntu/temporal-server@sha256:9cb05815c868bdf566b6a5a822d4d338709a96c3bd7b9ba0de0932773458266f  # 1.23-24.04
