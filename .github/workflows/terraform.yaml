@@ -10,4 +10,4 @@ on:
 jobs:
   pull-request-terraform-checks:
     name: PR Terraform checks
-    uses: canonical/workflows-team/.github/workflows/terraform.yaml@feature/terraform_workflows
+    uses: canonical/workflows-team/.github/workflows/terraform.yaml@main
