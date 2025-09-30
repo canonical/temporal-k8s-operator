@@ -37,12 +37,12 @@ To create a custom container image for the worker, you need to build and publish
 
 1. Create a `rockcraft` project. You can use the [`rockcraft.yaml`](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample_py) as template.
 
-2. Ensure the `command` of the rock runs the worker script directly. For example, if `command: "./app/scripts/start-worker.sh"`:
+2. Ensure the `command` of the rock runs the worker script directly. For example, if `command: "/app/scripts/start-worker.sh"`:
 
 ```
 $ cat start-worker.sh
  
-python3 app/resource_sample/worker.py
+python3 /app/resource_sample/worker.py
 ```
 
 3. Ensure your activities and workflows are also included in the rock as the worker script needs access to them.
