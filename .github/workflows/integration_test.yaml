@@ -10,7 +10,7 @@ on:
 
 jobs:
   integration-tests:
-    uses: arjun11-malik/operator-workflows/.github/workflows/integration_test.yaml@main
+    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
       provider: k8s
@@ -19,4 +19,7 @@ jobs:
       charmcraft-channel: latest/stable
       modules: '["test_charm.py", "test_auth.py", "test_scaling.py", "test_server_upgrade.py", "test_upgrades.py"]'
       juju-channel: 3.6/stable
-      self-hosted-runner: false
+      self-hosted-runner: true
+      self-hosted-runner-label: large
+      self-hosted-runner-arch: x64
+      self-hosted-runner-image: noble
