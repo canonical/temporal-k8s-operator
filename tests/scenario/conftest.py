@@ -61,14 +61,14 @@ def temporal_container_initialized():
     return ops.testing.Container(
         "temporal",
         can_connect=True,
-        check_infos=[ops.testing.CheckInfo("up")],
+        check_infos=[ops.testing.CheckInfo("temporal-server-running")],
         layers={
             "initialized-layer": ops.pebble.Layer(
                 {
                     "checks": {
-                        "up": ops.pebble.CheckDict(
+                        "temporal-server-running": ops.pebble.CheckDict(
                             exec=ops.pebble.ExecDict(
-                                command="tctl --address=temporal-k8s:7236 cluster health",
+                                command="temporal operator cluster health --address=temporal-k8s:7236",
                             ),
                             level=None,
                             override="replace",
@@ -87,7 +87,7 @@ def temporal_container_initialized():
 def incomplete_layer_dict():
     return {
         "services": {
-            "temporal": {
+            "temporal-server": {
                 "override": "replace",
             },
         },
@@ -278,11 +278,6 @@ def db_relation(postgres_db_data):
 @pytest.fixture(scope="function")
 def visibility_relation(postgres_visibility_data):
     return ops.testing.Relation("visibility", remote_app_data=postgres_visibility_data)
-
-
-@pytest.fixture(scope="function")
-def traefik_ingress_relation():
-    return ops.testing.Relation("ingress")
 
 
 @pytest.fixture(scope="function")

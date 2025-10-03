@@ -1,105 +1,94 @@
-# Deploy Temporal Worker
+# Deploy Temporal worker
+
+## Requirements
+
+* [`rockcraft`](https://snapcraft.io/rockcraft) installed.
+* A local OCI images registry to push images to or access to a public one.
 
 This is part of the
 [Charmed Temporal Tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777).
 Please refer to this page for more information and the overview of the content.
 
-The [Temporal Worker](https://docs.temporal.io/workers) is the entity which
-listens and polls on specific task queue, and executes code in response to the
+The [Temporal worker](https://docs.temporal.io/workers) is the entity that
+listens and polls a specific task queue, and executes code in response to the
 task.
 
-## Deploy
+The Temporal worker charm allows users to upload and automatically run custom worker scripts, independent of the chosen SDK.
+This is achieved by creating a rock with all runtime dependencies, worker scripts, and workflows, that is used at deployment time.
 
-In a production environment, a Temporal worker is deployed in a separate
-environment from the Temporal server. As our server is currently locally
-deployed, we will opt for a direct connection from the worker rather than using
-the ingress.
+Because of this, deploying the worker involves two steps:
 
-In order to test our Temporal worker, we will use a
-[sample resource](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample_py)
-which contains two workflows and two activities. This will require the
-availability of a local registry. In our case, we can enable the
-[microk8s registry](https://microk8s.io/docs/registry-built-in). You can run the
-following commands to clone the repository, build the necessary rock image and
-deploy the worker charm with it:
+1. Creating a custom container image for the worker using [rocks](https://documentation.ubuntu.com/server/explanation/virtualisation/about-rock-images/).
+2. Deploying the worker charm using a custom container image.
 
-```bash
-juju add-model worker-model
+[note]
 
-git clone https://github.com/canonical/temporal-worker-k8s-operator.git
-make -C resource_sample_py build_rock
+In a production setting, a Temporal worker can be deployed in a separate
+environment from the Temporal server. For simplicity, this guide assumes
+the server and worker belong to the same network, and can be connected directly.
 
-juju deploy temporal-worker-k8s --resource temporal-worker-image=localhost:32000/temporal-worker-rock
+It this is not the case, an ingress can be considered. See [Configure Ingress with Nginx Ingress Integrator](https://charmhub.io/temporal-k8s/docs/h-deploy-ingress) for more details.
+
+[/note]
+
+## Custom container image for the worker
+
+To create a custom container image for the worker, you need to build and publish it using Rockcraft. The steps below guide you through creating a rock-based image that includes your worker script and associated workflows.
+
+1. Create a `rockcraft` project. You can use the [`rockcraft.yaml`](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample_py) as template.
+
+2. Ensure the `command` of the rock runs the worker script directly. For example, if `command: "/app/scripts/start-worker.sh"`:
+
+```
+$ cat start-worker.sh
+ 
+python3 /app/resource_sample/worker.py
 ```
 
-Wait until the application is ready - when it is ready, `juju status` will show:
+3. Ensure your activities and workflows are also included in the rock as the worker script needs access to them.
+
+4. Build the rock with `rockcraft pack`.
+
+5. Make your rock available in a local or public registry. See [Publish a rock to a registry](https://documentation.ubuntu.com/rockcraft/latest/how-to/rocks/publish-a-rock/) for details.
+
+## Deploy and configure Temporal worker
+
+Once the rock is ready and available, you will deploy the worker charm.
+
+1. Add a model where worker charms will be deployed:
+
+[note]
+
+Deploying the worker charms in a dedicated Juju model allows a logic separation
+between the Charmed Temporal server components and the workers.
+
+[/note]
 
 ```
-Model            Controller           Cloud/Region        Version  SLA          Timestamp
-worker-model     temporal-controller  microk8s/localhost  3.1.5    unsupported  13:21:49+03:00
-
-App                  Version  Status   Scale  Charm                Channel  Rev  Address         Exposed  Message
-temporal-worker-k8s           waiting      1  temporal-worker-k8s  stable     5  10.152.183.187  no       installing agent
-
-Unit                    Workload  Agent  Address      Ports  Message
-temporal-worker-k8s/0*  blocked   idle   10.1.232.75         Invalid config: host missing
+juju add-model temporal-workers-model
 ```
 
-## Configure Worker
+2. Deploy the worker charm using the recently created image:
 
-We will then configure our worker to the Temporal server deployed in the
-previous steps. We will also configure our charm to add a couple of environment
-variables to be read by the workflows. Create a file `config.yaml` with the
-following content:
+```
+juju deploy temporal-worker-k8s --resource temporal-worker-image=<your-registry>/<your-rock-name>:<tag>
+```
 
-```yaml
+3. Create a configuration file with information about the server hostname, the task queue to poll, and namespace to connect to:
+
+```
+cat config.yaml
+
 temporal-worker-k8s:
-  host: "10.1.232.64:7233" # Temporal Server unit IP address
-  queue: "test-queue"
-  namespace: "default"
-  environment: |
-    env:
-      - name: message
-        value: hello
-      - name: juju-key1
-        value: world
+  host: "temporal-server-hostname:7233"
+  queue: "your-queue"
+  namespace: "your-namespace"
 ```
 
-Note: To get the Temporal Server unit IP address, you need to switch to the
-previously created model using `juju switch temporal-model` before switching
-back to this model using `juju switch temporal-worker`.
+4. Configure the worker charm with the configuration file from the previous step:
 
-Run the following command to configure your charm:
-
-```bash
+```
 juju config temporal-worker-k8s --file=path/to/config.yaml
-
-# Verify that the charm has been configured with the correct value
-juju config temporal-worker-k8s host
 ```
 
-Wait until the application is ready - when it is ready, `juju status` will show:
-
-```
-Model            Controller           Cloud/Region        Version  SLA          Timestamp
-worker-model     temporal-controller  microk8s/localhost  3.1.5    unsupported  13:45:16+03:00
-
-App                  Version  Status  Scale  Charm                Channel  Rev  Address         Exposed  Message
-temporal-worker-k8s           active      1  temporal-worker-k8s  stable     5  10.152.183.187  no       worker listening to namespace 'default' on queue 'test-queue'
-
-Unit                    Workload  Agent  Address      Ports  Message
-temporal-worker-k8s/0*  active    idle   10.1.232.78         worker listening to namespace 'default' on queue 'test-queue'
-```
-
-To further verify that the worker is functioning correctly, observe the output
-of the following command to ensure the absence of errors:
-
-```bash
-kubectl -n worker-model logs temporal-worker-k8s-0 -c temporal-worker -f
-```
-
-At this point, we have a Temporal worker connected to our Temporal server on the
-`default` namespace listening for tasks on the `test-queue` task queue.
-
-> **See next:
-> [Run Your First Workflow](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)**
+> **See next: [Run Your First Workflow](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-run-your-first-workflow/11785)**

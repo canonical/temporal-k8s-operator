@@ -65,7 +65,7 @@ async def run_sample_workflow(ops_test: OpsTest):
 
 
 async def create_default_namespace(ops_test: OpsTest):
-    """Creates default namespace on Temporal server using tctl.
+    """Creates default namespace on Temporal server using Temporal cli.
 
     Args:
         ops_test: PyTest object.
@@ -74,10 +74,10 @@ async def create_default_namespace(ops_test: OpsTest):
     action = (
         await ops_test.model.applications[APP_NAME_ADMIN]
         .units[0]
-        .run_action("tctl", args="--ns default namespace register -rd 3")
+        .run_action("cli", args="operator namespace create --namespace default --retention 3d")
     )
     result = (await action.wait()).results
-    logger.info(f"tctl result: {result}")
+    logger.info(f"cli result: {result}")
     assert "result" in result and result["result"] == "command succeeded"
 
 

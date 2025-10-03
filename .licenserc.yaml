@@ -34,4 +34,5 @@ header:
     - 'LICENSE'
     - 'trivy.yaml'
     - 'lib/**'
+    - 'terraform/**'
   comment: on-failure

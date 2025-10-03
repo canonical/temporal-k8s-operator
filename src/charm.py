@@ -28,11 +28,6 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     ProviderCertificate,
     TLSCertificatesRequiresV4,
 )
-from charms.traefik_k8s.v2.ingress import (
-    IngressPerAppReadyEvent,
-    IngressPerAppRequirer,
-    IngressPerAppRevokedEvent,
-)
 from jinja2 import Environment, FileSystemLoader
 from ops import EventBase, main, pebble
 from ops.charm import CharmBase, RelationBrokenEvent
@@ -163,7 +158,7 @@ class TemporalK8SCharm(CharmBase):
         self.s3_client = S3Requirer(self, "s3-parameters")
         self.s3_relation = S3Integrator(self)
 
-        # Handle Ingress (Nginx)
+        # Handle Ingress
         self._require_nginx_route()
 
         # Prometheus
@@ -195,17 +190,6 @@ class TemporalK8SCharm(CharmBase):
             self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
             self._update,
         )
-
-        # Handle Ingress (Traefik)
-        # Only handle ingress for the Frontend service
-        # It is assumed that one application per deployment will be set to Frontend
-        if self.model.get_relation("ingress"):
-            if "frontend" not in self.config["services"]:
-                self.unit.status = BlockedStatus("Not a frontend service, please remove ingress integration.")
-            else:
-                self.ingress = IngressPerAppRequirer(self, port=SERVICE_PORTS["frontend"]["grpc"], scheme=lambda: "h2c")
-                self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
-                self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):
@@ -248,12 +232,6 @@ class TemporalK8SCharm(CharmBase):
         self._delete_certificate()
         self._delete_private_key()
 
-    def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
-        logger.info("This app's ingress URL: %s", event.url)
-
-    def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent):
-        logger.info("This app no longer has ingress")
-
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
         """Handle peer relation changes.
@@ -269,11 +247,6 @@ class TemporalK8SCharm(CharmBase):
 
     def _require_nginx_route(self):
         """Require nginx-route relation based on current configuration."""
-        if self.model.get_relation("ingress") and self.model.get_relation("nginx-route"):
-            self.unit.status = BlockedStatus(
-                "Only one ingress solution is allowed - remove the ingress or the nginx-route relation."
-            )
-            return
         require_nginx_route(
             charm=self,
             service_hostname=self.external_hostname,
@@ -401,7 +374,7 @@ class TemporalK8SCharm(CharmBase):
             self._update(event)
             return
 
-        check = container.get_check("up")
+        check = container.get_check("temporal-server-running")
         if check.status != CheckStatus.UP:
             self.unit.status = MaintenanceStatus("Status check: DOWN")
             return
@@ -422,7 +395,7 @@ class TemporalK8SCharm(CharmBase):
         """
         try:
             plan = container.get_plan().to_dict()
-            return bool(plan["services"][self.name]["on-check-failure"])
+            return bool(plan["services"]["temporal-server"]["on-check-failure"])
         except (KeyError, pebble.ConnectionError):
             return False
 
@@ -652,7 +625,7 @@ class TemporalK8SCharm(CharmBase):
         pebble_layer = {
             "summary": "temporal server layer",
             "services": {
-                self.name: {
+                "temporal-server": {
                     "summary": "temporal server",
                     "command": "temporal-server --env charm start " + services_args,
                     "startup": "enabled",
@@ -660,16 +633,18 @@ class TemporalK8SCharm(CharmBase):
                     # Including config values here so that a change in the
                     # config forces replanning to restart the service.
                     "environment": context,
-                    "on-check-failure": {"up": "ignore"},
+                    "on-check-failure": {"temporal-server-running": "ignore"},
+                    "user": "ubuntu",
+                    "working-dir": "/etc/temporal",
                 }
             },
             "checks": {
-                "up": {
+                "temporal-server-running": {
                     "override": "replace",
                     "level": "alive",
                     "period": "300s",
                     # curl cluster health of internal-frontend service
-                    "exec": {"command": "tctl --address=temporal-k8s:7236 cluster health"},
+                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
                 }
             },
         }
