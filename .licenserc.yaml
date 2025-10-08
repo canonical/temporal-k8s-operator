@@ -35,4 +35,5 @@ header:
     - 'trivy.yaml'
     - 'lib/**'
     - 'terraform/**'
+    - 'uv.lock'
   comment: on-failure
