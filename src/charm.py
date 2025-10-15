@@ -215,9 +215,10 @@ class TemporalK8SCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for certificates to be available")
             return
 
+        self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
+
         # If either the certificate or key is outdated or missing, update both
         if self._update_certificates_required(provider_certificate, private_key):
-            self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
             self._store_certificate(certificate=provider_certificate.certificate)
             self._store_private_key(private_key=private_key)
 
