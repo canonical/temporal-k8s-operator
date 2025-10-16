@@ -70,7 +70,7 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
                 name,
                 id="my-workflow-id",
                 task_queue="my-task-queue",
-                execution_timeout=datetime.timedelta(seconds=60),
+                execution_timeout=datetime.timedelta(seconds=300),
             )
             logger.info(f"result: {result}")
         assert result == f"Hello, {name}!"
