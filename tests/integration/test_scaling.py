@@ -48,10 +48,10 @@ async def deploy(ops_test: OpsTest):
             },
         )
 
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
-    await ops_test.model.deploy(APP_NAME_UI, channel="edge")
+    await ops_test.model.deploy(APP_NAME_ADMIN, channel="1.23/edge")
+    await ops_test.model.deploy(APP_NAME_UI, channel="1.23/edge")
     await ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True)
-    await ops_test.model.deploy("pgbouncer-k8s", channel="1/stable", trust=True, config={"max_db_connections": 200})
+    await ops_test.model.deploy("pgbouncer-k8s", channel="1/edge", trust=True, config={"max_db_connections": 200})
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
