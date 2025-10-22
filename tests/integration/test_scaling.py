@@ -47,7 +47,7 @@ async def deploy(ops_test: OpsTest):
             config={
                 "services": ALL_CONFIG[i],
                 "num-history-shards": 1,
-                "persistence-max-conns": 15,
+                "persistence-max-conns": 3,
                 "visibility-max-conns": 5,
             },
         )
@@ -56,7 +56,7 @@ async def deploy(ops_test: OpsTest):
     await ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
     await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
     await ops_test.model.deploy(
-        PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True, config={"max_db_connections": 50}
+        PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True, config={"max_db_connections": 20}
     )
 
     async with ops_test.fast_forward():
