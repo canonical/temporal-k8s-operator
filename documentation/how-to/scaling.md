@@ -94,7 +94,7 @@ temporal-k8s/0*           active    idle   10.1.232.26
 ```
 
 To confirm the four services can reach each other, you can run
-`juju run temporal-admin-k8s/0 tctl args="adm cl d"`, you should see the output
+`juju run temporal-admin-k8s/0 cli args="operator cluster describe"`, you should see the output
 below. As can be seen from the output, the reachable members use the k8s pod IP
 address to communicate with other services.
 
@@ -229,7 +229,7 @@ temporal-k8s/1            active    idle   10.1.232.25
 ```
 
 To confirm the four scaled services can reach each other, you can run
-`juju run temporal-admin-k8s/0 tctl args="adm cl d"`, you should see the
+`juju run temporal-admin-k8s/0 cli args="operator cluster describe"`, you should see the
 following:
 
 ```

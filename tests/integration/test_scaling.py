@@ -7,6 +7,7 @@ import logging
 
 import pytest
 import pytest_asyncio
+from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -48,9 +49,9 @@ async def deploy(ops_test: OpsTest):
             },
         )
 
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel="1.23/edge")
-    await ops_test.model.deploy(APP_NAME_UI, channel="1.23/edge")
-    await ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True)
+    await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    await ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
+    await ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True)
     await ops_test.model.deploy("pgbouncer-k8s", channel="1/edge", trust=True, config={"max_db_connections": 200})
 
     async with ops_test.fast_forward():

@@ -105,7 +105,7 @@ deployment, follow the following steps:
     juju relate temporal-k8s:admin temporal-admin-k8s:admin
 
     # Create default namespace:
-    juju run temporal-admin-k8s/0 tctl args="--ns default namespace register -rd 3"
+    juju run temporal-admin-k8s/0 cli args="operator namespace create --namespace default --retention 3d"
 
     # Generate private key
     openssl genrsa -out server.key 2048

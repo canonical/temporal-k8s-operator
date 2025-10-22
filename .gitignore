@@ -7,3 +7,5 @@ __pycache__/
 *.py[cod]
 .idea
 .vscode
+src/*.egg-info/
+uv.lock.bak
