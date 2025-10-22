@@ -11,7 +11,6 @@ from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
-    APP_NAME_UI,
     PGBOUNCER_APP_NAME,
     PGBOUNCER_CHANNEL,
     POSTGRESQL_APP_NAME,
@@ -59,7 +58,6 @@ async def deploy(ops_test: OpsTest):
 
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=300)
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
-        assert ops_test.model.applications[APP_NAME_UI].units[0].workload_status == "active"
 
 
 @pytest.mark.abort_on_fail
