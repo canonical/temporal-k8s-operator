@@ -24,3 +24,4 @@ jobs:
       self-hosted-runner-label: large
       self-hosted-runner-arch: x64
       self-hosted-runner-image: noble
+      test-timeout: 35
