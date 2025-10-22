@@ -67,7 +67,7 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
     async with Worker(client, task_queue="my-task-queue", workflows=[SayHello], activities=[say_hello]):
         name = "Jean-luc"
         for i in range(count):
-            logger.info(f"running workflow #{i+1}")
+            logger.info(f"running workflow #{i + 1}")
             result = await client.execute_workflow(
                 SayHello.run,
                 name,
