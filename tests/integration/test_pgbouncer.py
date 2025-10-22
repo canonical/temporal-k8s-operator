@@ -28,9 +28,9 @@ async def deploy(ops_test: OpsTest):
     """The app is up and running."""
     # Deploy temporal server, temporal admin and postgresql charms.
     await ops_test.model.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1}, num_units=3)
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
     await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
     await ops_test.model.deploy(PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True)
+    await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
@@ -40,7 +40,7 @@ async def deploy(ops_test: OpsTest):
             timeout=600,
         )
         await ops_test.model.wait_for_idle(
-            apps=[POSTGRESQL_APP_NAME], status="active", raise_on_blocked=False, timeout=600
+            apps=[POSTGRESQL_APP_NAME], status="active", raise_on_blocked=False, timeout=90*10
         )
 
         await ops_test.model.integrate(PGBOUNCER_APP_NAME, POSTGRESQL_APP_NAME)
