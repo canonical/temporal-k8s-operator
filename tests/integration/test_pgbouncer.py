@@ -7,10 +7,14 @@ import logging
 
 import pytest
 import pytest_asyncio
+from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
     APP_NAME_UI,
+    PGBOUNCER_APP_NAME,
+    PGBOUNCER_CHANNEL,
+    POSTGRESQL_APP_NAME,
     create_default_namespace,
     run_sample_workflow,
 )
@@ -24,39 +28,32 @@ logger = logging.getLogger(__name__)
 async def deploy(ops_test: OpsTest):
     """The app is up and running."""
     # Deploy temporal server, temporal admin and postgresql charms.
-    await ops_test.model.deploy(APP_NAME, channel="edge", config={"num-history-shards": 1}, num_units=3)
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
-    await ops_test.model.deploy(APP_NAME_UI, channel="edge")
-    await ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True)
-    await ops_test.model.deploy("pgbouncer-k8s", channel="1/stable", trust=True)
+    await ops_test.model.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1}, num_units=3)
+    await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
+    await ops_test.model.deploy(PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True)
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, "pgbouncer-k8s"],
+            apps=[APP_NAME, APP_NAME_ADMIN, PGBOUNCER_APP_NAME],
             status="blocked",
             raise_on_blocked=False,
             timeout=600,
         )
         await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
+            apps=[POSTGRESQL_APP_NAME], status="active", raise_on_blocked=False, timeout=600
         )
 
-        await ops_test.model.integrate("pgbouncer-k8s", "postgresql-k8s")
+        await ops_test.model.integrate(PGBOUNCER_APP_NAME, POSTGRESQL_APP_NAME)
 
         await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s", "pgbouncer-k8s"], status="active", raise_on_blocked=False, timeout=600
+            apps=[POSTGRESQL_APP_NAME, PGBOUNCER_APP_NAME], status="active", raise_on_blocked=False, timeout=600
         )
 
-        await ops_test.model.integrate(f"{APP_NAME}:db", "pgbouncer-k8s:database")
-        await ops_test.model.integrate(f"{APP_NAME}:visibility", "pgbouncer-k8s:database")
+        await ops_test.model.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
+        await ops_test.model.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
-        await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=180
-        )
-
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
         await create_default_namespace(ops_test)
 

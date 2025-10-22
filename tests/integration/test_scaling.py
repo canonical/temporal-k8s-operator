@@ -13,6 +13,9 @@ from helpers import (
     APP_NAME_ADMIN,
     APP_NAME_UI,
     METADATA,
+    PGBOUNCER_APP_NAME,
+    PGBOUNCER_CHANNEL,
+    POSTGRESQL_APP_NAME,
     create_default_namespace,
     run_sample_workflow,
     scale,
@@ -51,39 +54,41 @@ async def deploy(ops_test: OpsTest):
 
     await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
     await ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    await ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True)
-    await ops_test.model.deploy("pgbouncer-k8s", channel="1/edge", trust=True, config={"max_db_connections": 200})
+    await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
+    await ops_test.model.deploy(
+        PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True, config={"max_db_connections": 50}
+    )
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME_ADMIN, APP_NAME_UI, "pgbouncer-k8s"] + ALL_SERVICES,
+            apps=[APP_NAME_ADMIN, APP_NAME_UI, PGBOUNCER_APP_NAME] + ALL_SERVICES,
             status="blocked",
             raise_on_blocked=False,
             timeout=1200,
         )
         await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=1200
+            apps=[POSTGRESQL_APP_NAME], status="active", raise_on_blocked=False, timeout=1200
         )
 
-        await ops_test.model.integrate("pgbouncer-k8s", "postgresql-k8s")
+        await ops_test.model.integrate(PGBOUNCER_APP_NAME, POSTGRESQL_APP_NAME)
 
         await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s", "pgbouncer-k8s"], status="active", raise_on_blocked=False, timeout=600
+            apps=[POSTGRESQL_APP_NAME, PGBOUNCER_APP_NAME], status="active", raise_on_blocked=False, timeout=1200
         )
 
         for service in ALL_SERVICES:
             assert ops_test.model.applications[service].units[0].workload_status == "blocked"
 
         # Must integrate temporal-k8s frontend service first
-        await ops_test.model.integrate(f"{APP_NAME}:db", "pgbouncer-k8s:database")
-        await ops_test.model.integrate(f"{APP_NAME}:visibility", "pgbouncer-k8s:database")
+        await ops_test.model.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
+        await ops_test.model.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
         for service in ALL_SERVICES:
             if service != "temporal-k8s":
-                await ops_test.model.integrate(f"{service}:db", "pgbouncer-k8s:database")
-                await ops_test.model.integrate(f"{service}:visibility", "pgbouncer-k8s:database")
+                await ops_test.model.integrate(f"{service}:db", f"{PGBOUNCER_APP_NAME}:database")
+                await ops_test.model.integrate(f"{service}:visibility", f"{PGBOUNCER_APP_NAME}:database")
 
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
 

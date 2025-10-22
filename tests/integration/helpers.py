@@ -22,6 +22,9 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 APP_NAME_ADMIN = "temporal-admin-k8s"
 APP_NAME_UI = "temporal-ui-k8s"
+PGBOUNCER_APP_NAME = "pgbouncer-k8s"
+POSTGRESQL_APP_NAME = "postgresql-k8s"
+PGBOUNCER_CHANNEL = "1/stable"
 
 
 async def scale(ops_test: OpsTest, app, units):
