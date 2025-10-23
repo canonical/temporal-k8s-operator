@@ -115,11 +115,11 @@ class TestScaling:
         for service in ALL_SERVICES:
             await scale(ops_test, app=service, units=2)
 
-        await run_sample_workflow(ops_test, count=1000)
+        await run_sample_workflow(ops_test)
 
     async def test_scaling_down(self, ops_test: OpsTest):
         """Scale Temporal charm down to 1 unit."""
         for service in ALL_SERVICES:
             await scale(ops_test, app=service, units=1)
 
-        await run_sample_workflow(ops_test, count=1000)
+        await run_sample_workflow(ops_test)
