@@ -13,6 +13,9 @@ from helpers import (
     APP_NAME_ADMIN,
     APP_NAME_UI,
     METADATA,
+    PGBOUNCER_APP_NAME,
+    PGBOUNCER_CHANNEL,
+    POSTGRESQL_APP_NAME,
     create_default_namespace,
     run_sample_workflow,
     scale,
@@ -41,34 +44,53 @@ async def deploy(ops_test: OpsTest):
             charm,
             resources=resources,
             application_name=ALL_SERVICES[i],
-            config={"services": ALL_CONFIG[i], "num-history-shards": 1},
+            config={
+                "services": ALL_CONFIG[i],
+                "num-history-shards": 1,
+                "persistence-max-conns": 3,
+                "persistence-max-idle-conns": 3,
+                "visibility-max-conns": 5,
+                "visibility-max-idle-conns": 5,
+            },
         )
 
     await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
     await ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    await ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True)
+    await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
+    await ops_test.model.deploy(
+        PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True, config={"max_db_connections": 20}
+    )
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME_ADMIN, APP_NAME_UI] + ALL_SERVICES, status="blocked", raise_on_blocked=False, timeout=1200
+            apps=[APP_NAME_ADMIN, APP_NAME_UI, PGBOUNCER_APP_NAME] + ALL_SERVICES,
+            status="blocked",
+            raise_on_blocked=False,
+            timeout=1200,
         )
         await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=1200
+            apps=[POSTGRESQL_APP_NAME], status="active", raise_on_blocked=False, timeout=1200
+        )
+
+        await ops_test.model.integrate(PGBOUNCER_APP_NAME, POSTGRESQL_APP_NAME)
+
+        await ops_test.model.wait_for_idle(
+            apps=[POSTGRESQL_APP_NAME, PGBOUNCER_APP_NAME], status="active", raise_on_blocked=False, timeout=1200
         )
 
         for service in ALL_SERVICES:
             assert ops_test.model.applications[service].units[0].workload_status == "blocked"
 
         # Must integrate temporal-k8s frontend service first
-        await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
-        await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
+        await ops_test.model.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
+        await ops_test.model.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
         for service in ALL_SERVICES:
             if service != "temporal-k8s":
-                await ops_test.model.integrate(f"{service}:db", "postgresql-k8s:database")
-                await ops_test.model.integrate(f"{service}:visibility", "postgresql-k8s:database")
+                await ops_test.model.integrate(f"{service}:db", f"{PGBOUNCER_APP_NAME}:database")
+                await ops_test.model.integrate(f"{service}:visibility", f"{PGBOUNCER_APP_NAME}:database")
 
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
 
@@ -95,11 +117,13 @@ class TestScaling:
         for service in ALL_SERVICES:
             await scale(ops_test, app=service, units=2)
 
-        await run_sample_workflow(ops_test)
+        # The count argument is an arbitrary number, keep it around 500 to allow
+        # runners to complete this number of runs before timeouts.
+        await run_sample_workflow(ops_test, count=500)
 
     async def test_scaling_down(self, ops_test: OpsTest):
         """Scale Temporal charm down to 1 unit."""
         for service in ALL_SERVICES:
             await scale(ops_test, app=service, units=1)
 
-        await run_sample_workflow(ops_test)
+        await run_sample_workflow(ops_test, count=500)
