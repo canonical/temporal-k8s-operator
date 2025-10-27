@@ -39,24 +39,18 @@ async def deploy(ops_test: OpsTest):
             raise_on_blocked=False,
             timeout=600,
         )
-        await ops_test.model.wait_for_idle(
-            apps=[POSTGRESQL_APP_NAME], status="active", raise_on_blocked=False, timeout=90*10
-        )
 
+        # Add integrations and wait for apps to become active and idle
         await ops_test.model.integrate(PGBOUNCER_APP_NAME, POSTGRESQL_APP_NAME)
-
-        await ops_test.model.wait_for_idle(
-            apps=[POSTGRESQL_APP_NAME, PGBOUNCER_APP_NAME], status="active", raise_on_blocked=False, timeout=600
-        )
-
         await ops_test.model.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
+        await ops_test.model.wait_for_idle(status="active", raise_on_blocked=False, timeout=90*10)
 
+        # Run action to create default namespace
         await create_default_namespace(ops_test)
 
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=300)
+        await ops_test.model.wait_for_idle(status="active", raise_on_blocked=False, timeout=300)
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
