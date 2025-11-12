@@ -51,7 +51,7 @@ from log import log_event_handler
 
 # import relations
 from relations.admin import Admin
-from relations.host_info import HostInfo
+from relations.host_info import TemporalHostInfoProvider
 from relations.openfga import OpenFGA
 from relations.postgresql import Postgresql
 from relations.s3_archival import S3Integrator
@@ -200,7 +200,7 @@ class TemporalK8SCharm(CharmBase):
         )
 
         # Host Info
-        self._host_info = HostInfo(self, SERVICE_PORTS["frontend"]["grpc"])
+        self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["frontend"]["grpc"])
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):
