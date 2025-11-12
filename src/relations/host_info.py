@@ -38,10 +38,10 @@ class TemporalHostInfoProvider(framework.Object):
         self.charm = charm
         self.port = port
         charm.framework.observe(
-            charm.on.host_info_relation_joined, self._on_host_info_relation_changed
+            charm.on.temporal_host_info_relation_joined, self._on_host_info_relation_changed
         )
         charm.framework.observe(
-            charm.on.host_info_relation_changed, self._on_host_info_relation_changed
+            charm.on.temporal_host_info_relation_changed, self._on_host_info_relation_changed
         )
         charm.framework.observe(charm.on.leader_elected, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on.config_changed, self._on_host_info_relation_changed)
@@ -87,7 +87,7 @@ class TemporalHostInfoRelationReadyEvent(framework.EventBase):
 class TemporalHostInfoRequirerCharmEvents(CharmEvents):
     """List of events that the requirer charm can leverage."""
 
-    host_info_available = framework.EventSource(TemporalHostInfoRelationReadyEvent)
+    temporal_host_info_available = framework.EventSource(TemporalHostInfoRelationReadyEvent)
 
 
 class TemporalHostInfoRequirer(framework.Object):
@@ -99,7 +99,7 @@ class TemporalHostInfoRequirer(framework.Object):
 
         self.host_info = TemporalHostInfoRequirer(self)
         # update container with new host info
-        self.framework.observe(self.host_info.on.host_info_available, self._update)
+        self.framework.observe(self.host_info.on.temporal_host_info_available, self._update)
     """
 
     def __init__(self, charm: CharmBase):
@@ -114,10 +114,10 @@ class TemporalHostInfoRequirer(framework.Object):
         self.host: str | None = None
         self.port: int | None = None
         charm.framework.observe(
-            charm.on.host_info_relation_joined, self._on_host_info_relation_changed
+            charm.on.temporal_host_info_relation_joined, self._on_host_info_relation_changed
         )
         charm.framework.observe(
-            charm.on.host_info_relation_changed, self._on_host_info_relation_changed
+            charm.on.temporal_host_info_relation_changed, self._on_host_info_relation_changed
         )
 
     def _on_host_info_relation_changed(self, event: RelationChangedEvent):
@@ -128,4 +128,4 @@ class TemporalHostInfoRequirer(framework.Object):
         """
         self.host = event.relation.data[event.relation.app]['host']
         self.port = int(event.relation.data[event.relation.app]['port'])
-        self.on.host_info_available.emit(host=self.host, port=self.port)
+        self.on.temporal_host_info_available.emit(host=self.host, port=self.port)
