@@ -20,6 +20,7 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder, LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.temporal_k8s.v0.temporal_host_info import TemporalHostInfoProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
@@ -51,7 +52,6 @@ from log import log_event_handler
 
 # import relations
 from relations.admin import Admin
-from relations.host_info import TemporalHostInfoProvider
 from relations.openfga import OpenFGA
 from relations.postgresql import Postgresql
 from relations.s3_archival import S3Integrator
