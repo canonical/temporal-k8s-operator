@@ -6,12 +6,11 @@
 import logging
 
 import ops
-
 from charms.temporal_k8s.v0 import temporal_host_info
 
 logger = logging.getLogger(__name__)
 
-CONTAINER = 'workload'
+CONTAINER = "workload"
 
 
 class Charm(ops.CharmBase):
@@ -25,12 +24,10 @@ class Charm(ops.CharmBase):
 
     def _configure(self, event: ops.EventBase):
         if self.host_info.host is None or self.host_info.port is None:
-            self.unit.status = ops.WaitingStatus('Waiting for temporal-host-info relation data')
+            self.unit.status = ops.WaitingStatus("Waiting for temporal-host-info relation data")
             return
-        self.unit.status = ops.ActiveStatus(
-            f'Temporal host: {self.host_info.host}, port: {self.host_info.port}'
-        )
+        self.unit.status = ops.ActiveStatus(f"Temporal host: {self.host_info.host}, port: {self.host_info.port}")
 
 
-if __name__ == '__main__':  # pragma: nocover
+if __name__ == "__main__":  # pragma: nocover
     ops.main(Charm)
