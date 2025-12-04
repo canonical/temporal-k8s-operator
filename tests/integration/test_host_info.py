@@ -1,7 +1,7 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Temporal charm pgbouncer integration tests."""
+"""Temporal charm temporal-host-info relation integration tests."""
 
 import logging
 from pathlib import Path
