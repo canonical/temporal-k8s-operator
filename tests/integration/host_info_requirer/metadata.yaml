@@ -1,0 +1,18 @@
+name: temporal-host-info-requirer
+summary: A small charm for use in integration tests.
+description: A small charm for use in integration tests.
+
+
+containers:
+  workload:
+    resource: workload
+
+resources:
+  workload:
+    type: oci-image
+    description: OCI image for the 'workload' container.
+    upstream-source: ghcr.io/canonical/ubuntu-noble:latest
+
+requires:
+  temporal-host-info:
+    interface: temporal-host-info
