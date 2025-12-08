@@ -1,11 +1,6 @@
-data "juju_model" "terraform_model" {
-  name  = var.model
-  owner = "admin"
-}
-
 resource "juju_application" "temporal_k8s" {
   name       = var.app_name
-  model_uuid = data.juju_model.terraform_model.uuid
+  model_uuid = var.model_uuid
 
   charm {
     name     = "temporal-k8s"
