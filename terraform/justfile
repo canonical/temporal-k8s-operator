@@ -46,9 +46,11 @@ apply variables_file: (initialize)
 
 # Destroy the terraform plan with the provided variables file
 destroy variables_file:
+    #!/usr/bin/bash
     terraform destroy -auto-approve -var-file="${variables_file}"
 
     just destroy-model
+    sed '/model_uuid/d' -i "${variables_file}"
 
 test:
     #!/usr/bin/bash
