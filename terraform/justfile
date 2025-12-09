@@ -19,6 +19,15 @@ destroy-model:
 add-model: (destroy-model)
     juju add-model terraform
 
+[private]
+validate_test_tfvars variables_file:
+    #!/usr/bin/bash
+    MODEL_UUID=$(juju show-model terraform --format=json | jq -r '.terraform["model-uuid"]')
+    if ! juju show-model "${MODEL_UUID}" >/dev/null 2>&1; then
+        exit 1
+    fi
+    echo "model_uuid = \"${MODEL_UUID}\"" >> "${variables_file}"
+
 # Run terraform format
 fmt: (initialize)
     terraform fmt
@@ -37,9 +46,11 @@ apply variables_file: (initialize)
 
 # Destroy the terraform plan with the provided variables file
 destroy variables_file:
+    #!/usr/bin/bash
     terraform destroy -auto-approve -var-file="${variables_file}"
 
     just destroy-model
+    sed '/model_uuid/d' -i "${variables_file}"
 
 test:
     #!/usr/bin/bash
@@ -48,6 +59,8 @@ test:
     trap 'just destroy "./test/test.tfvars"' EXIT
 
     just add-model
+
+    just validate_test_tfvars "./test/test.tfvars"
 
     just apply "./test/test.tfvars"
 

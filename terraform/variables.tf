@@ -10,9 +10,9 @@ variable "units" {
   default     = 1
 }
 
-variable "model" {
+variable "model_uuid" {
   type        = string
-  description = "Juju model where the application is to be deployed"
+  description = "UUID of Juju model where the application is to be deployed"
 }
 
 variable "revision" {

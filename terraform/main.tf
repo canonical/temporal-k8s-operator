@@ -1,6 +1,6 @@
 resource "juju_application" "temporal_k8s" {
-  name  = var.app_name
-  model = var.model
+  name       = var.app_name
+  model_uuid = var.model_uuid
 
   charm {
     name     = "temporal-k8s"
