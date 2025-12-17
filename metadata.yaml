@@ -42,7 +42,6 @@ requires:
     limit: 1
   visibility:
     interface: postgresql_client
-    optional: true
     limit: 1
   nginx-route:
     interface: nginx-route
