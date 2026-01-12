@@ -57,23 +57,25 @@ class TemporalHostInfoProvider(framework.Object):
         :type event: RelationChangedEvent | RelationJoinedEvent
         """
         logger.info("Handling temporal-host-info relation event")
-        if self.charm.unit.is_leader() and "frontend" in str(self.charm.config["services"]):
-            host = str(self.charm.config["external-hostname"])
-            if binding := self.charm.model.get_binding(event.relation):
-                host = host or str(binding.network.bind_address)
-            event.relation.data[self.charm.app]["host"] = host
-            event.relation.data[self.charm.app]["port"] = str(self.port)
+        if not self.charm.unit.is_leader() or "frontend" not in str(self.charm.config["services"]):
+            return
+        host = str(self.charm.config["external-hostname"])
+        if binding := self.charm.model.get_binding(event.relation):
+            host = host or str(binding.network.bind_address)
+        event.relation.data[self.charm.app]["host"] = host
+        event.relation.data[self.charm.app]["port"] = str(self.port)
 
     def _on_config_changed(self, event: ConfigChangedEvent | LeaderElectedEvent):
         """Update relation data on config change."""
         logger.info("Config changed, updating temporal-host-info relation data")
-        if self.charm.unit.is_leader() and "frontend" in str(self.charm.config["services"]):
-            host = str(self.charm.config["external-hostname"])
-            for relation in self.charm.model.relations.get("temporal-host-info", []):
-                if binding := self.charm.model.get_binding(relation):
-                    host = host or str(binding.network.bind_address)
-                relation.data[self.charm.app]["host"] = host
-                relation.data[self.charm.app]["port"] = str(self.port)
+        if not self.charm.unit.is_leader() or "frontend" not in str(self.charm.config["services"]):
+            return
+        host = str(self.charm.config["external-hostname"])
+        for relation in self.charm.model.relations.get("temporal-host-info", []):
+            if binding := self.charm.model.get_binding(relation):
+                host = host or str(binding.network.bind_address)
+            relation.data[self.charm.app]["host"] = host
+            relation.data[self.charm.app]["port"] = str(self.port)
 
 
 class TemporalHostInfoRelationReadyEvent(EventBase):

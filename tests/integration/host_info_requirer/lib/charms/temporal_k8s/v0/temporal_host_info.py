@@ -1,1 +1,0 @@
-../../../../../../../lib/charms/temporal_k8s/v0/temporal_host_info.py
