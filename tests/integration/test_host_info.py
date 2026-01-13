@@ -8,9 +8,7 @@ from pathlib import Path
 
 import jubilant
 import pytest
-from helpers import (
-    APP_NAME,
-)
+from helpers import APP_NAME
 
 logger = logging.getLogger(__name__)
 
