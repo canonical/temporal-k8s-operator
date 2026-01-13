@@ -1,5 +1,5 @@
-# common charmcraft.yaml file symlinked by these charms
-# k8s charms can define containers + resources in metadata.yaml
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
 
 base: ubuntu@24.04
 type: charm

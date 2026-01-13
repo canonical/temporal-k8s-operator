@@ -1,3 +1,5 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
 name: temporal-host-info-requirer
 summary: A small charm for use in integration tests.
 description: A small charm for use in integration tests.

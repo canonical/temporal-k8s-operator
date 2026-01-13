@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(scope="module")
 def host_info_requirer(juju: jubilant.Juju) -> str | Path:
     """Fetch the path to charm."""
-    charm = juju.build_charm("./test/integration/host_info_requirer")
+    charm = juju.build_charm("./tests/integration/host_info_requirer")
     assert charm, "Charm not built"
     return charm
 
