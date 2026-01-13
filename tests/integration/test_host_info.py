@@ -21,6 +21,13 @@ def host_info_requirer(juju: jubilant.Juju) -> str | Path:
     return charm
 
 
+@pytest.fixture(scope="module")
+def juju(deploy: str):
+    """Juju fixture for integration tests."""
+    juju = jubilant.Juju(model_name=deploy)
+    return juju
+
+
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("deploy")
 class TestTemporalHostInfoRelation:

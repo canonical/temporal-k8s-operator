@@ -80,3 +80,5 @@ async def deploy(ops_test: OpsTest, charm: str):
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=300)
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
         assert ops_test.model.applications[APP_NAME_UI].units[0].workload_status == "active"
+
+    yield ops_test.model.name
