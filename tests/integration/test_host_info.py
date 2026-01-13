@@ -24,6 +24,8 @@ def host_info_requirer(juju: jubilant.Juju) -> str | Path:
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("deploy")
 class TestTemporalHostInfoRelation:
+    """Tests for temporal-host-info relation."""
+
     def test_relation(self, juju: jubilant.Juju, host_info_requirer: str | Path):
         cfg = juju.config(APP_NAME)
         services = cfg["services"]["value"]
@@ -38,7 +40,7 @@ class TestTemporalHostInfoRelation:
             application_name="host-info-requirer",
         )
         juju.wait(jubilant.all_active, timeout=300)
-        juju.integrate(f"host-info-requirer:temporal-host-info", f"{APP_NAME}:temporal-host-info")
+        juju.integrate("host-info-requirer:temporal-host-info", f"{APP_NAME}:temporal-host-info")
         juju.wait(jubilant.all_active, timeout=300)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]

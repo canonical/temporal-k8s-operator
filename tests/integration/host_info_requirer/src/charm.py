@@ -17,12 +17,22 @@ class Charm(ops.CharmBase):
     """Charm the application."""
 
     def __init__(self, framework: ops.Framework):
+        """Construct the charm.
+
+        Args:
+            framework: The framework instance
+        """
         super().__init__(framework)
         framework.observe(self.on[CONTAINER].pebble_ready, self._configure)
         self.host_info = temporal_host_info.TemporalHostInfoRequirer(self)
         framework.observe(self.host_info.on.temporal_host_info_available, self._configure)
 
     def _configure(self, event: ops.EventBase):
+        """Handle the pebble ready event and temporal host info available event.
+
+        Args:
+            event: The event that triggered this handler
+        """
         if self.host_info.host is None or self.host_info.port is None:
             self.unit.status = ops.WaitingStatus("Waiting for temporal-host-info relation data")
             return
