@@ -45,6 +45,8 @@ class TemporalHostInfoProvider(framework.Object):
         super().__init__(charm, "temporal_host_info_provider")
         self.charm = charm
         self.port = port
+        if "frontend" not in str(self.charm.config["services"]):
+            raise RuntimeError("temporal-host-info interface requires 'frontend' service to be enabled.")
         charm.framework.observe(charm.on[RELATION_NAME].relation_joined, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on[RELATION_NAME].relation_changed, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on.leader_elected, self._on_config_changed)
@@ -57,7 +59,7 @@ class TemporalHostInfoProvider(framework.Object):
         :type event: RelationChangedEvent | RelationJoinedEvent
         """
         logger.info("Handling temporal-host-info relation event")
-        if not self.charm.unit.is_leader() or "frontend" not in str(self.charm.config["services"]):
+        if not self.charm.unit.is_leader():
             return
         host = str(self.charm.config["external-hostname"])
         if binding := self.charm.model.get_binding(event.relation):
@@ -68,12 +70,14 @@ class TemporalHostInfoProvider(framework.Object):
     def _on_config_changed(self, event: ConfigChangedEvent | LeaderElectedEvent):
         """Update relation data on config change."""
         logger.info("Config changed, updating temporal-host-info relation data")
-        if not self.charm.unit.is_leader() or "frontend" not in str(self.charm.config["services"]):
+        if not self.charm.unit.is_leader():
             return
-        host = str(self.charm.config["external-hostname"])
+        ext_host = str(self.charm.config["external-hostname"])
         for relation in self.charm.model.relations.get("temporal-host-info", []):
-            if binding := self.charm.model.get_binding(relation):
-                host = host or str(binding.network.bind_address)
+            binding = self.charm.model.get_binding(relation)
+            host = ext_host
+            if not host and binding:
+                host = str(binding.network.bind_address)
             relation.data[self.charm.app]["host"] = host
             relation.data[self.charm.app]["port"] = str(self.port)
 
@@ -136,33 +140,35 @@ class TemporalHostInfoRequirer(framework.Object):
         """
         super().__init__(charm, "temporal_host_info_requirer")
         self.charm = charm
+        if len(self.charm.model.relations.get(RELATION_NAME, [])) > 1:
+            raise RuntimeError(f"Multiple {RELATION_NAME} relations are not supported for requirers.")
         charm.framework.observe(charm.on[RELATION_NAME].relation_joined, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on[RELATION_NAME].relation_changed, self._on_host_info_relation_changed)
 
     @property
-    def relations(self) -> list[Relation]:
-        """Return the relations for this interface."""
-        return self.charm.model.relations.get(RELATION_NAME, [])
+    def relation(self) -> Relation | None:
+        """Return the relation for this interface, if any."""
+        return self.charm.model.get_relation(RELATION_NAME)
 
     @property
     def host(self) -> str | None:
         """Return the host from the relation data."""
-        for relation in self.relations:
-            if relation and relation.app:
-                return relation.data[relation.app].get("host", None)
+        relation = self.relation
+        if relation and relation.app:
+            return relation.data[relation.app].get("host", None)
         return None
 
     @property
     def port(self) -> int | None:
         """Return the port from the relation data."""
-        for relation in self.relations:
-            if relation and relation.app:
-                port_str = relation.data[relation.app].get("port", None)
-                if port_str is not None:
-                    return int(port_str)
+        relation = self.relation
+        if relation and relation.app:
+            port_str = relation.data[relation.app].get("port", None)
+            if port_str is not None:
+                return int(port_str)
         return None
 
-    def _on_host_info_relation_changed(self, event: RelationChangedEvent):
+    def _on_host_info_relation_changed(self, event: RelationChangedEvent | RelationJoinedEvent):
         """Handle the relation joined/changed events.
 
         :param: event: The relation event that triggered this handler.
@@ -172,8 +178,5 @@ class TemporalHostInfoRequirer(framework.Object):
             host = event.relation.data[event.relation.app]["host"]
             port = int(event.relation.data[event.relation.app]["port"])
         except KeyError:
-            self.charm.unit.status = WaitingStatus("Waiting for temporal-host-info provider")
-            event.defer()
             return
-        self.charm.unit.status = ActiveStatus()
         self.on.temporal_host_info_available.emit(host=host, port=port)
