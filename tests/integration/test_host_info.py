@@ -26,7 +26,7 @@ class TestTemporalHostInfoRelation:
 
     def test_relation(self, juju: jubilant.Juju):
         cfg = juju.config(APP_NAME)
-        services = cfg["services"]["value"]
+        services = cfg["services"]
         new_cfg = {"external-hostname": "temporal.local.test"}
         if "frontend" not in services:
             services += ",frontend"
@@ -41,4 +41,4 @@ class TestTemporalHostInfoRelation:
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
         expected_status = "Temporal host: temporal.local.test, port: 7233"
         assert requirer_unit.workload_status == "active"
-        assert requirer_unit.workload_status_message == expected_status
+        assert requirer_unit.workload_status.message == expected_status
