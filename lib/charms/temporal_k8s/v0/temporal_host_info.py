@@ -46,7 +46,8 @@ class TemporalHostInfoProvider(framework.Object):
         self.charm = charm
         self.port = port
         if "frontend" not in str(self.charm.config["services"]):
-            raise RuntimeError("temporal-host-info interface requires 'frontend' service to be enabled.")
+            logger.warning("The temporal-host-info relation interface requires the 'frontend' service to be enabled.")
+            return
         charm.framework.observe(charm.on[RELATION_NAME].relation_joined, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on[RELATION_NAME].relation_changed, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on.leader_elected, self._on_config_changed)
