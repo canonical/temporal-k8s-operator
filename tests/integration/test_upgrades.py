@@ -66,7 +66,21 @@ class TestUpgrade:
 
         # This is to accmmodate for a self-resolving error which sometimes appears when Temporal
         # services attempt to connect to the cluster before the application is ready.
-        await ops_test.model.applications[APP_NAME].refresh(path=str(charm), resources=resources, base="ubuntu@24.04")
+        # Use CLI directly to support --base parameter for 22.04→24.04 platform upgrade
+        model_name = ops_test.model.name
+        retcode, stdout, stderr = await ops_test.juju(
+            "refresh",
+            APP_NAME,
+            "--path",
+            str(charm),
+            "--resource",
+            f"temporal-server-image={resources['temporal-server-image']}",
+            "--base",
+            "ubuntu@24.04",
+            "-m",
+            model_name,
+        )
+        assert retcode == 0, f"Refresh failed: {stderr}"
 
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
