@@ -66,7 +66,7 @@ class TestUpgrade:
 
         # This is to accmmodate for a self-resolving error which sometimes appears when Temporal
         # services attempt to connect to the cluster before the application is ready.
-        await ops_test.model.applications[APP_NAME].refresh(path=str(charm), resources=resources)
+        await ops_test.model.applications[APP_NAME].refresh(path=str(charm), resources=resources, base="ubuntu@24.04")
 
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
