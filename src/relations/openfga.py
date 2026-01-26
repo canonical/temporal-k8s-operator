@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import requests
 from charms.openfga_k8s.v1.openfga import OpenFGAStoreCreateEvent
-from openfga_sdk import ReadRequestTupleKey, TupleKey
+from openfga_sdk import ReadRequestTupleKey
 from openfga_sdk.client import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
@@ -224,14 +224,30 @@ class OpenFGA(framework.Object):
 
         user = event.params.get("user")
         group = event.params.get("group")
+        namespace = event.params.get("namespace")
         openfga_data = self.charm._state.openfga
 
         if user:
+            if not user.strip():
+                logger.error("list-auth-rule action failed: 'user' value cannot be empty")
+                event.fail("'user' value cannot be empty")
+                return
             asyncio.run(_list_user_auth_rules(event, openfga_data))
         elif group:
+            if not group.strip():
+                logger.error("list-auth-rule action failed: 'group' value cannot be empty")
+                event.fail("'group' value cannot be empty")
+                return
             asyncio.run(_list_group_auth_rules(event, openfga_data))
-        else:
+        elif namespace:
+            if not namespace.strip():
+                logger.error("list-auth-rule action failed: 'namespace' value cannot be empty")
+                event.fail("'namespace' value cannot be empty")
+                return
             asyncio.run(_list_namespace_auth_rules(event, openfga_data))
+        else:
+            logger.error("list-auth-rule action failed: one of 'user', 'group', or 'namespace' is required")
+            event.fail("one of 'user', 'group', or 'namespace' is required")
 
     @log_event_handler(logger)
     def _on_check_auth_rule_action(self, event):
@@ -599,7 +615,7 @@ async def _list_namespace_auth_rules(event, openfga_data):
     """
     try:
         results = {key: [] for key in ALLOWED_OFGA_ROLES}
-        body = TupleKey(
+        body = ReadRequestTupleKey(
             object=f"namespace:{event.params.get('namespace')}",
         )
 
