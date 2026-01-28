@@ -127,5 +127,3 @@ Metrics", make sure to select the juju model which contains your Temporal charm.
 The Temporal charm supports observability through either direct COS relations (shown above)
 or via [OpenTelemetry Collector](https://charmhub.io/opentelemetry-collector-k8s).
 Both use the same `prometheus_scrape` interface.
-
-> **Note:** `grafana-agent-k8s` is deprecated. Use `opentelemetry-collector-k8s` instead.
