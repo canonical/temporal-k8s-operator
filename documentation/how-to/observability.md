@@ -121,3 +121,9 @@ juju run grafana/0 -m cos get-admin-password --wait 1m
 Grafana can be accessed on port 3000 of the app IP address (in our case, it will
 be `10.152.183.78:3000`). The dashboard can be accessed under "Temporal Server
 Metrics", make sure to select the juju model which contains your Temporal charm.
+
+## Using OpenTelemetry Collector
+
+The Temporal charm supports observability through either direct COS relations (shown above)
+or via [OpenTelemetry Collector](https://charmhub.io/opentelemetry-collector-k8s).
+Both use the same `prometheus_scrape` interface.
