@@ -24,7 +24,7 @@ def juju(deploy: str):
 def host_info_requirer_charm() -> pathlib.Path:
     """Return full absolute path to given test charm."""
     name = "temporal-host-info-requirer"
-    charm_dir = pathlib.Path(__file__) / "host_info_requirer"
+    charm_dir = pathlib.Path(__file__).parent / "host_info_requirer"
     charms = [p.absolute() for p in charm_dir.glob(f"{name}_*.charm")]
     assert charms, f"{name}_*.charm not found"
     assert len(charms) == 1, "more than one .charm file, unsure which to use"
