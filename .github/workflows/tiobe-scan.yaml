@@ -9,6 +9,8 @@ on:
 jobs:
     tics:
         name: TiCs
+        # Only run if we have access to secrets.
+        if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
         uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@main
         with: 
             coverage-folder: ".cover"
