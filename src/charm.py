@@ -421,7 +421,7 @@ class TemporalK8SCharm(CharmBase):
         """
         try:
             container.exec(["logrotate", "/etc/logrotate.d/temporal-server"]).wait()
-        except pebble.ExecError as e:
+        except (pebble.ExecError, pebble.APIError) as e:
             logger.warning(f"Log rotation failed: {e}")
 
     def _check_missing_params(self, params, required_params):
