@@ -8,6 +8,8 @@
 from enum import Enum
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
+LOG_OUTPUT_FILE = "/var/log/temporal/server.log"
+LOG_FORMAT = "json"
 DB_NAME = "temporal-k8s_db"
 VISIBILITY_DB_NAME = "temporal-k8s_visibility"
 ALLOWED_OFGA_ROLES = ["admin", "writer", "reader"]
