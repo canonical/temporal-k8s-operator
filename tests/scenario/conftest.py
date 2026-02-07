@@ -2,13 +2,11 @@
 # See LICENSE file for licensing details.
 
 import json
-import os
 
 import ops.testing
 import pytest
 
 from charm import TemporalK8SCharm
-from literals import LOG_OUTPUT_FILE
 
 
 def pytest_configure(config):  # noqa: DCO020
@@ -52,10 +50,7 @@ def context(temporal_k8s_charm):
 
 @pytest.fixture(scope="function")
 def log_dir_execs():
-    log_dir = os.path.dirname(LOG_OUTPUT_FILE)
     return {
-        ops.testing.Exec(["mkdir", "-p", log_dir]),
-        ops.testing.Exec(["chown", "-R", "ubuntu:ubuntu", log_dir]),
         ops.testing.Exec(["logrotate", "/etc/logrotate.d/temporal-server"]),
     }
 

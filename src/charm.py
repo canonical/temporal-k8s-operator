@@ -638,8 +638,7 @@ class TemporalK8SCharm(CharmBase):
 
         # Ensure log directory exists
         log_dir = os.path.dirname(LOG_OUTPUT_FILE)
-        container.exec(["mkdir", "-p", log_dir]).wait()
-        container.exec(["chown", "-R", "ubuntu:ubuntu", log_dir]).wait()
+        container.make_dir(log_dir, make_parents=True, user="ubuntu", group="ubuntu")
 
         # Configure log rotation
         logrotate_config = f"""{LOG_OUTPUT_FILE} {{
