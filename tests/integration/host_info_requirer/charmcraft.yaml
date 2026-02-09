@@ -9,3 +9,10 @@ platforms:
 parts:
   charm:
     source: .
+containers:
+  workload:
+    resource: testapp-image
+resources:
+  testapp-image:
+    type: oci-image
+    description: Simple web server image
