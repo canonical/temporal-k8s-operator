@@ -647,6 +647,7 @@ class TemporalK8SCharm(CharmBase):
     size 100M
     missingok
     notifempty
+    nomail
     compress
     delaycompress
     copytruncate
