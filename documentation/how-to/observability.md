@@ -140,7 +140,5 @@ Log rotation runs periodically via Juju's `update-status` event:
 
 - **Rotation trigger**: Daily or when file reaches 100MB (whichever occurs first)
 - **Retention**: 7 rotated files are kept locally 
-- **Compression**: Old logs are compressed with gzip to save disk space
+- **Compression**: Old logs are compressed
 - **Location**: Rotated files are stored as `server.log.1.gz` through `server.log.7.gz`
-
-After 7 rotations, the oldest local log file is automatically deleted.

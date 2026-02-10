@@ -387,7 +387,7 @@ class TemporalK8SCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Status check: DOWN")
             return
 
-        # Run log rotation (idempotent - only rotates when needed)
+        # Run log rotation
         self._run_log_rotation(container)
 
         self.unit.set_workload_version(WORKLOAD_VERSION)
