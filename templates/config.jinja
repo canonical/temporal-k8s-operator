@@ -1,6 +1,8 @@
 log:
-    stdout: true
+    stdout: false
     level: {{ LOG_LEVEL | default("info") }}
+    format: {{ LOG_FORMAT | default("json") }}
+    outputFile: {{ LOG_OUTPUT_FILE | default("/var/log/temporal/server.log") }}
 
 auth:
   enabled: {{ AUTH_ENABLED | default("false") }}

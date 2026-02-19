@@ -49,18 +49,27 @@ def context(temporal_k8s_charm):
 
 
 @pytest.fixture(scope="function")
-def temporal_container():
+def log_dir_execs():
+    return {
+        ops.testing.Exec(["logrotate", "/etc/logrotate.d/temporal-server"]),
+    }
+
+
+@pytest.fixture(scope="function")
+def temporal_container(log_dir_execs):
     return ops.testing.Container(
         "temporal",
         can_connect=True,
+        execs=log_dir_execs,
     )
 
 
 @pytest.fixture(scope="function")
-def temporal_container_initialized():
+def temporal_container_initialized(log_dir_execs):
     return ops.testing.Container(
         "temporal",
         can_connect=True,
+        execs=log_dir_execs,
         check_infos=[ops.testing.CheckInfo("temporal-server-running")],
         layers={
             "initialized-layer": ops.pebble.Layer(
@@ -95,10 +104,11 @@ def incomplete_layer_dict():
 
 
 @pytest.fixture(scope="function")
-def temporal_container_incomplete_layer(incomplete_layer_dict):
+def temporal_container_incomplete_layer(incomplete_layer_dict, log_dir_execs):
     return ops.testing.Container(
         "temporal",
         can_connect=True,
+        execs=log_dir_execs,
         layers={
             "incomplete-layer": ops.pebble.Layer(incomplete_layer_dict),
         },
