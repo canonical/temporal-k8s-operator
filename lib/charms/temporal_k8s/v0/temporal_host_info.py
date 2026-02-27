@@ -7,13 +7,15 @@ from ops import (
     ConfigChangedEvent,
     Handle,
     LeaderElectedEvent,
+    RelationBrokenEvent,
     RelationChangedEvent,
     RelationJoinedEvent,
+    TooManyRelatedAppsError,
     framework,
 )
 from ops.charm import CharmBase
 from ops.framework import EventBase, EventSource, ObjectEvents
-from ops.model import ActiveStatus, Relation, WaitingStatus
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "024db27b47e546628c9ed7f26ddad6c8"
@@ -113,6 +115,8 @@ class TemporalHostInfoRequirerCharmEvents(ObjectEvents):
     """List of events that the requirer charm can leverage."""
 
     temporal_host_info_available = EventSource(TemporalHostInfoRelationReadyEvent)
+    # No data to snapshot/restore here, so we can just use EventBase
+    temporal_host_info_broken = EventSource(EventBase)
 
 
 class TemporalHostInfoRequirer(framework.Object):
@@ -134,17 +138,20 @@ class TemporalHostInfoRequirer(framework.Object):
     on = TemporalHostInfoRequirerCharmEvents()  # type: ignore[reportAssignmentType]
 
     def __init__(self, charm: CharmBase):
-        """Create a new instance of the TemporalHostInfoProvider class.
+        """Create a new instance of the TemporalHostInfoRequirer class.
 
         :param: charm: The charm that is using this interface.
         :type charm: CharmBase
         """
         super().__init__(charm, "temporal_host_info_requirer")
         self.charm = charm
-        if len(self.charm.model.relations.get(RELATION_NAME, [])) > 1:
+        try:
+            self.charm.model.get_relation(RELATION_NAME)
+        except TooManyRelatedAppsError:
             raise RuntimeError(f"Multiple {RELATION_NAME} relations are not supported for requirers.")
         charm.framework.observe(charm.on[RELATION_NAME].relation_joined, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on[RELATION_NAME].relation_changed, self._on_host_info_relation_changed)
+        charm.framework.observe(charm.on[RELATION_NAME].relation_broken, self._on_host_info_relation_broken)
 
     @property
     def relation(self) -> Relation | None:
@@ -168,6 +175,14 @@ class TemporalHostInfoRequirer(framework.Object):
             if port_str is not None:
                 return int(port_str)
         return None
+
+    def _on_host_info_relation_broken(self, event: RelationBrokenEvent):
+        """Handle the relation broken event.
+
+        :param: event: The relation broken event that triggered this handler.
+        :type event: RelationBrokenEvent
+        """
+        self.on.temporal_host_info_broken.emit()
 
     def _on_host_info_relation_changed(self, event: RelationChangedEvent | RelationJoinedEvent):
         """Handle the relation joined/changed events.
