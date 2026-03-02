@@ -48,7 +48,7 @@ class TestTemporalHostInfoRelation:
         juju.deploy(
             host_info_requirer_charm,
             "host-info-requirer",
-            resources={"testapp-image": "ghcr.io/canonical/api_demo_server:1.0.2"},
+            resources={"workload-image": "ghcr.io/canonical/api_demo_server:1.0.2"},
         )
         juju.wait(jubilant.all_active, timeout=300)
         juju.integrate("host-info-requirer:temporal-host-info", f"{APP_NAME}:temporal-host-info")

@@ -1,6 +1,8 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
-
+name: temporal-host-info-requirer
+summary: A test charm for the temporal-host-info relation.
+description: This charm is used for testing purposes only.
 base: ubuntu@24.04
 type: charm
 platforms:
@@ -11,8 +13,9 @@ parts:
     source: .
 containers:
   workload:
-    resource: testapp-image
+    resource: workload-image
 resources:
-  testapp-image:
+  workload-image:
     type: oci-image
     description: Simple web server image
+    upstream-source: ghcr.io/canonical/api_demo_server:1.0.2
