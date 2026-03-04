@@ -11,6 +11,8 @@ platforms:
 parts:
   charm:
     source: .
+    build-packages:
+      - python3-venv
 containers:
   workload:
     resource: workload-image
@@ -19,3 +21,7 @@ resources:
     type: oci-image
     description: Simple web server image
     upstream-source: ghcr.io/canonical/api_demo_server:1.0.2
+requires:
+  temporal-host-info:
+    interface: temporal-host-info
+    limit: 1
