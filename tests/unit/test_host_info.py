@@ -71,8 +71,8 @@ class RequirerCharm(ops.CharmBase):
         """
         super().__init__(framework)
         self.host_info = TemporalHostInfoRequirer(self)
-        self.received_host_info_changed = []
-        self.received_host_info_broken = []
+        self.received_host_info_changed: list[ops.EventBase] = []
+        self.received_host_info_broken: list[ops.EventBase] = []
         framework.observe(self.host_info.on.temporal_host_info_changed, self._on_changed)
         framework.observe(self.host_info.on.temporal_host_info_broken, self._on_broken)
 
