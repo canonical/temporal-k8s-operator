@@ -3,7 +3,6 @@
 
 """Temporal charm temporal-host-info relation integration tests."""
 
-import json
 import logging
 import pathlib
 
@@ -38,6 +37,7 @@ class TestTemporalHostInfoRelation:
     """Tests for temporal-host-info relation."""
 
     def test_relation(self, juju: jubilant.Juju, host_info_requirer_charm: pathlib.Path):
+        """Test host and port are correctly published when external-hostname is set."""
         cfg = juju.config(APP_NAME)
         services = cfg["services"]
         new_cfg = {"external-hostname": "temporal.local.test"}
@@ -61,6 +61,7 @@ class TestTemporalHostInfoRelation:
         assert requirer_unit.workload_status.message == expected_status
 
     def test_relation_no_ext_hostname(self, juju: jubilant.Juju):
+        """Test host falls back to pod IP when external-hostname is unset."""
         juju.config(APP_NAME, {"external-hostname": ""})
         juju.wait(jubilant.all_active, timeout=300)
         status = juju.status()

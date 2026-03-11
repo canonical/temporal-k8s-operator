@@ -26,10 +26,10 @@ class Charm(ops.CharmBase):
         super().__init__(framework)
         framework.observe(self.on[CONTAINER].pebble_ready, self._configure)
         self.host_info = temporal_host_info.TemporalHostInfoRequirer(self)
-        framework.observe(self.host_info.on.temporal_host_info_available, self._configure)
+        framework.observe(self.host_info.on.temporal_host_info_changed, self._configure)
 
     def _configure(self, event: ops.EventBase):
-        """Handle the pebble ready event and temporal host info available event.
+        """Handle the pebble ready event and temporal host info changed event.
 
         Args:
             event: The event that triggered this handler

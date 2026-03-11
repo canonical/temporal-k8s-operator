@@ -23,6 +23,12 @@ The How-to guides will cover the following:
 - [Enabling Archival](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-enable-archival/13106):
   for enabling workflow event history archival to an S3 bucket.
 
+<!-- TODO: Add a Discourse link -->
+
+- Using the temporal-host-info relation:
+  for integrating other charms with the Temporal server using the
+  `temporal-host-info` interface and charm library.
+
 Also check out the
 [Tutorials](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-introduction/11777)
 for step-by-step instructions that help you get started with Charmed Temporal,
