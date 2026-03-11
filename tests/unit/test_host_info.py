@@ -8,7 +8,6 @@ import dataclasses
 import ops
 import ops.testing
 import pytest
-
 from charms.temporal_k8s.v0.temporal_host_info import (
     TemporalHostInfoChangedEvent,
     TemporalHostInfoProvider,
@@ -23,7 +22,12 @@ EXTERNAL_HOSTNAME = "temporal.example.com"
 
 # Minimal provider charm
 class ProviderCharm(ops.CharmBase):
-    """Minimal charm for testing TemporalHostInfoProvider."""
+    """Minimal charm for testing TemporalHostInfoProvider.
+
+    Attributes:
+        META: Charm metadata defining the temporal-host-info relation.
+        CONFIG: Charm config options for services and external-hostname.
+    """
 
     META = {
         "name": "provider-charm",
@@ -37,13 +41,22 @@ class ProviderCharm(ops.CharmBase):
     }
 
     def __init__(self, framework: ops.Framework):
+        """Initialize the provider charm and its TemporalHostInfoProvider.
+
+        Args:
+            framework: The charm framework.
+        """
         super().__init__(framework)
         self.host_info = TemporalHostInfoProvider(self, port=PROVIDER_PORT)
 
 
 # Minimal requirer charm
 class RequirerCharm(ops.CharmBase):
-    """Minimal charm for testing TemporalHostInfoRequirer."""
+    """Minimal charm for testing TemporalHostInfoRequirer.
+
+    Attributes:
+        META: Charm metadata defining the temporal-host-info relation.
+    """
 
     META = {
         "name": "requirer-charm",
@@ -51,6 +64,11 @@ class RequirerCharm(ops.CharmBase):
     }
 
     def __init__(self, framework: ops.Framework):
+        """Initialize the requirer charm and its TemporalHostInfoRequirer.
+
+        Args:
+            framework: The charm framework.
+        """
         super().__init__(framework)
         self.host_info = TemporalHostInfoRequirer(self)
         self.received_host_info_changed = []
@@ -59,9 +77,11 @@ class RequirerCharm(ops.CharmBase):
         framework.observe(self.host_info.on.temporal_host_info_broken, self._on_broken)
 
     def _on_changed(self, event: ops.EventBase) -> None:
+        """Record temporal_host_info_changed events for testing."""
         self.received_host_info_changed.append(event)
 
     def _on_broken(self, event: ops.EventBase) -> None:
+        """Record temporal_host_info_broken events for testing."""
         self.received_host_info_broken.append(event)
 
 
@@ -274,9 +294,7 @@ class TestTemporalHostInfoRequirer:
             relations=[requirer_relation_with_data],
         )
 
-        with requirer_context(
-            requirer_context.on.relation_changed(requirer_relation_with_data), state
-        ) as manager:
+        with requirer_context(requirer_context.on.relation_changed(requirer_relation_with_data), state) as manager:
             charm = manager.charm
             manager.run()
 
@@ -297,9 +315,7 @@ class TestTemporalHostInfoRequirer:
             relations=[requirer_relation_no_data],
         )
 
-        with requirer_context(
-            requirer_context.on.relation_changed(requirer_relation_no_data), state
-        ) as manager:
+        with requirer_context(requirer_context.on.relation_changed(requirer_relation_no_data), state) as manager:
             charm = manager.charm
             manager.run()
 
@@ -316,9 +332,7 @@ class TestTemporalHostInfoRequirer:
             relations=[requirer_relation_with_data],
         )
 
-        with requirer_context(
-            requirer_context.on.relation_broken(requirer_relation_with_data), state
-        ) as manager:
+        with requirer_context(requirer_context.on.relation_broken(requirer_relation_with_data), state) as manager:
             charm = manager.charm
             manager.run()
 
