@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 name: temporal-host-info-requirer
 summary: A test charm for the temporal-host-info relation.
@@ -13,14 +13,6 @@ parts:
     source: .
     build-packages:
       - python3-venv
-containers:
-  workload:
-    resource: workload-image
-resources:
-  workload-image:
-    type: oci-image
-    description: Simple web server image
-    upstream-source: ghcr.io/canonical/api_demo_server:1.0.2
 requires:
   temporal-host-info:
     interface: temporal-host-info

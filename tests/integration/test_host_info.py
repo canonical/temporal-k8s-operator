@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Temporal charm temporal-host-info relation integration tests."""
@@ -46,11 +46,7 @@ class TestTemporalHostInfoRelation:
             new_cfg["services"] = services
         juju.config(APP_NAME, new_cfg)
         # Deploy host info requirer charm
-        juju.deploy(
-            host_info_requirer_charm,
-            "host-info-requirer",
-            resources={"workload-image": "ghcr.io/canonical/api_demo_server:1.0.2"},
-        )
+        juju.deploy(host_info_requirer_charm, "host-info-requirer")
         juju.wait(jubilant.all_agents_idle, timeout=300)
         juju.integrate("host-info-requirer:temporal-host-info", f"{APP_NAME}:temporal-host-info")
         juju.wait(jubilant.all_active, timeout=300)

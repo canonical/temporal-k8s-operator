@@ -72,17 +72,17 @@ class RequirerCharm(ops.CharmBase):
         super().__init__(framework)
         self.host_info = TemporalHostInfoRequirer(self)
         self.received_host_info_changed: list[ops.EventBase] = []
-        self.received_host_info_broken: list[ops.EventBase] = []
+        self.received_host_info_unavailable: list[ops.EventBase] = []
         framework.observe(self.host_info.on.temporal_host_info_changed, self._on_changed)
-        framework.observe(self.host_info.on.temporal_host_info_broken, self._on_broken)
+        framework.observe(self.host_info.on.temporal_host_info_unavailable, self._on_unavailable)
 
     def _on_changed(self, event: ops.EventBase) -> None:
         """Record temporal_host_info_changed events for testing."""
         self.received_host_info_changed.append(event)
 
-    def _on_broken(self, event: ops.EventBase) -> None:
-        """Record temporal_host_info_broken events for testing."""
-        self.received_host_info_broken.append(event)
+    def _on_unavailable(self, event: ops.EventBase) -> None:
+        """Record temporal_host_info_unavailable events for testing."""
+        self.received_host_info_unavailable.append(event)
 
 
 # Provider fixtures
@@ -326,7 +326,7 @@ class TestTemporalHostInfoRequirer:
         requirer_context,
         requirer_relation_with_data,
     ):
-        """Requirer emits temporal_host_info_broken when relation is removed."""
+        """Requirer emits temporal_host_info_unavailable when relation is removed."""
         state = ops.testing.State(
             leader=True,
             relations=[requirer_relation_with_data],
@@ -336,7 +336,7 @@ class TestTemporalHostInfoRequirer:
             charm = manager.charm
             manager.run()
 
-        assert len(charm.received_host_info_broken) == 1
+        assert len(charm.received_host_info_unavailable) == 1
 
     def test_requirer_raises_on_multiple_relations(self, requirer_context):
         """Requirer raises RuntimeError if more than one temporal-host-info relation exists."""

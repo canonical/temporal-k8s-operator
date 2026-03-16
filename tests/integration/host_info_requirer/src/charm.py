@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """K8s charm for testing."""
@@ -10,8 +10,6 @@ import ops
 from charms.temporal_k8s.v0 import temporal_host_info
 
 logger = logging.getLogger(__name__)
-
-CONTAINER = "workload"
 
 
 class Charm(ops.CharmBase):
@@ -24,7 +22,6 @@ class Charm(ops.CharmBase):
             framework: The framework instance
         """
         super().__init__(framework)
-        framework.observe(self.on[CONTAINER].pebble_ready, self._configure)
         self.host_info = temporal_host_info.TemporalHostInfoRequirer(self)
         framework.observe(self.host_info.on.temporal_host_info_changed, self._configure)
 

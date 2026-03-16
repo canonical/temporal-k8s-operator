@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Charm library for the temporal-host-info relation interface.
@@ -14,11 +14,11 @@ from ops import (
     ConfigChangedEvent,
     Handle,
     LeaderElectedEvent,
+    Object,
     RelationBrokenEvent,
     RelationChangedEvent,
     RelationJoinedEvent,
     TooManyRelatedAppsError,
-    framework,
 )
 from ops.charm import CharmBase
 from ops.framework import EventBase, EventSource, ObjectEvents
@@ -39,7 +39,7 @@ RELATION_NAME = "temporal-host-info"
 logger = logging.getLogger(__name__)
 
 
-class TemporalHostInfoProvider(framework.Object):
+class TemporalHostInfoProvider(Object):
     """A class for managing the temporal-host-info interface provider."""
 
     def __init__(self, charm: CharmBase, port: int):
@@ -137,10 +137,10 @@ class TemporalHostInfoRequirerCharmEvents(ObjectEvents):
 
     temporal_host_info_changed = EventSource(TemporalHostInfoChangedEvent)
     # No data to snapshot/restore here, so we can just use EventBase
-    temporal_host_info_broken = EventSource(EventBase)
+    temporal_host_info_unavailable = EventSource(EventBase)
 
 
-class TemporalHostInfoRequirer(framework.Object):
+class TemporalHostInfoRequirer(Object):
     """A class for managing the temporal-host-info interface requirer.
 
     Track this relation in your charm with:
@@ -203,7 +203,7 @@ class TemporalHostInfoRequirer(framework.Object):
         :param: event: The relation broken event that triggered this handler.
         :type event: RelationBrokenEvent
         """
-        self.on.temporal_host_info_broken.emit()
+        self.on.temporal_host_info_unavailable.emit()
 
     def _on_host_info_relation_changed(self, event: RelationChangedEvent | RelationJoinedEvent):
         """Handle the relation joined/changed events.
