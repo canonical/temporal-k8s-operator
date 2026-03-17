@@ -20,6 +20,7 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder, LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.temporal_k8s.v0.temporal_host_info import TemporalHostInfoProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
@@ -197,6 +198,9 @@ class TemporalK8SCharm(CharmBase):
             self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
             self._update,
         )
+
+        # Host Info
+        self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["frontend"]["grpc"])
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):

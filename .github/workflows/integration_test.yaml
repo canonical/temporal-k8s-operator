@@ -17,7 +17,7 @@ jobs:
       use-canonical-k8s: true
       channel: 1.33-classic/stable
       charmcraft-channel: latest/stable
-      modules: '["test_charm.py", "test_auth.py", "test_scaling.py", "test_server_upgrade.py", "test_upgrades.py", "test_pgbouncer.py"]'
+      modules: '["test_charm.py", "test_auth.py", "test_scaling.py", "test_server_upgrade.py", "test_upgrades.py", "test_pgbouncer.py", "test_host_info.py"]'
       juju-channel: 3.6/stable
       self-hosted-runner: true
       self-hosted-runner-label: large

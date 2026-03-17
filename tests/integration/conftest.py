@@ -65,7 +65,7 @@ async def deploy(ops_test: OpsTest, charm: str):
             apps=["postgresql-k8s", "self-signed-certificates"], status="active", raise_on_blocked=False, timeout=1200
         )
 
-        await ops_test.model.integrate("self-signed-certificates", "postgresql-k8s")
+        await ops_test.model.integrate("postgresql-k8s:certificates", "self-signed-certificates:certificates")
         await ops_test.model.wait_for_idle(
             apps=["postgresql-k8s", "self-signed-certificates"], status="active", raise_on_blocked=False, timeout=1200
         )
@@ -80,3 +80,5 @@ async def deploy(ops_test: OpsTest, charm: str):
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=300)
         assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
         assert ops_test.model.applications[APP_NAME_UI].units[0].workload_status == "active"
+
+    yield ops_test.model.name
