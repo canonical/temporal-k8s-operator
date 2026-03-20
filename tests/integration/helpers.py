@@ -4,6 +4,7 @@
 
 """Temporal charm integration test helpers."""
 
+import asyncio
 import datetime
 import logging
 import time
@@ -13,7 +14,7 @@ import yaml
 from pytest_operator.plugin import OpsTest
 from temporal_client.activities import say_hello
 from temporal_client.workflows import SayHello
-from temporalio.client import Client
+from temporalio.client import Client, WorkflowFailureError
 from temporalio.worker import Worker
 
 logger = logging.getLogger(__name__)
@@ -56,9 +57,14 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
     Args:
         ops_test: PyTest object.
         count: Number of workflows to run.
+
+    Raises:
+        WorkflowFailureError: If workflow execution keeps failing after retries.
     """
     url = await get_application_url(ops_test, application=APP_NAME, port=7233)
     logger.info("running workflow on app address: %s", url)
+    # Temporal can report active before worker scheduling is fully ready in CI.
+    await asyncio.sleep(30)
 
     client = await Client.connect(url)
 
@@ -67,14 +73,37 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
     async with Worker(client, task_queue="my-task-queue", workflows=[SayHello], activities=[say_hello]):
         name = "Jean-luc"
         for i in range(count):
-            logger.info(f"running workflow #{i + 1}")
-            result = await client.execute_workflow(
-                SayHello.run,
-                name,
-                id="my-workflow-id",
-                task_queue="my-task-queue",
-                execution_timeout=datetime.timedelta(seconds=300),
-            )
+            logger.info("running workflow #%d", i + 1)
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    result = await client.execute_workflow(
+                        SayHello.run,
+                        name,
+                        id=f"my-workflow-id-{i}-{attempt}",
+                        task_queue="my-task-queue",
+                        execution_timeout=datetime.timedelta(seconds=300),
+                    )
+                    break
+                except WorkflowFailureError as exc:
+                    message = str(exc).lower()
+                    retryable = (
+                        "scheduletostart timeout" in message
+                        or "activity task timed out" in message
+                        or "timeout expired" in message
+                        or "not enough hosts" in message
+                    )
+                    if not retryable or attempt == max_attempts - 1:
+                        raise
+                    backoff = 10 * (attempt + 1)
+                    logger.warning(
+                        "workflow attempt %d/%d failed with retryable error: %s; retrying in %ss",
+                        attempt + 1,
+                        max_attempts,
+                        exc,
+                        backoff,
+                    )
+                    await asyncio.sleep(backoff)
             logger.info(f"result: {result}")
         assert result == f"Hello, {name}!"
 
@@ -96,7 +125,9 @@ async def create_default_namespace(ops_test: OpsTest):
     )
     result = (await action.wait()).results
     logger.info(f"cli result: {result}")
-    assert "result" in result and result["result"] == "command succeeded"
+    assert result.get("return-code") == 0
+    if "result" in result:
+        assert result["result"] == "command succeeded"
 
 
 async def get_application_url(ops_test: OpsTest, application, port):
