@@ -68,7 +68,7 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
     """
     url = await get_application_url(ops_test, application=APP_NAME, port=7233)
     logger.info("running workflow on app address: %s", url)
-    # Temporal can report active before matching / worker scheduling is ready in CI (incl. multi-unit).
+    # Juju active may precede Temporal matching/worker scheduling readiness in CI.
     await asyncio.sleep(45)
 
     client = await Client.connect(url)
