@@ -17,6 +17,11 @@ from temporal_client.workflows import SayHello
 from temporalio.client import Client, WorkflowFailureError
 from temporalio.worker import Worker
 
+try:
+    import temporal_sdk_bridge
+except ImportError:  # integration extra not installed (e.g. lint-only env)
+    temporal_sdk_bridge = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
@@ -63,10 +68,14 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
     """
     url = await get_application_url(ops_test, application=APP_NAME, port=7233)
     logger.info("running workflow on app address: %s", url)
-    # Temporal can report active before worker scheduling is fully ready in CI.
-    await asyncio.sleep(30)
+    # Temporal can report active before matching / worker scheduling is ready in CI (incl. multi-unit).
+    await asyncio.sleep(45)
 
     client = await Client.connect(url)
+
+    workflow_errors: tuple = (WorkflowFailureError,)
+    if temporal_sdk_bridge is not None:
+        workflow_errors = (WorkflowFailureError, temporal_sdk_bridge.RPCError)
 
     # Run a worker for the workflow
     start_time = time.time()
@@ -74,7 +83,7 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
         name = "Jean-luc"
         for i in range(count):
             logger.info("running workflow #%d", i + 1)
-            max_attempts = 3
+            max_attempts = 5
             for attempt in range(max_attempts):
                 try:
                     result = await client.execute_workflow(
@@ -85,13 +94,14 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
                         execution_timeout=datetime.timedelta(seconds=300),
                     )
                     break
-                except WorkflowFailureError as exc:
+                except workflow_errors as exc:
                     message = str(exc).lower()
                     retryable = (
                         "scheduletostart timeout" in message
                         or "activity task timed out" in message
                         or "timeout expired" in message
                         or "not enough hosts" in message
+                        or "unavailable" in message
                     )
                     if not retryable or attempt == max_attempts - 1:
                         raise
