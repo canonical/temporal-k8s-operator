@@ -13,6 +13,12 @@ parts:
     source: .
     build-packages:
       - python3-venv
+    charm-binary-python-packages:
+      - hatchling
+      - pluggy
+      - setuptools-scm
+      - opentelemetry-api
+      - pathspec
 requires:
   temporal-host-info:
     interface: temporal-host-info
