@@ -8,8 +8,10 @@ import asyncio
 import datetime
 import logging
 import time
+import uuid
 from pathlib import Path
 
+import tenacity
 import yaml
 from pytest_operator.plugin import OpsTest
 from temporal_client.activities import say_hello
@@ -73,9 +75,21 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
 
     client = await Client.connect(url)
 
-    workflow_errors: tuple = (WorkflowFailureError,)
+    workflow_error_types: tuple = (WorkflowFailureError,)
     if temporal_sdk_bridge is not None:
-        workflow_errors = (WorkflowFailureError, temporal_sdk_bridge.RPCError)
+        workflow_error_types = (WorkflowFailureError, temporal_sdk_bridge.RPCError)
+
+    def _retryable_workflow_error(exc: BaseException) -> bool:
+        if not isinstance(exc, workflow_error_types):
+            return False
+        message = str(exc).lower()
+        return (
+            "scheduletostart timeout" in message
+            or "activity task timed out" in message
+            or "timeout expired" in message
+            or "not enough hosts" in message
+            or "unavailable" in message
+        )
 
     # Run a worker for the workflow
     start_time = time.time()
@@ -83,37 +97,21 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
         name = "Jean-luc"
         for i in range(count):
             logger.info("running workflow #%d", i + 1)
-            max_attempts = 5
-            for attempt in range(max_attempts):
-                try:
+            async for attempt in tenacity.AsyncRetrying(
+                stop=tenacity.stop_after_attempt(5),
+                wait=tenacity.wait_incrementing(start=10, increment=10),
+                retry=tenacity.retry_if_exception(_retryable_workflow_error),
+                reraise=True,
+                before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+            ):
+                with attempt:
                     result = await client.execute_workflow(
                         SayHello.run,
                         name,
-                        id=f"my-workflow-id-{i}-{attempt}",
+                        id=f"my-workflow-id-{i}-{uuid.uuid4().hex[:12]}",
                         task_queue="my-task-queue",
                         execution_timeout=datetime.timedelta(seconds=300),
                     )
-                    break
-                except workflow_errors as exc:
-                    message = str(exc).lower()
-                    retryable = (
-                        "scheduletostart timeout" in message
-                        or "activity task timed out" in message
-                        or "timeout expired" in message
-                        or "not enough hosts" in message
-                        or "unavailable" in message
-                    )
-                    if not retryable or attempt == max_attempts - 1:
-                        raise
-                    backoff = 10 * (attempt + 1)
-                    logger.warning(
-                        "workflow attempt %d/%d failed with retryable error: %s; retrying in %ss",
-                        attempt + 1,
-                        max_attempts,
-                        exc,
-                        backoff,
-                    )
-                    await asyncio.sleep(backoff)
             logger.info(f"result: {result}")
         assert result == f"Hello, {name}!"
 

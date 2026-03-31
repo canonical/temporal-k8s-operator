@@ -1,5 +1,9 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "integration-test-charm"
 version = "0.0.0.dev0"
@@ -8,3 +12,7 @@ requires-python = ">=3.10"
 dependencies = [
     "ops==2.21.1",
 ]
+
+[tool.setuptools]
+py-modules = ["charm"]
+package-dir = {"" = "src"}

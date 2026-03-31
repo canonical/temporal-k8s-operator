@@ -8,18 +8,11 @@ type: charm
 platforms:
   amd64:
 
-parts:
-  charm:
-    source: .
-    build-packages:
-      - python3-venv
-    charm-binary-python-packages:
-      - hatchling
-      - pluggy
-      - setuptools-scm
-      - opentelemetry-api
-      - pathspec
 requires:
   temporal-host-info:
     interface: temporal-host-info
     limit: 1
+
+parts:
+  charm:
+    source: .
