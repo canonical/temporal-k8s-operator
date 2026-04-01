@@ -64,9 +64,6 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
     Args:
         ops_test: PyTest object.
         count: Number of workflows to run.
-
-    Raises:
-        WorkflowFailureError: If workflow execution keeps failing after retries.
     """
     url = await get_application_url(ops_test, application=APP_NAME, port=7233)
     logger.info("running workflow on app address: %s", url)
@@ -80,6 +77,7 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
         workflow_error_types = (WorkflowFailureError, temporal_sdk_bridge.RPCError)
 
     def _retryable_workflow_error(exc: BaseException) -> bool:
+        """Return True if the exception is retryable transient workflow/client errors."""
         if not isinstance(exc, workflow_error_types):
             return False
         message = str(exc).lower()
