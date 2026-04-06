@@ -15,4 +15,9 @@ requires:
 
 parts:
   charm:
+    plugin: uv
     source: .
+    build-snaps:
+      - astral-uv
+    build-packages:
+      - python3-venv
