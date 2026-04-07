@@ -43,7 +43,7 @@ async def deploy(ops_test: OpsTest, charm: str):
     resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
 
     # Deploy temporal server, temporal admin and postgresql charms.
-    asyncio.gather(
+    await asyncio.gather(
         ops_test.model.deploy(
             charm,
             resources=resources,

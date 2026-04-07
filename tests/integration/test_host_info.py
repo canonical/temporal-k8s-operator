@@ -8,9 +8,28 @@ import pathlib
 
 import jubilant
 import pytest
-from helpers import APP_NAME
+from helpers import APP_NAME, APP_NAME_ADMIN, APP_NAME_UI
 
 logger = logging.getLogger(__name__)
+
+_HOST_INFO_WAIT_APPS = (
+    APP_NAME,
+    APP_NAME_ADMIN,
+    APP_NAME_UI,
+    "postgresql-k8s",
+    "self-signed-certificates",
+    "host-info-requirer",
+)
+
+
+def _wait_stack_active(juju: jubilant.Juju, timeout: int = 900) -> None:
+    """Wait until listed apps (and their units) report active workload and app status."""
+    juju.wait(lambda s: jubilant.all_active(s, *_HOST_INFO_WAIT_APPS), timeout=timeout)
+
+
+def _wait_requirer_agent_idle(juju: jubilant.Juju, timeout: int = 600) -> None:
+    """Wait until the mock requirer's unit agent is idle (install/config hooks done)."""
+    juju.wait(lambda s: jubilant.all_agents_idle(s, "host-info-requirer"), timeout=timeout)
 
 
 @pytest.fixture(scope="module")
@@ -47,22 +66,22 @@ class TestTemporalHostInfoRelation:
         juju.config(APP_NAME, new_cfg)
         # Deploy host info requirer charm
         juju.deploy(host_info_requirer_charm, "host-info-requirer")
-        juju.wait(jubilant.all_agents_idle, timeout=300)
+        _wait_requirer_agent_idle(juju)
         juju.integrate("host-info-requirer:temporal-host-info", f"{APP_NAME}:temporal-host-info")
-        juju.wait(jubilant.all_active, timeout=300)
+        _wait_stack_active(juju)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
         expected_status = "Temporal host: temporal.local.test, port: 7233"
-        assert requirer_unit.workload_status == "active"
+        assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status
 
     def test_relation_no_ext_hostname(self, juju: jubilant.Juju):
         """Test host falls back to pod IP when external-hostname is unset."""
         juju.config(APP_NAME, {"external-hostname": ""})
-        juju.wait(jubilant.all_active, timeout=300)
+        _wait_stack_active(juju)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
         server_ip = status.apps[APP_NAME].units[f"{APP_NAME}/0"].address
         expected_status = f"Temporal host: {server_ip}, port: 7233"
-        assert requirer_unit.workload_status == "active"
+        assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status

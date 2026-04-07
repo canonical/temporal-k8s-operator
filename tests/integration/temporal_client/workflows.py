@@ -29,7 +29,7 @@ class SayHello:
         Returns:
             Workflow execution
         """
-        return await workflow.execute_activity(say_hello, name, schedule_to_close_timeout=timedelta(seconds=5))
+        return await workflow.execute_activity(say_hello, name, schedule_to_close_timeout=timedelta(seconds=60))
 
 
 @workflow.defn

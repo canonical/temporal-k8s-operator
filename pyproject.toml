@@ -84,7 +84,8 @@ integration = [
     "grpcio==1.73.1",
     "grpcio-health-checking==1.73.1",
     "ipdb==0.13.9",
-    "ops==2.21.1"
+    "ops==2.21.1",
+    "tenacity>=8.2.0,<10",
 ]
 
 # Static analysis / linting

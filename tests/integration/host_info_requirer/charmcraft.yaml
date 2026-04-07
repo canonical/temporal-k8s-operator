@@ -8,12 +8,16 @@ type: charm
 platforms:
   amd64:
 
-parts:
-  charm:
-    source: .
-    build-packages:
-      - python3-venv
 requires:
   temporal-host-info:
     interface: temporal-host-info
     limit: 1
+
+parts:
+  charm:
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
+    build-packages:
+      - python3-venv
