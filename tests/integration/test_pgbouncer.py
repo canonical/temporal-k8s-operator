@@ -45,6 +45,7 @@ async def deploy(ops_test: OpsTest):
         await ops_test.model.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
+        await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
         await ops_test.model.wait_for_idle(status="active", raise_on_blocked=False, timeout=90 * 10)
 
         # Run action to create default namespace

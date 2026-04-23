@@ -87,6 +87,7 @@ async def deploy(ops_test: OpsTest):
         await ops_test.model.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
+        await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
         for service in ALL_SERVICES:
@@ -97,6 +98,7 @@ async def deploy(ops_test: OpsTest):
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
 
         await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
+        await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_UI}:temporal-host-info")
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=1200
         )
