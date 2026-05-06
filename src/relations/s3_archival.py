@@ -8,13 +8,7 @@ import logging
 import boto3
 import botocore
 from botocore.exceptions import ClientError
-from charms.data_platform_libs.v0.s3 import (
-    CredentialsChangedEvent,
-    CredentialsGoneEvent,
-)
 from ops import framework
-
-from log import log_event_handler
 
 logger = logging.getLogger(__name__)
 
@@ -30,54 +24,8 @@ class S3Integrator(framework.Object):
         """
         super().__init__(charm, "s3")
         self.charm = charm
-        charm.framework.observe(charm.s3_client.on.credentials_changed, self._on_s3_credentials_changed)
-        charm.framework.observe(charm.s3_client.on.credentials_gone, self._on_s3_credentials_gone)
-
-    @log_event_handler(logger)
-    def _on_s3_credentials_changed(self, event: CredentialsChangedEvent):
-        """Handle new s3:temporal relation.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        s3_parameters, missing_parameters = self._retrieve_s3_parameters()
-        if missing_parameters:
-            return
-
-        endpoint = _construct_endpoint(s3_parameters)
-        bucket_created = True
-
-        try:
-            _create_bucket_if_not_exists(s3_parameters, endpoint)
-        except (ClientError, ValueError):
-            bucket_created = False
-
-        self.charm._state.s3 = {
-            "bucket": s3_parameters.get("bucket"),
-            "endpoint": endpoint,
-            "region": s3_parameters.get("region"),
-            "aws_access_key_id": s3_parameters.get("access-key"),
-            "aws_secret_access_key": s3_parameters.get("secret-key"),
-            "uri_style": s3_parameters.get("s3-uri-style"),
-            "bucket_created": bucket_created,
-        }
-        self.charm._update(event)
-
-    @log_event_handler(logger)
-    def _on_s3_credentials_gone(self, event: CredentialsGoneEvent) -> None:
-        """Handle s3:temporal relation broken event.
-
-        Args:
-            event: The event triggered when the relation was broken.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        self.charm._state.s3 = None
-        self.charm._update(event)
+        # Observers are registered centrally in the charm's __init__.
+        # This class is a stateless utility called by _reconcile.
 
     def _retrieve_s3_parameters(self):
         """Retrieve S3 parameters from the S3 integrator relation.

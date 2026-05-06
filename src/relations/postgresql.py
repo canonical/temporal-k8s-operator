@@ -6,10 +6,8 @@
 import logging
 
 from ops import framework
-from ops.model import WaitingStatus
 
 from literals import DB_NAME, DEFAULT_DB_DICT, VISIBILITY_DB_NAME
-from log import log_event_handler
 
 logger = logging.getLogger(__name__)
 
@@ -25,61 +23,11 @@ class Postgresql(framework.Object):
         """
         super().__init__(charm, "db")
         self.charm = charm
+        # Observers are registered centrally in the charm's __init__.
+        # This class is a stateless utility called by _reconcile.
 
-        # Handle db:pgsql and visibility:pgsql relations. The "db" and
-        # "visibility" strings in this code block reflect the relation names.
-        charm.framework.observe(charm.db.on.database_created, self._on_database_changed)
-        charm.framework.observe(charm.db.on.endpoints_changed, self._on_database_changed)
-        charm.framework.observe(charm.on.db_relation_broken, self._on_database_relation_broken)
-
-        charm.framework.observe(charm.visibility.on.database_created, self._on_database_changed)
-        charm.framework.observe(charm.visibility.on.endpoints_changed, self._on_database_changed)
-        charm.framework.observe(charm.on.visibility_relation_broken, self._on_database_relation_broken)
-
-    @log_event_handler(logger)
-    def _on_database_changed(self, event) -> None:
-        """Handle database creation/change events.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not self.charm._state.is_ready():
-            event.defer()
-            return
-
-        self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
-        if self.charm._state.database_connections is None:
-            self.charm._state.database_connections = DEFAULT_DB_DICT
-
-        self.update_db_relation_data_in_state(event)
-        self.charm._update(event)
-
-    @log_event_handler(logger)
-    def _on_database_relation_broken(self, event) -> None:
-        """Handle broken relations with the database.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not self.charm._state.is_ready():
-            event.defer()
-            return
-
-        self._update_db_connections(event.relation.name, None)
-        self.charm._update(event)
-
-    # flake8: noqa: C901
-    def update_db_relation_data_in_state(self, event) -> bool:
+    def update_db_relation_data_in_state(self) -> bool:
         """Update database data from relation into peer relation databag.
-
-        Args:
-            event: The event triggering the DB update.
 
         Returns:
             True if the charm should update its pebble layer, False otherwise.
@@ -88,9 +36,10 @@ class Postgresql(framework.Object):
             return False
 
         if not self.charm._state.is_ready():
-            logger.info("charm peer state not ready, deferring db update event")
-            event.defer()
             return False
+
+        if self.charm._state.database_connections is None:
+            self.charm._state.database_connections = DEFAULT_DB_DICT
 
         should_update = False
         for rel_name in ["db", "visibility"]:
@@ -134,7 +83,6 @@ class Postgresql(framework.Object):
                 should_update = True
 
             self._update_db_connections(rel_name, db_conn)
-            self.charm.admin._provide_db_info()
 
         return should_update
 
