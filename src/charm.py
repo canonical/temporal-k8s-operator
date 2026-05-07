@@ -7,18 +7,24 @@
 """Charm definition and helpers."""
 
 import functools
+import json
 import logging
 import os
 import re
 import socket
 from typing import Optional
+from urllib.parse import urlsplit
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
-from charms.data_platform_libs.v0.s3 import S3Requirer
+from charms.data_platform_libs.v0.s3 import (
+    CredentialsChangedEvent,
+    CredentialsGoneEvent,
+    S3Requirer,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder, LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
-from charms.openfga_k8s.v1.openfga import OpenFGARequires
+from charms.openfga_k8s.v1.openfga import OpenFGARequires, OpenFGAStoreCreateEvent
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.temporal_k8s.v0.temporal_host_info import TemporalHostInfoProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
@@ -30,6 +36,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     TLSCertificatesRequiresV4,
 )
 from jinja2 import Environment, FileSystemLoader
+import ops
 from ops import EventBase, main, pebble
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
@@ -37,6 +44,7 @@ from ops.pebble import CheckStatus
 
 from literals import (
     DB_NAME,
+    DEFAULT_DB_DICT,
     LOG_FORMAT,
     LOG_OUTPUT_FILE,
     PROMETHEUS_PORT,
@@ -50,12 +58,9 @@ from literals import (
 )
 from log import log_event_handler
 
-# import relations
-from relations.admin import Admin
+# import relations — used as stateless utility classes
 from relations.openfga import OpenFGA
-from relations.postgresql import Postgresql
-from relations.s3_archival import S3Integrator
-from relations.ui import UI
+from relations.s3_archival import create_bucket_if_not_exists, construct_endpoint
 from state import State
 
 CERTIFICATE_NAME = "temporal-frontend.pem"
@@ -106,11 +111,6 @@ class TemporalK8SCharm(CharmBase):
         external_hostname: DNS listing used for external connections.
     """
 
-    def set_active_unit_status(self):
-        """Set active unit status depending on relations."""
-        message = "auth enabled" if self.config["auth-enabled"] else ""
-        self.unit.status = ActiveStatus(message)
-
     @property
     def external_hostname(self):
         """Return the DNS listing used for external connections."""
@@ -126,20 +126,8 @@ class TemporalK8SCharm(CharmBase):
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal"
         self.container = self.unit.get_container("temporal")
-        self._extra_context = {}
-        self._dns_entries = [
-            dns.strip() for dns in self.config.get("frontend-cert-sans-dns", "").split(",") if dns.strip()
-        ]
 
-        # Handle basic charm lifecycle.
-        self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.temporal_pebble_ready, self._on_temporal_pebble_ready)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.restart_action, self._on_restart_action)
-        self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
-        self.framework.observe(self.on.update_status, self._on_update_status)
-
-        # Handle postgresql relation.
+        # Initialize libraries
         self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME, extra_user_roles="admin")
         self.visibility = DatabaseRequires(
             self,
@@ -147,24 +135,14 @@ class TemporalK8SCharm(CharmBase):
             database_name=VISIBILITY_DB_NAME,
             extra_user_roles="admin",
         )
-        self.postgresql = Postgresql(self)
-
-        # Handle admin and ui relations.
-        self.admin = Admin(self)
-        self.ui = UI(self)
-
-        # Handle openfga relation
         self.openfga = OpenFGARequires(self, self.name)
         self.openfga_relation = OpenFGA(self)
-
-        # Handle S3 integrator relation
         self.s3_client = S3Requirer(self, "s3-parameters")
-        self.s3_relation = S3Integrator(self)
 
         # Handle Ingress
         self._require_nginx_route()
 
-        # Prometheus
+        # Prometheus (hidden observer: refresh_event=self.on.config_changed)
         self._prometheus_scraping = MetricsEndpointProvider(
             self,
             relation_name="metrics-endpoint",
@@ -183,8 +161,7 @@ class TemporalK8SCharm(CharmBase):
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
-        # Frontend TLS certificates
-        # Only frontend TLS will be configured
+        # Frontend TLS certificates (hidden observers: refresh_events)
         self.certificates = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=FRONTEND_CERTIFICATES_RELATION_NAME,
@@ -192,70 +169,624 @@ class TemporalK8SCharm(CharmBase):
             mode=Mode.UNIT,
             refresh_events=[self.on.upgrade_charm, self.on.config_changed],
         )
-        self.framework.observe(self.certificates.on.certificate_available, self._update)
-        self.framework.observe(self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined, self._update)
-        self.framework.observe(
-            self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
-            self._update,
-        )
 
         # Host Info
         self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["frontend"]["grpc"])
 
-    # Frontend TLS handler
-    def _handle_frontend_tls(self):
-        # Block if the unit is not configured as a frontend service but has the relation
-        if "frontend" not in self.config["services"] and self.model.get_relation(FRONTEND_CERTIFICATES_RELATION_NAME):
-            self.unit.status = BlockedStatus(
-                f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
+        # --- Route ALL reconcilable events to _reconcile ---
+        reconcile_events = [
+            # Charm lifecycle
+            self.on.install,
+            self.on.start,
+            self.on.config_changed,
+            self.on.upgrade_charm,
+            self.on.update_status,
+            self.on.leader_elected,
+            # Container
+            self.on.temporal_pebble_ready,
+            # Peer relation
+            self.on.peer_relation_changed,
+            # Admin relation (all hooks)
+            self.on.admin_relation_joined,
+            self.on.admin_relation_changed,
+            self.on.admin_relation_departed,
+            self.on.admin_relation_broken,
+            # DB relation (library events + hooks)
+            self.db.on.database_created,
+            self.db.on.endpoints_changed,
+            self.on.db_relation_broken,
+            # Visibility relation (library events + hooks)
+            self.visibility.on.database_created,
+            self.visibility.on.endpoints_changed,
+            self.on.visibility_relation_broken,
+            # OpenFGA relation (library event + hooks)
+            self.openfga.on.openfga_store_created,
+            self.on.openfga_relation_broken,
+            # S3 relation (library events)
+            self.s3_client.on.credentials_changed,
+            self.s3_client.on.credentials_gone,
+            # UI relation
+            self.on.ui_relation_joined,
+            self.on.ui_relation_changed,
+            # Frontend TLS certificates
+            self.certificates.on.certificate_available,
+            self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined,
+            self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
+        ]
+        for event in reconcile_events:
+            self.framework.observe(event, self._reconcile)
+
+        # --- Dedicated handlers ---
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
+        self.framework.observe(self.on.restart_action, self._on_restart_action)
+        # OpenFGA action handlers (delegated to openfga_relation utility)
+        self.framework.observe(
+            self.on.create_authorization_model_action, self.openfga_relation._on_create_authorization_model_action
+        )
+        self.framework.observe(self.on.add_auth_rule_action, self.openfga_relation._on_add_auth_rule_action)
+        self.framework.observe(self.on.remove_auth_rule_action, self.openfga_relation._on_remove_auth_rule_action)
+        self.framework.observe(self.on.list_auth_rule_action, self.openfga_relation._on_list_auth_rule_action)
+        self.framework.observe(self.on.check_auth_rule_action, self.openfga_relation._on_check_auth_rule_action)
+        self.framework.observe(self.on.list_system_admins_action, self.openfga_relation._on_list_system_admins_action)
+
+    # ── Central Reconciliation Loop ──────────────────────────────────
+
+    @log_event_handler(logger)
+    def _reconcile(self, event: EventBase) -> None:
+        """Central reconciliation loop: read → compute → write."""
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            return
+
+        if not self._state.is_ready():
+            return
+
+        # ── Phase 1: Read inputs ──
+
+        # DNS validation (was in _on_config_changed, stays OUTSIDE _validate)
+        dns_entries = [
+            dns.strip() for dns in self.config.get("frontend-cert-sans-dns", "").split(",") if dns.strip()
+        ]
+        invalid_dns = [dns for dns in dns_entries if not self._valid_dns(dns)]
+        if invalid_dns:
+            logger.info(f"Invalid frontend-cert-sans-dns: {invalid_dns}")
+            return
+
+        if self.unit.is_leader():
+            # DB: safe to poll — data in relation databag
+            self._read_db_state(event)
+
+            # Admin schema: safe to poll — reads directly from relation databag
+            self._read_admin_schema_state()
+
+            # OpenFGA: event-filtered — only read on OpenFGAStoreCreateEvent
+            self._read_openfga_state(event)
+
+            # S3: event-filtered — only read on CredentialsChangedEvent/CredentialsGoneEvent
+            self._read_s3_state(event)
+
+            # Handle relation-broken: clear broken relation's state
+            if isinstance(event, RelationBrokenEvent):
+                if event.relation.name == "openfga":
+                    self._state.openfga = None
+                elif event.relation.name in ("db", "visibility"):
+                    self._update_db_connections(event.relation.name, None)
+
+            # Provide DB info to admin charm
+            self._provide_db_info()
+
+        # Validate
+        try:
+            self._validate()
+        except ValueError:
+            return
+
+        if self.unit.is_leader():
+            self._open_service_ports()
+
+        # ── Phase 2: Compute new state ──
+        context = self._build_workload_context()
+
+        # Handle frontend TLS (returns extra context or None)
+        tls_context = self._compute_frontend_tls_context(event)
+        if tls_context is not None:
+            context.update(tls_context)
+
+        pebble_layer = self._build_pebble_layer(context)
+
+        config_content = render("config.jinja", context)
+        dynamic_context = {
+            "GLOBAL_RPS_LIMIT": self.config["global-rps-limit"],
+            "NAMESPACE_RPS_LIMIT": self.config["namespace-rps-limit"],
+            "LONG_POLL_INTERVAL": self.config["long-poll-interval"],
+        }
+        dynamic_config_content = render("dynamic_config.jinja", dynamic_context)
+
+        # ── Phase 3: Write outputs (only if changed) ──
+        # Ensure log directory exists
+        log_dir = os.path.dirname(LOG_OUTPUT_FILE)
+        container.make_dir(log_dir, make_parents=True, user="ubuntu", group="ubuntu")
+
+        # Configure log rotation
+        logrotate_config = f"""{LOG_OUTPUT_FILE} {{
+    daily
+    rotate 7
+    size 100M
+    missingok
+    notifempty
+    nomail
+    compress
+    delaycompress
+    copytruncate
+    create 0640 ubuntu ubuntu
+}}
+"""
+        container.push("/etc/logrotate.d/temporal-server", logrotate_config, make_dirs=True)
+        container.push("/etc/temporal/config/charm.yaml", config_content, make_dirs=True)
+        container.push("/etc/temporal/config/dynamicconfig/docker.yaml", dynamic_config_content, make_dirs=True)
+
+        # If frontend-certificates relation is broken, remove certs from workload
+        if isinstance(event, RelationBrokenEvent) and event.relation.name == FRONTEND_CERTIFICATES_RELATION_NAME:
+            self._delete_certificate()
+            self._delete_private_key()
+
+        # Compare pebble layers before replanning
+        current_plan = container.get_plan().to_dict()
+        if current_plan.get("services") != pebble_layer.get("services") or current_plan.get(
+            "checks"
+        ) != pebble_layer.get("checks"):
+            container.add_layer(self.name, pebble_layer, combine=True)
+            container.replan()
+
+        # Log rotation on update-status
+        if isinstance(event, ops.UpdateStatusEvent):
+            self._run_log_rotation(container)
+
+        self.unit.set_workload_version(WORKLOAD_VERSION)
+
+        # Provide UI server status (leader only)
+        if self.unit.is_leader():
+            self._provide_server_status()
+
+    # ── Status Reporting ──────────────────────────────────────────────
+
+    def _on_collect_unit_status(self, event) -> None:
+        """Report unit status based on current state.
+
+        Replicates the same checks the original delta handlers used.
+        """
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            event.add_status(WaitingStatus("Waiting for container"))
+            return
+
+        if not self._state.is_ready():
+            event.add_status(BlockedStatus("peer relation not ready"))
+            return
+
+        # DNS validation (was in _on_config_changed, stays OUTSIDE _validate)
+        dns_entries = [
+            dns.strip() for dns in self.config.get("frontend-cert-sans-dns", "").split(",") if dns.strip()
+        ]
+        invalid_dns = [dns for dns in dns_entries if not self._valid_dns(dns)]
+        if invalid_dns:
+            event.add_status(BlockedStatus("Invalid frontend-cert-sans-dns, please correct the value(s)."))
+            return
+
+        # Frontend-cert on non-frontend check (was in _handle_frontend_tls)
+        if "frontend" not in self.config["services"] and self.model.get_relation(
+            FRONTEND_CERTIFICATES_RELATION_NAME
+        ):
+            event.add_status(
+                BlockedStatus(
+                    f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
+                )
             )
             return
 
-        # Pre-flight checks
-        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+        try:
+            self._validate()
+        except ValueError as err:
+            event.add_status(BlockedStatus(str(err)))
             return
 
-        # Fetch the assigned certificate and key
+        # Pebble plan validation
+        valid_pebble_plan = self._validate_pebble_plan(container)
+        if not valid_pebble_plan:
+            event.add_status(MaintenanceStatus("replanning application"))
+            return
+
+        # Health check
+        check = container.get_check("temporal-server-running")
+        if check.status != CheckStatus.UP:
+            event.add_status(MaintenanceStatus("Status check: DOWN"))
+            return
+
+        # Frontend TLS waiting status
+        if self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+            provider_certificate, private_key = self.certificates.get_assigned_certificate(
+                certificate_request=self._get_certificate_request_attributes()
+            )
+            if not provider_certificate or not private_key:
+                event.add_status(WaitingStatus("Waiting for certificates to be available"))
+                return
+
+        message = "auth enabled" if self.config["auth-enabled"] else ""
+        event.add_status(ActiveStatus(message))
+
+    # ── Dedicated Handlers ──────────────────────────────────────────
+
+    @log_event_handler(logger)
+    def _on_restart_action(self, event):
+        """Restart the temporal server, even if there are no changes.
+
+        Args:
+            event: The event triggered when the action is invoked.
+        """
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            event.fail("Container not ready")
+            return
+
+        logger.info("restarting temporal")
+        container.restart(self.name)
+
+    # ── Phase 1 Helpers: Read Inputs ─────────────────────────────────
+
+    def _read_db_state(self, event) -> None:
+        """Read database relation data and persist to peer state.
+
+        Safe to poll — DatabaseRequires stores data in relation databag.
+        """
+        if self._state.database_connections is None:
+            self._state.database_connections = DEFAULT_DB_DICT
+
+        for rel_name in ["db", "visibility"]:
+            if self.model.get_relation(rel_name) is None:
+                continue
+
+            if rel_name == "db":
+                if not self.db.relations:
+                    continue
+                relation_id = self.db.relations[0].id
+                relation_data = self.db.fetch_relation_data()[relation_id]
+            elif rel_name == "visibility":
+                if not self.visibility.relations:
+                    continue
+                relation_id = self.visibility.relations[0].id
+                relation_data = self.visibility.fetch_relation_data()[relation_id]
+            else:
+                continue
+
+            endpoints = relation_data.get("endpoints", "").split(",")
+            if len(endpoints) < 1:
+                continue
+
+            primary_endpoint = endpoints[0].split(":")
+            if len(primary_endpoint) < 2:
+                continue
+
+            db_conn = {
+                "dbname": DB_NAME if rel_name == "db" else VISIBILITY_DB_NAME,
+                "host": primary_endpoint[0],
+                "port": primary_endpoint[1],
+                "password": relation_data.get("password"),
+                "user": relation_data.get("username"),
+                "tls": relation_data.get("tls") == "True" or self.config["db-tls-enabled"],
+            }
+
+            if None in (db_conn["user"], db_conn["password"]):
+                continue
+
+            self._update_db_connections(rel_name, db_conn)
+
+    def _read_admin_schema_state(self) -> None:
+        """Read admin schema status from relation databag. Safe to poll."""
+        admin_relations = self.model.relations.get("admin")
+        if not admin_relations:
+            return
+
+        for relation in admin_relations:
+            remote_app = relation.app
+            if remote_app and relation.data.get(remote_app, {}).get("schema_status") == "ready":
+                self._state.schema_ready = True
+                return
+
+    def _read_openfga_state(self, event: EventBase) -> None:
+        """Read OpenFGA state — ONLY on OpenFGAStoreCreateEvent.
+
+        The OpenFGA library populates store info transiently during its event.
+        We read it then and persist to peer state. On all other events,
+        _reconcile reads from the persisted peer state instead.
+        """
+        if not isinstance(event, OpenFGAStoreCreateEvent):
+            return
+
+        if not event.store_id:
+            logger.info("openfga relation revoked, no store id")
+            return
+
+        info = self.openfga.get_store_info()
+        if not info:
+            logger.info("openfga relation revoked, no store info found")
+            return
+
+        url_components = urlsplit(info.http_api_url)
+        scheme = url_components.scheme
+        address = url_components.hostname
+        http_port = url_components.port
+
+        self._state.openfga = {
+            "store_id": info.store_id,
+            "token": info.token,
+            "address": address,
+            "port": http_port,
+            "scheme": scheme,
+            "auth_model_id": None,
+        }
+
+    def _read_s3_state(self, event: EventBase) -> None:
+        """Read S3 state — ONLY on CredentialsChangedEvent/CredentialsGoneEvent.
+
+        The S3 library populates connection info during its specific events.
+        """
+        if isinstance(event, CredentialsGoneEvent):
+            self._state.s3 = None
+            return
+
+        if not isinstance(event, CredentialsChangedEvent):
+            return
+
+        s3_parameters = self.s3_client.get_s3_connection_info()
+        required_parameters = ["bucket", "access-key", "secret-key"]
+        missing_required_parameters = [param for param in required_parameters if param not in s3_parameters]
+        if missing_required_parameters:
+            logger.warning(
+                f"Missing required S3 parameters in relation with S3 integrator: {missing_required_parameters}"
+            )
+            return
+
+        # Add sensible defaults for missing optional parameters
+        s3_parameters.setdefault("endpoint", "https://s3.amazonaws.com")
+        s3_parameters.setdefault("region", "")
+        s3_parameters.setdefault("path", "")
+        s3_parameters.setdefault("s3-uri-style", "host")
+
+        # Strip whitespaces
+        for key, value in s3_parameters.items():
+            if isinstance(value, str):
+                s3_parameters[key] = value.strip()
+
+        s3_parameters["endpoint"] = s3_parameters["endpoint"].rstrip("/")
+        s3_parameters["path"] = f'/{s3_parameters["path"].strip("/")}'
+        s3_parameters["bucket"] = s3_parameters["bucket"].strip("/")
+
+        endpoint = construct_endpoint(s3_parameters)
+        bucket_created = True
+
+        try:
+            create_bucket_if_not_exists(s3_parameters, endpoint)
+        except Exception:
+            bucket_created = False
+
+        self._state.s3 = {
+            "bucket": s3_parameters.get("bucket"),
+            "endpoint": endpoint,
+            "region": s3_parameters.get("region"),
+            "aws_access_key_id": s3_parameters.get("access-key"),
+            "aws_secret_access_key": s3_parameters.get("secret-key"),
+            "uri_style": s3_parameters.get("s3-uri-style"),
+            "bucket_created": bucket_created,
+        }
+
+    def _update_db_connections(self, rel_name, db_conn):
+        """Assign nested value in peer relation.
+
+        Args:
+            rel_name: Name of the relation to update.
+            db_conn: Database connection dict.
+        """
+        if self._state.database_connections is None:
+            self._state.database_connections = DEFAULT_DB_DICT
+
+        database_connections = self._state.database_connections
+        database_connections[rel_name] = db_conn
+        self._state.database_connections = database_connections
+
+    def _provide_db_info(self):
+        """Provide DB info to the admin charm."""
+        if not self.unit.is_leader():
+            return
+
+        try:
+            database_connections = self.database_connections()
+        except ValueError as err:
+            logger.debug(f"admin:temporal: not providing database connections: {err}")
+            return
+
+        admin_relations = self.model.relations["admin"]
+        if not admin_relations:
+            logger.debug("admin:temporal: not providing database connections: admin not ready")
+            return
+        for relation in admin_relations:
+            logger.debug(f"admin:temporal: providing database connections on relation {relation.id}")
+            relation.data[self.app].update({"database_connections": json.dumps(database_connections)})
+
+    def _provide_server_status(self):
+        """Provide server status to the UI charm."""
+        ui_relations = self.model.relations["ui"]
+        if not ui_relations:
+            return
+        for relation in ui_relations:
+            relation.data[self.app].update({"server_status": "ready"})
+
+    # ── Phase 2 Helpers: Compute State ───────────────────────────────
+
+    def _build_workload_context(self) -> dict:
+        """Build the workload environment context."""
+        options = {"log-level": "LOG_LEVEL"}
+        context = {config_key: self.config[key] for key, config_key in options.items()}
+        context.update(
+            {
+                "LOG_OUTPUT_FILE": LOG_OUTPUT_FILE,
+                "LOG_FORMAT": LOG_FORMAT,
+            }
+        )
+        db_conn = self._state.database_connections["db"]
+        visibility_conn = self._state.database_connections["visibility"]
+        context.update(
+            {
+                "DB_NAME": db_conn["dbname"],
+                "DB_HOST": db_conn["host"],
+                "DB_PORT": db_conn["port"],
+                "DB_USER": db_conn["user"],
+                "DB_PSWD": db_conn["password"],
+                "VISIBILITY_NAME": visibility_conn["dbname"],
+                "VISIBILITY_HOST": visibility_conn["host"],
+                "VISIBILITY_PORT": visibility_conn["port"],
+                "VISIBILITY_USER": visibility_conn["user"],
+                "VISIBILITY_PSWD": visibility_conn["password"],
+                "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.bind_address),
+                "NUM_HISTORY_SHARDS": self._state.num_history_shards,
+                "SQL_MAX_CONNS": self.config["persistence-max-conns"],
+                "SQL_MAX_IDLE_CONNS": self.config["persistence-max-idle-conns"],
+                "SQL_MAX_CONN_TIME": self.config["persistence-max-conn-time"],
+                "SQL_VIS_MAX_CONNS": self.config["visibility-max-conns"],
+                "SQL_VIS_MAX_IDLE_CONNS": self.config["visibility-max-idle-conns"],
+                "SQL_VIS_MAX_CONN_TIME": self.config["visibility-max-conn-time"],
+                "SQL_TLS_ENABLED": db_conn.get("tls", False),
+            }
+        )
+
+        if self.config["auth-enabled"]:
+            openfga = self._state.openfga
+            context.update(
+                {
+                    "AUTH_ENABLED": True,
+                    "OFGA_STORE_ID": openfga.get("store_id"),
+                    "OFGA_AUTH_MODEL_ID": openfga.get("auth_model_id"),
+                    "OFGA_API_HOST": openfga.get("address"),
+                    "OFGA_API_SCHEME": openfga.get("scheme"),
+                    "OFGA_SECRETS_BEARER_TOKEN": openfga.get("token"),
+                    "OFGA_API_PORT": openfga.get("port"),
+                    "AUTH_ADMIN_GROUPS": self.config["auth-admin-groups"],
+                    "AUTH_OPEN_ACCESS_NAMESPACES": self.config["auth-open-access-namespaces"],
+                    "AUTH_GOOGLE_CLIENT_ID": self.config["auth-google-client-id"],
+                }
+            )
+
+        http_proxy = os.environ.get("JUJU_CHARM_HTTP_PROXY")
+        https_proxy = os.environ.get("JUJU_CHARM_HTTPS_PROXY")
+        no_proxy = os.environ.get("JUJU_CHARM_NO_PROXY")
+
+        if http_proxy or https_proxy:
+            context.update(
+                {
+                    "HTTP_PROXY": http_proxy,
+                    "HTTPS_PROXY": https_proxy,
+                    "NO_PROXY": no_proxy,
+                }
+            )
+
+        if self._state.s3:
+            context.update(
+                {
+                    "ARCHIVAL_ENABLED": True,
+                    "ARCHIVAL_BUCKET_REGION": self._state.s3.get("region"),
+                    "ARCHIVAL_ENDPOINT": self._state.s3.get("endpoint"),
+                    "ARCHIVAL_URI_STYLE": self._state.s3.get("uri_style"),
+                    "AWS_ACCESS_KEY_ID": self._state.s3.get("aws_access_key_id"),
+                    "AWS_SECRET_ACCESS_KEY": self._state.s3.get("aws_secret_access_key"),
+                }
+            )
+
+        return context
+
+    def _compute_frontend_tls_context(self, event: EventBase) -> Optional[dict]:
+        """Compute frontend TLS context. Pure function — no side effects.
+
+        Returns:
+            dict of TLS env vars if TLS is configured, None otherwise.
+        """
+        # Block if not a frontend service but has the relation
+        if "frontend" not in self.config["services"] and self.model.get_relation(
+            FRONTEND_CERTIFICATES_RELATION_NAME
+        ):
+            return None
+
+        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+            return None
+
         provider_certificate, private_key = self.certificates.get_assigned_certificate(
             certificate_request=self._get_certificate_request_attributes()
         )
 
-        # Set unit to WaitingStatus if certificate or key is not yet available
         if not provider_certificate or not private_key:
             logger.info("The certificate is not available yet.")
-            self.unit.status = WaitingStatus("Waiting for certificates to be available")
-            return
-
-        self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
+            return None
 
         # If either the certificate or key is outdated or missing, update both
         if self._update_certificates_required(provider_certificate, private_key):
             self._store_certificate(certificate=provider_certificate.certificate)
             self._store_private_key(private_key=private_key)
 
-    def _remove_certificates(self, event: EventBase) -> None:
-        """Remove frontend certificates from the workload container.
+        return dict(FRONTEND_TLS_CONFIGURATION)
 
-        Args:
-          event: an event to verify if it is RelationBroken before proceeding with the removal.
-        """
-        if not isinstance(event, RelationBrokenEvent) or not event.relation.name == FRONTEND_CERTIFICATES_RELATION_NAME:
-            return
-        self._delete_certificate()
-        self._delete_private_key()
+    def _build_pebble_layer(self, context: dict) -> dict:
+        """Build the Pebble layer dict."""
+        services = self.config["services"].split(",")
+        services_args = " ".join(f"--service={service}" for service in services)
+        if ValidServiceTypes.FRONTEND.value in services:
+            services_args += " --service=internal-frontend"
 
-    @log_event_handler(logger)
-    def _on_peer_relation_changed(self, event):
-        """Handle peer relation changes.
+        return {
+            "summary": "temporal server layer",
+            "services": {
+                "temporal-server": {
+                    "summary": "temporal server",
+                    "command": "temporal-server --env charm start " + services_args,
+                    "startup": "enabled",
+                    "override": "replace",
+                    "environment": context,
+                    "on-check-failure": {"temporal-server-running": "ignore"},
+                    "user": "ubuntu",
+                    "working-dir": "/etc/temporal",
+                }
+            },
+            "checks": {
+                "temporal-server-running": {
+                    "override": "replace",
+                    "level": "alive",
+                    "period": "300s",
+                    "threshold": 3,
+                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
+                }
+            },
+        }
 
-        Args:
-            event: The event triggered when the peer relation changed.
-        """
-        if self.unit.is_leader():
-            return
+    # ── Validation (cloned verbatim from original) ───────────────────
 
-        self.unit.status = WaitingStatus("configuring temporal")
-        self._update(event)
+    def _open_service_ports(self):
+        """Open the respective ports based on Temporal service."""
+        services = self.config["services"]
+
+        open_port = functools.partial(self.model.unit.open_port, protocol="tcp")
+        close_port = functools.partial(self.model.unit.close_port, protocol="tcp")
+
+        for service, ports in SERVICE_PORTS.items():
+            if service in services:
+                open_port(port=ports["grpc"])
+                open_port(port=ports["http"])
+            else:
+                close_port(port=ports["grpc"])
+                close_port(port=ports["http"])
+
+        if "frontend" in services:
+            open_port(port=SERVICE_PORTS["internal-frontend"]["grpc"])
+            open_port(port=SERVICE_PORTS["internal-frontend"]["http"])
+        else:
+            close_port(port=SERVICE_PORTS["internal-frontend"]["grpc"])
+            close_port(port=SERVICE_PORTS["internal-frontend"]["http"])
 
     def _require_nginx_route(self):
         """Require nginx-route relation based on current configuration."""
@@ -271,34 +802,12 @@ class TemporalK8SCharm(CharmBase):
     def database_connections(self):
         """Return connection info for the related databases.
 
-        The connection info is returned as a dict like the following:
-
-            {
-                "db": {
-                    "dbname": "...",
-                    "host": "...",
-                    "port": "...",
-                    "user": "...",
-                    "password": "...",
-                },  # or None.
-
-                "visibility": {
-                    "dbname": "...",
-                    "host": "...",
-                    "port": "...",
-                    "user": "...",
-                    "password": "...",
-                },  # or None.
-            }
-
         Raises:
             ValueError: one of the databases is not connected yet
 
         Returns:
             DB connection info dict.
         """
-        # Copy key/value pairs in a new dict as self._state.database_connections
-        # and its values (of type ops.framework.StoredDict) are not serializable.
         database_connections = {}
 
         if self._state.database_connections is None or self._state.database_connections == {
@@ -312,92 +821,6 @@ class TemporalK8SCharm(CharmBase):
                 raise ValueError(f"{rel_name}:pgsql relation: no database connection available")
             database_connections[rel_name] = dict(db_conn)
         return database_connections
-
-    @log_event_handler(logger)
-    def _on_install(self, event):
-        """Install temporal.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if self.unit.is_leader():
-            self.unit.status = MaintenanceStatus("installing temporal")
-
-    @log_event_handler(logger)
-    def _on_temporal_pebble_ready(self, event):
-        """Define and start temporal using the Pebble API.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        self._update(event)
-
-    @log_event_handler(logger)
-    def _on_config_changed(self, event):
-        """Handle configuration changes.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        # Validate the frontend-cert-sans-dns configuration before proceeding
-        invalid_dns = [dns for dns in self._dns_entries if not self._valid_dns(dns)]
-        if invalid_dns:
-            self.unit.status = BlockedStatus("Invalid frontend-cert-sans-dns, please correct the value(s).")
-            logger.info(f"Invalid frontend-cert-sans-dns: {invalid_dns}")
-            return
-
-        self.unit.status = WaitingStatus("configuring temporal")
-        self._update(event)
-
-    @log_event_handler(logger)
-    def _on_restart_action(self, event):
-        """Restart the temporal server, even if there are no changes.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        container = self.unit.get_container(self.name)
-
-        logger.info("restarting temporal")
-        self.unit.status = MaintenanceStatus("restarting temporal")
-        container.restart(self.name)
-        self.set_active_unit_status()
-
-    @log_event_handler(logger)
-    def _on_update_status(self, event):
-        """Handle `update-status` events.
-
-        Args:
-            event: The `update-status` event triggered at intervals.
-        """
-        try:
-            self._validate()
-        except ValueError:
-            return
-
-        should_update = self.postgresql.update_db_relation_data_in_state(event)
-        if should_update:
-            self._update(event)
-            return
-
-        container = self.unit.get_container(self.name)
-        valid_pebble_plan = self._validate_pebble_plan(container)
-        if not valid_pebble_plan:
-            self._update(event)
-            return
-
-        check = container.get_check("temporal-server-running")
-        if check.status != CheckStatus.UP:
-            self.unit.status = MaintenanceStatus("Status check: DOWN")
-            return
-
-        # Run log rotation
-        self._run_log_rotation(container)
-
-        self.unit.set_workload_version(WORKLOAD_VERSION)
-        self.set_active_unit_status()
-        if self.unit.is_leader():
-            self.ui._provide_server_status()
 
     def _validate_pebble_plan(self, container):
         """Validate Temporal server pebble plan.
@@ -417,9 +840,6 @@ class TemporalK8SCharm(CharmBase):
     def _run_log_rotation(self, container):
         """Run log rotation for temporal server logs.
 
-        logrotate only rotates when the configured
-        conditions are met (file size or time threshold).
-
         Args:
             container: application container
         """
@@ -436,7 +856,7 @@ class TemporalK8SCharm(CharmBase):
             required_params: list of required parameters.
 
         Returns:
-            list: List of OpenFGA parameters that are not set in state.
+            list: List of parameters that are not set.
         """
         missing_params = []
         for key in required_params:
@@ -513,201 +933,6 @@ class TemporalK8SCharm(CharmBase):
             if not self._state.s3.get("bucket_created"):
                 raise ValueError("s3:archival failed to create s3 bucket.")
 
-    def _open_service_ports(self):
-        """Open the respective ports based on Temporal service."""
-        services = self.config["services"]
-
-        open_port = functools.partial(self.model.unit.open_port, protocol="tcp")
-        close_port = functools.partial(self.model.unit.close_port, protocol="tcp")
-
-        for service, ports in SERVICE_PORTS.items():
-            if service in services:
-                open_port(port=ports["grpc"])
-                open_port(port=ports["http"])
-            else:
-                close_port(port=ports["grpc"])
-                close_port(port=ports["http"])
-
-        if "frontend" in services:
-            open_port(port=SERVICE_PORTS["internal-frontend"]["grpc"])
-            open_port(port=SERVICE_PORTS["internal-frontend"]["http"])
-        else:
-            close_port(port=SERVICE_PORTS["internal-frontend"]["grpc"])
-            close_port(port=SERVICE_PORTS["internal-frontend"]["http"])
-
-    def _update(self, event):
-        """Update the Temporal server configuration and replan its execution.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        try:
-            self._validate()
-        except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
-            return
-
-        if self.unit.is_leader():
-            self._open_service_ports()
-
-        container = self.unit.get_container(self.name)
-        if not container.can_connect():
-            event.defer()
-            return
-
-        logger.info("configuring temporal")
-        options = {
-            "log-level": "LOG_LEVEL",
-        }
-        context = {config_key: self.config[key] for key, config_key in options.items()}
-        context.update(
-            {
-                "LOG_OUTPUT_FILE": LOG_OUTPUT_FILE,
-                "LOG_FORMAT": LOG_FORMAT,
-            }
-        )
-        db_conn = self._state.database_connections["db"]
-        visibility_conn = self._state.database_connections["visibility"]
-        context.update(
-            {
-                "DB_NAME": db_conn["dbname"],
-                "DB_HOST": db_conn["host"],
-                "DB_PORT": db_conn["port"],
-                "DB_USER": db_conn["user"],
-                "DB_PSWD": db_conn["password"],
-                "VISIBILITY_NAME": visibility_conn["dbname"],
-                "VISIBILITY_HOST": visibility_conn["host"],
-                "VISIBILITY_PORT": visibility_conn["port"],
-                "VISIBILITY_USER": visibility_conn["user"],
-                "VISIBILITY_PSWD": visibility_conn["password"],
-                "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.bind_address),
-                "NUM_HISTORY_SHARDS": self._state.num_history_shards,
-                "SQL_MAX_CONNS": self.config["persistence-max-conns"],
-                "SQL_MAX_IDLE_CONNS": self.config["persistence-max-idle-conns"],
-                "SQL_MAX_CONN_TIME": self.config["persistence-max-conn-time"],
-                "SQL_VIS_MAX_CONNS": self.config["visibility-max-conns"],
-                "SQL_VIS_MAX_IDLE_CONNS": self.config["visibility-max-idle-conns"],
-                "SQL_VIS_MAX_CONN_TIME": self.config["visibility-max-conn-time"],
-                "SQL_TLS_ENABLED": db_conn.get("tls", False),
-            }
-        )
-
-        if self.config["auth-enabled"]:
-            openfga = self._state.openfga
-            context.update(
-                {
-                    "AUTH_ENABLED": True,
-                    "OFGA_STORE_ID": openfga.get("store_id"),
-                    "OFGA_AUTH_MODEL_ID": openfga.get("auth_model_id"),
-                    "OFGA_API_HOST": openfga.get("address"),
-                    "OFGA_API_SCHEME": openfga.get("scheme"),
-                    "OFGA_SECRETS_BEARER_TOKEN": openfga.get("token"),
-                    "OFGA_API_PORT": openfga.get("port"),
-                    "AUTH_ADMIN_GROUPS": self.config["auth-admin-groups"],
-                    "AUTH_OPEN_ACCESS_NAMESPACES": self.config["auth-open-access-namespaces"],
-                    "AUTH_GOOGLE_CLIENT_ID": self.config["auth-google-client-id"],
-                }
-            )
-
-        http_proxy = os.environ.get("JUJU_CHARM_HTTP_PROXY")
-        https_proxy = os.environ.get("JUJU_CHARM_HTTPS_PROXY")
-        no_proxy = os.environ.get("JUJU_CHARM_NO_PROXY")
-
-        if http_proxy or https_proxy:
-            context.update(
-                {
-                    "HTTP_PROXY": http_proxy,
-                    "HTTPS_PROXY": https_proxy,
-                    "NO_PROXY": no_proxy,
-                }
-            )
-
-        if self._state.s3:
-            context.update(
-                {
-                    "ARCHIVAL_ENABLED": True,
-                    "ARCHIVAL_BUCKET_REGION": self._state.s3.get("region"),
-                    "ARCHIVAL_ENDPOINT": self._state.s3.get("endpoint"),
-                    "ARCHIVAL_URI_STYLE": self._state.s3.get("uri_style"),
-                    "AWS_ACCESS_KEY_ID": self._state.s3.get("aws_access_key_id"),
-                    "AWS_SECRET_ACCESS_KEY": self._state.s3.get("aws_secret_access_key"),
-                }
-            )
-
-        # Handle frontend TLS
-        self._handle_frontend_tls()
-        # If the relation is broken, remove certificates
-        self._remove_certificates(event)
-        context.update(self._extra_context)
-
-        # Ensure log directory exists
-        log_dir = os.path.dirname(LOG_OUTPUT_FILE)
-        container.make_dir(log_dir, make_parents=True, user="ubuntu", group="ubuntu")
-
-        # Configure log rotation
-        logrotate_config = f"""{LOG_OUTPUT_FILE} {{
-    daily
-    rotate 7
-    size 100M
-    missingok
-    notifempty
-    nomail
-    compress
-    delaycompress
-    copytruncate
-    create 0640 ubuntu ubuntu
-}}
-"""
-        container.push("/etc/logrotate.d/temporal-server", logrotate_config, make_dirs=True)
-
-        config = render("config.jinja", context)
-        container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
-
-        dynamic_context = {
-            "GLOBAL_RPS_LIMIT": self.config["global-rps-limit"],
-            "NAMESPACE_RPS_LIMIT": self.config["namespace-rps-limit"],
-            "LONG_POLL_INTERVAL": self.config["long-poll-interval"],
-        }
-        dynamic_config = render("dynamic_config.jinja", dynamic_context)
-        container.push("/etc/temporal/config/dynamicconfig/docker.yaml", dynamic_config, make_dirs=True)
-
-        logger.info("planning temporal execution")
-        services = self.config["services"].split(",")
-        services_args = " ".join(f"--service={service}" for service in services)
-        if ValidServiceTypes.FRONTEND.value in services:
-            services_args += " --service=internal-frontend"
-
-        pebble_layer = {
-            "summary": "temporal server layer",
-            "services": {
-                "temporal-server": {
-                    "summary": "temporal server",
-                    "command": "temporal-server --env charm start " + services_args,
-                    "startup": "enabled",
-                    "override": "replace",
-                    # Including config values here so that a change in the
-                    # config forces replanning to restart the service.
-                    "environment": context,
-                    "on-check-failure": {"temporal-server-running": "ignore"},
-                    "user": "ubuntu",
-                    "working-dir": "/etc/temporal",
-                }
-            },
-            "checks": {
-                "temporal-server-running": {
-                    "override": "replace",
-                    "level": "alive",
-                    "period": "300s",
-                    # curl cluster health of internal-frontend service
-                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
-                }
-            },
-        }
-        container.add_layer(self.name, pebble_layer, combine=True)
-        container.replan()
-
-        self.unit.status = MaintenanceStatus("replanning application")
-
     # Helpers for frontend TLS
     def _relation_created(self, relation_name: str) -> bool:
         return bool(self.model.relations.get(relation_name))
@@ -753,7 +978,10 @@ class TemporalK8SCharm(CharmBase):
         common_name = self.config["frontend-cert-common-name"] or generated_common_name
 
         # Generate SANS_DNS - set to the unit hostname if not set in configuration
-        sans_dns = self._dns_entries or [unit_fqdn]
+        dns_entries = [
+            dns.strip() for dns in self.config.get("frontend-cert-sans-dns", "").split(",") if dns.strip()
+        ]
+        sans_dns = dns_entries or [unit_fqdn]
 
         return CertificateRequestAttributes(
             common_name=common_name,

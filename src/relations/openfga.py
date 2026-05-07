@@ -7,10 +7,8 @@ import asyncio
 import json
 import logging
 from enum import Enum
-from urllib.parse import urlsplit
 
 import requests
-from charms.openfga_k8s.v1.openfga import OpenFGAStoreCreateEvent
 from openfga_sdk import ReadRequestTupleKey
 from openfga_sdk.client import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models.check_request import ClientCheckRequest
@@ -59,7 +57,7 @@ class AuthRuleActionType(Enum):
 
 
 class OpenFGA(framework.Object):
-    """Client for openfga:temporal relations."""
+    """Client for openfga:temporal relations — action handlers only."""
 
     def __init__(self, charm):
         """Construct.
@@ -69,95 +67,8 @@ class OpenFGA(framework.Object):
         """
         super().__init__(charm, "openfga")
         self.charm = charm
-        # Register OpenFGA relation handlers.
-        charm.framework.observe(
-            charm.openfga.on.openfga_store_created,
-            self._on_openfga_store_created,
-        )
-
-        charm.framework.observe(
-            charm.on.create_authorization_model_action,
-            self._on_create_authorization_model_action,
-        )
-
-        charm.framework.observe(
-            charm.on.add_auth_rule_action,
-            self._on_add_auth_rule_action,
-        )
-
-        charm.framework.observe(
-            charm.on.remove_auth_rule_action,
-            self._on_remove_auth_rule_action,
-        )
-
-        charm.framework.observe(
-            charm.on.list_auth_rule_action,
-            self._on_list_auth_rule_action,
-        )
-
-        charm.framework.observe(
-            charm.on.check_auth_rule_action,
-            self._on_check_auth_rule_action,
-        )
-
-        charm.framework.observe(
-            charm.on.list_system_admins_action,
-            self._on_list_system_admins_action,
-        )
-
-        charm.framework.observe(charm.on.openfga_relation_broken, self._on_openfga_relation_broken)
-
-    @log_event_handler(logger)
-    def _on_openfga_store_created(self, event: OpenFGAStoreCreateEvent):
-        """Handle OpenFGA relation created event.
-
-        Args:
-            event: The event triggered when the relation is created.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not event.store_id:
-            logger.info("openfga relation revoked, no store id")
-            return
-
-        info = self.charm.openfga.get_store_info()
-        if not info:
-            logger.info("openfga relation revoked, no store info found")
-            return
-
-        url_components = urlsplit(info.http_api_url)
-        scheme = url_components.scheme
-        address = url_components.hostname
-        http_port = url_components.port
-
-        self.charm._state.openfga = {
-            "store_id": info.store_id,
-            "token": info.token,
-            "address": address,
-            "port": http_port,
-            "scheme": scheme,
-            "auth_model_id": None,
-        }
-
-        self.charm._update(event)
-
-    @log_event_handler(logger)
-    def _on_openfga_relation_broken(self, event) -> None:
-        """Handle broken relations with OpenFGA.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not self.charm._state.is_ready():
-            event.defer()
-            return
-
-        self.charm._state.openfga = None
-        self.charm._update(event)
+        # Action handlers are registered by the charm's __init__ via
+        # self.framework.observe(self.on.<action>, self.openfga_relation._on_<action>)
 
     @log_event_handler(logger)
     def _on_create_authorization_model_action(self, event):
@@ -205,7 +116,6 @@ class OpenFGA(framework.Object):
             **self.charm._state.openfga,
             "auth_model_id": authorization_model_id,
         }
-        self.charm._update(event)
 
     @log_event_handler(logger)
     def _on_list_auth_rule_action(self, event):
