@@ -16,10 +16,11 @@ from typing import Optional
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.loki_k8s.v1.loki_push_api import LogForwarder
+from charms.loki_k8s.v1.loki_push_api import LogForwarder, LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.temporal_k8s.v0.temporal_host_info import TemporalHostInfoProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
@@ -36,6 +37,8 @@ from ops.pebble import CheckStatus
 
 from literals import (
     DB_NAME,
+    LOG_FORMAT,
+    LOG_OUTPUT_FILE,
     PROMETHEUS_PORT,
     REQUIRED_OPENFGA_KEYS,
     REQUIRED_S3_PARAMETERS,
@@ -171,6 +174,11 @@ class TemporalK8SCharm(CharmBase):
 
         # Loki
         self._log_forwarder = LogForwarder(self, relation_name="logging")
+        self._log_proxy = LogProxyConsumer(
+            self,
+            logs_scheme={"temporal": {"log-files": [LOG_OUTPUT_FILE]}},
+            relation_name="log-proxy",
+        )
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
@@ -190,6 +198,9 @@ class TemporalK8SCharm(CharmBase):
             self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
             self._update,
         )
+
+        # Host Info
+        self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["frontend"]["grpc"])
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):
@@ -380,6 +391,9 @@ class TemporalK8SCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Status check: DOWN")
             return
 
+        # Run log rotation
+        self._run_log_rotation(container)
+
         self.unit.set_workload_version(WORKLOAD_VERSION)
         self.set_active_unit_status()
         if self.unit.is_leader():
@@ -399,6 +413,20 @@ class TemporalK8SCharm(CharmBase):
             return bool(plan["services"]["temporal-server"]["on-check-failure"])
         except (KeyError, pebble.ConnectionError):
             return False
+
+    def _run_log_rotation(self, container):
+        """Run log rotation for temporal server logs.
+
+        logrotate only rotates when the configured
+        conditions are met (file size or time threshold).
+
+        Args:
+            container: application container
+        """
+        try:
+            container.exec(["logrotate", "/etc/logrotate.d/temporal-server"]).wait()
+        except (pebble.ExecError, pebble.APIError) as e:
+            logger.warning(f"Log rotation failed: {e}")
 
     def _check_missing_params(self, params, required_params):
         """Validate that all required properties were extracted.
@@ -532,6 +560,12 @@ class TemporalK8SCharm(CharmBase):
             "log-level": "LOG_LEVEL",
         }
         context = {config_key: self.config[key] for key, config_key in options.items()}
+        context.update(
+            {
+                "LOG_OUTPUT_FILE": LOG_OUTPUT_FILE,
+                "LOG_FORMAT": LOG_FORMAT,
+            }
+        )
         db_conn = self._state.database_connections["db"]
         visibility_conn = self._state.database_connections["visibility"]
         context.update(
@@ -605,6 +639,26 @@ class TemporalK8SCharm(CharmBase):
         # If the relation is broken, remove certificates
         self._remove_certificates(event)
         context.update(self._extra_context)
+
+        # Ensure log directory exists
+        log_dir = os.path.dirname(LOG_OUTPUT_FILE)
+        container.make_dir(log_dir, make_parents=True, user="ubuntu", group="ubuntu")
+
+        # Configure log rotation
+        logrotate_config = f"""{LOG_OUTPUT_FILE} {{
+    daily
+    rotate 7
+    size 100M
+    missingok
+    notifempty
+    nomail
+    compress
+    delaycompress
+    copytruncate
+    create 0640 ubuntu ubuntu
+}}
+"""
+        container.push("/etc/logrotate.d/temporal-server", logrotate_config, make_dirs=True)
 
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)

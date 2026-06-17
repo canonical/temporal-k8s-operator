@@ -4,17 +4,25 @@
 
 """Temporal charm integration test helpers."""
 
+import asyncio
 import datetime
 import logging
 import time
+import uuid
 from pathlib import Path
 
+import tenacity
 import yaml
 from pytest_operator.plugin import OpsTest
 from temporal_client.activities import say_hello
 from temporal_client.workflows import SayHello
-from temporalio.client import Client
+from temporalio.client import Client, WorkflowFailureError
 from temporalio.worker import Worker
+
+try:
+    import temporal_sdk_bridge
+except ImportError:  # integration extra not installed (e.g. lint-only env)
+    temporal_sdk_bridge = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -59,22 +67,49 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
     """
     url = await get_application_url(ops_test, application=APP_NAME, port=7233)
     logger.info("running workflow on app address: %s", url)
+    # Juju active may precede Temporal matching/worker scheduling readiness in CI.
+    await asyncio.sleep(45)
 
     client = await Client.connect(url)
+
+    workflow_error_types: tuple = (WorkflowFailureError,)
+    if temporal_sdk_bridge is not None:
+        workflow_error_types = (WorkflowFailureError, temporal_sdk_bridge.RPCError)
+
+    def _retryable_workflow_error(exc: BaseException) -> bool:
+        """Return True if the exception is retryable transient workflow/client errors."""
+        if not isinstance(exc, workflow_error_types):
+            return False
+        message = str(exc).lower()
+        return (
+            "scheduletostart timeout" in message
+            or "activity task timed out" in message
+            or "timeout expired" in message
+            or "not enough hosts" in message
+            or "unavailable" in message
+        )
 
     # Run a worker for the workflow
     start_time = time.time()
     async with Worker(client, task_queue="my-task-queue", workflows=[SayHello], activities=[say_hello]):
         name = "Jean-luc"
         for i in range(count):
-            logger.info(f"running workflow #{i + 1}")
-            result = await client.execute_workflow(
-                SayHello.run,
-                name,
-                id="my-workflow-id",
-                task_queue="my-task-queue",
-                execution_timeout=datetime.timedelta(seconds=300),
-            )
+            logger.info("running workflow #%d", i + 1)
+            async for attempt in tenacity.AsyncRetrying(
+                stop=tenacity.stop_after_attempt(5),
+                wait=tenacity.wait_incrementing(start=10, increment=10),
+                retry=tenacity.retry_if_exception(_retryable_workflow_error),
+                reraise=True,
+                before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+            ):
+                with attempt:
+                    result = await client.execute_workflow(
+                        SayHello.run,
+                        name,
+                        id=f"my-workflow-id-{i}-{uuid.uuid4().hex[:12]}",
+                        task_queue="my-task-queue",
+                        execution_timeout=datetime.timedelta(seconds=300),
+                    )
             logger.info(f"result: {result}")
         assert result == f"Hello, {name}!"
 
@@ -96,7 +131,9 @@ async def create_default_namespace(ops_test: OpsTest):
     )
     result = (await action.wait()).results
     logger.info(f"cli result: {result}")
-    assert "result" in result and result["result"] == "command succeeded"
+    assert result.get("return-code") == 0
+    if "result" in result:
+        assert result["result"] == "command succeeded"
 
 
 async def get_application_url(ops_test: OpsTest, application, port):
@@ -172,8 +209,10 @@ async def perform_temporal_integrations(ops_test: OpsTest):
     await ops_test.model.integrate(f"{APP_NAME}:db", "postgresql-k8s:database")
     await ops_test.model.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
     await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
+    await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
     await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=180)
     await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
+    await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_UI}:temporal-host-info")
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=180
     )

@@ -39,4 +39,19 @@ the different charms and their relations. The charmed components are as follows:
   is the entity which listens and polls on specific task queue, and executes
   code in response to the task.
 
+## Charm interfaces
+
+### temporal-host-info
+
+The `temporal-host-info` interface allows other charms in the ecosystem to
+discover the Temporal server's connection details (host and port) at runtime.
+The Temporal server charm acts as the provider, and any charm that needs to
+connect to the Temporal frontend service (such as the Temporal Admin, UI or
+Worker charms) can act as a requirer.
+
+The Temporal server publishes either the configured `external-hostname` or its
+pod IP address, along with the frontend gRPC port. Requirers receive these
+details via the `temporal_host_info_changed` event emitted by the
+`TemporalHostInfoRequirer` charm library.
+
 ![Charmed Temporal Architecture](../media/temporal-architecture.drawio.png)

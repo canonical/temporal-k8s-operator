@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+"""K8s charm for testing."""
+
+import logging
+
+import ops
+from charms.temporal_k8s.v0 import temporal_host_info
+
+logger = logging.getLogger(__name__)
+
+
+class Charm(ops.CharmBase):
+    """Charm the application."""
+
+    def __init__(self, framework: ops.Framework):
+        """Construct the charm.
+
+        Args:
+            framework: The framework instance
+        """
+        super().__init__(framework)
+        self.host_info = temporal_host_info.TemporalHostInfoRequirer(self)
+        framework.observe(self.host_info.on.temporal_host_info_changed, self._configure)
+
+    def _configure(self, event: ops.EventBase):
+        """Handle the pebble ready event and temporal host info changed event.
+
+        Args:
+            event: The event that triggered this handler
+        """
+        if self.host_info.host is None or self.host_info.port is None:
+            self.unit.status = ops.WaitingStatus("Waiting for temporal-host-info relation data")
+            return
+        self.unit.status = ops.ActiveStatus(f"Temporal host: {self.host_info.host}, port: {self.host_info.port}")
+
+
+if __name__ == "__main__":  # pragma: nocover
+    ops.main(Charm)

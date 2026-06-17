@@ -1,5 +1,8 @@
 venv/
 build/
+parts/
+stage/
+prime/
 *.charm
 .tox/
 .coverage

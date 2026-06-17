@@ -10,7 +10,7 @@ summary: Temporal server operator
 description: |
   Temporal is a developer-first, open source platform that ensures
   the successful execution of services and applications (using workflows).
-maintainers: 
+maintainers:
   - Commercial Systems <jaas-crew@lists.canonical.com>
 source: https://github.com/canonical/temporal-k8s-operator
 docs: https://discourse.charmhub.io/t/temporal-server-documentation-overview/8948
@@ -55,6 +55,10 @@ requires:
     interface: loki_push_api
     optional: true
     limit: 1
+  log-proxy:
+    interface: loki_push_api
+    optional: true
+    limit: 1
   openfga:
     interface: openfga
     optional: true
@@ -71,6 +75,8 @@ provides:
   grafana-dashboard:
     interface: grafana_dashboard
     optional: true
+  temporal-host-info:
+    interface: temporal-host-info
 
 containers:
   temporal:

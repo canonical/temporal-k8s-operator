@@ -1,0 +1,45 @@
+name: Publish charm
+
+on:
+  push:
+    branches:
+      - track/**
+
+jobs:
+  tests:
+    name: Release tests
+    uses: ./.github/workflows/integration_test.yaml
+
+  publish:
+    name: Release the charm
+    needs:
+      - tests
+    uses: canonical/observability/.github/workflows/_charm-release.yaml@v1
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      release-channel: "1.23/edge"
+      charm-path: "."
+      charmcraft-channel: "3.x/stable"
+      runners: '["ubuntu-latest"]'
+
+  publish-libs:
+    name: Publish charm libs
+    needs:
+      - tests
+      - publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Publish changed charm libraries
+        uses: canonical/charming-actions/release-libraries@2.7.0
+        with:
+          credentials: ${{ secrets.CHARMHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          charmcraft-channel: 3.x/stable

@@ -25,6 +25,8 @@ from pytest_operator.plugin import OpsTest
 ALL_SERVICES = ["temporal-k8s", "temporal-k8s-history", "temporal-k8s-matching", "temporal-k8s-worker"]
 ALL_CONFIG = ["frontend", "history", "matching", "worker"]
 
+_SCALE_TEST_WORKFLOW_COUNT = 150
+
 logger = logging.getLogger(__name__)
 
 
@@ -85,6 +87,7 @@ async def deploy(ops_test: OpsTest):
         await ops_test.model.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
         await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
+        await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
         for service in ALL_SERVICES:
@@ -95,6 +98,7 @@ async def deploy(ops_test: OpsTest):
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
 
         await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
+        await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_UI}:temporal-host-info")
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=1200
         )
@@ -117,13 +121,13 @@ class TestScaling:
         for service in ALL_SERVICES:
             await scale(ops_test, app=service, units=2)
 
-        # The count argument is an arbitrary number, keep it around 500 to allow
+        # The count argument is an arbitrary number, keep it around 150 to allow
         # runners to complete this number of runs before timeouts.
-        await run_sample_workflow(ops_test, count=500)
+        await run_sample_workflow(ops_test, count=_SCALE_TEST_WORKFLOW_COUNT)
 
     async def test_scaling_down(self, ops_test: OpsTest):
         """Scale Temporal charm down to 1 unit."""
         for service in ALL_SERVICES:
             await scale(ops_test, app=service, units=1)
 
-        await run_sample_workflow(ops_test, count=500)
+        await run_sample_workflow(ops_test, count=_SCALE_TEST_WORKFLOW_COUNT)
