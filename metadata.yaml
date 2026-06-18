@@ -38,12 +38,14 @@ requires:
     limit: 1
   frontend-certificates:
     interface: tls-certificates
+    optional: true
     limit: 1
   visibility:
     interface: postgresql_client
     limit: 1
   nginx-route:
     interface: nginx-route
+    optional: true
     limit: 1
   ui:
     interface: temporal
@@ -59,17 +61,20 @@ requires:
     limit: 1
   openfga:
     interface: openfga
+    optional: true
     limit: 1
   s3-parameters:
     interface: s3
-    limit: 1
     optional: true
+    limit: 1
 
 provides:
   metrics-endpoint:
     interface: prometheus_scrape
+    optional: true
   grafana-dashboard:
     interface: grafana_dashboard
+    optional: true
   temporal-host-info:
     interface: temporal-host-info
 
