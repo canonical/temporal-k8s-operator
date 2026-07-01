@@ -15,5 +15,9 @@ jobs:
       - name: Run promtool checks on Prometheus alert definitions
         run: promtool check rules $(find "$PWD" -name "*_rules.yaml")
   unit-tests:
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     uses: canonical/operator-workflows/.github/workflows/test.yaml@main
     secrets: inherit
