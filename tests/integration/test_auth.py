@@ -37,30 +37,19 @@ class TestAuth:
         await ops_test.model.applications[APP_NAME].set_config(
             {"auth-enabled": "true", "auth-admin-groups": "red,green"}
         )
-        await ops_test.model.deploy("openfga-k8s", channel="2.0/stable")
+
+        # Deploy openfga and add required relations
+        await ops_test.model.deploy("openfga-k8s", channel="latest/stable")
+        await ops_test.model.integrate("openfga-k8s:database", "postgresql-k8s:database")
+        await ops_test.model.wait_for_idle(
+            apps=["openfga-k8s"],
+            status="active",
+            raise_on_blocked=False,
+            timeout=1200,
+        )
 
         async with ops_test.fast_forward():
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME, "openfga-k8s"],
-                status="blocked",
-                raise_on_blocked=False,
-                raise_on_error=False,
-                timeout=1200,
-            )
-
-            logger.info("adding openfga postgresql relation")
-            await ops_test.model.integrate("openfga-k8s:database", "postgresql-k8s:database")
-
-            await ops_test.model.wait_for_idle(
-                apps=["openfga-k8s"],
-                status="active",
-                raise_on_blocked=False,
-                timeout=1200,
-            )
-
-            logger.info("adding openfga relation")
             await ops_test.model.integrate(APP_NAME, "openfga-k8s")
-
             await ops_test.model.wait_for_idle(
                 apps=[APP_NAME],
                 status="blocked",
