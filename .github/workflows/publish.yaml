@@ -30,7 +30,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           channel: 1.31/edge
           tag-prefix: temporal-k8s
-          charmcraft-channel: 3.x/stable
+          charmcraft-channel: 4.x/stable
 
   publish-libs:
     name: Publish charm libs
@@ -50,4 +50,4 @@ jobs:
         with:
           credentials: ${{ secrets.CHARMHUB_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          charmcraft-channel: 3.x/stable
+          charmcraft-channel: 4.x/stable

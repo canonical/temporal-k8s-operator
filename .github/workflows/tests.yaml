@@ -71,8 +71,8 @@ jobs:
 
           sudo -E concierge prepare \
             -p k8s \
-            --juju-channel 3.6/stable \
-            --charmcraft-channel latest/stable \
+            --juju-channel 4.x/stable \
+            --charmcraft-channel 4.x/stable \
             --extra-snaps="astral-uv,just,kubectl"
 
           sudo k8s kubectl config view --raw > ~/.kube/config
