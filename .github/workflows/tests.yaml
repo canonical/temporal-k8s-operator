@@ -71,7 +71,7 @@ jobs:
 
           sudo -E concierge prepare \
             -p k8s \
-            --juju-channel 4.x/stable \
+            --juju-channel 4.0/stable \
             --charmcraft-channel 4.x/stable \
             --extra-snaps="astral-uv,just,kubectl"
 
