@@ -59,7 +59,7 @@ jobs:
 
   integration-tests:
     name: Integration tests
-    runs-on: [self-hosted, linux, X64, large, resolute]
+    runs-on: [self-hosted, linux, X64, large, noble]
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -69,10 +69,10 @@ jobs:
         run: |
           sudo snap install concierge --classic
 
-          sudo -E concierge prepare \
+          sudo concierge prepare \
             -p k8s \
             --juju-channel 3.6/stable \
-            --charmcraft-channel 4.x/stable \
+            --charmcraft-channel 3.x/stable \
             --extra-snaps="astral-uv,just,kubectl"
 
           sudo k8s kubectl config view --raw > ~/.kube/config
