@@ -1,0 +1,85 @@
+name: Tests
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  alertmanager-rules-lint:
+    name: Alertmanager rules lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Prometheus
+        run: sudo snap install prometheus
+
+      - name: Run promtool checks on Prometheus alert definitions
+        run: promtool check rules $(find "$PWD" -name "*_rules.yaml")
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo snap install astral-uv --classic
+          sudo snap install just --classic
+
+      - name: Run lint
+        run: just lint
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo snap install astral-uv --classic
+          sudo snap install just --classic
+
+      - name: Run unit tests
+        run: just unit
+
+  integration-tests:
+    name: Integration tests
+    runs-on: [self-hosted, linux, X64, large, resolute]
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo snap install concierge --classic
+
+          sudo -E concierge prepare \
+            -p k8s \
+            --juju-channel 3.6/stable \
+            --charmcraft-channel latest/stable \
+            --extra-snaps="astral-uv,just,kubectl"
+
+          sudo k8s kubectl config view --raw > ~/.kube/config
+
+      - name: Run integration tests
+        run: just integration
+
+      - name: Get system state (if failure)
+        if: failure()
+        run: just get-system-state
