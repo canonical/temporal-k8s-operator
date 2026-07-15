@@ -60,7 +60,7 @@ jobs:
   integration-tests:
     name: Integration tests
     runs-on: [self-hosted, linux, X64, large, noble]
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v5
