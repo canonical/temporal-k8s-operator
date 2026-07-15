@@ -58,9 +58,20 @@ jobs:
         run: just unit
 
   integration-tests:
-    name: Integration tests
+    name: Integration tests (${{ matrix.test }})
     runs-on: [self-hosted, linux, X64, large, noble]
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - test_auth
+          - test_charm
+          - test_host_info
+          - test_pgbouncer
+          - test_scaling
+          - test_server_upgrade
+          - test_upgrades
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -78,7 +89,7 @@ jobs:
           sudo k8s kubectl config view --raw > ~/.kube/config
 
       - name: Run integration tests
-        run: just integration
+        run: just integration tests/integration/${{ matrix.test }}.py
 
       - name: Get system state (if failure)
         if: failure()
