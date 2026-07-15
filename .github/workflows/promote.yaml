@@ -10,7 +10,7 @@ on:
       destination-channel:
         description: Destination channel
         required: true
-        default: 1.31/stable
+        default: 1.31/beta
 
 jobs:
   promote:
