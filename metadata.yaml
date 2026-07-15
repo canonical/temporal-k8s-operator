@@ -41,6 +41,7 @@ requires:
     optional: true
   ingress:
     interface: ingress
+    optional: true
     limit: 1
   visibility:
     interface: postgresql_client

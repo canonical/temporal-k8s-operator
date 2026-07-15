@@ -214,7 +214,7 @@ class TemporalK8SCharm(CharmBase):
             if "frontend" not in self.config["services"]:
                 self.unit.status = BlockedStatus("Not a frontend service, please remove ingress integration.")
             else:
-                self.ingress = IngressPerAppRequirer(self, port=SERVICE_PORTS["frontend"]["grpc"], scheme=lambda: "h2c")
+                self.ingress = IngressPerAppRequirer(self, port=SERVICE_PORTS["frontend"]["grpc"], relation_name="ingress")
                 self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
                 self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
 
