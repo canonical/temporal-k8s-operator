@@ -39,6 +39,7 @@ requires:
   frontend-certificates:
     interface: tls-certificates
     optional: true
+    limit: 1
   ingress:
     interface: ingress
     optional: true

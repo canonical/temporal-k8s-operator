@@ -162,3 +162,58 @@ juju integrate temporal-ui-ingress <tls-certificate-provider>
 ```
 
 3. Use `https` when browsing, and and configure certificate trust settings as needed.
+
+## Configure ingress through the `ingress` interface (Traefik / Gateway API)
+
+As an alternative to the `nginx-route` interface, the Temporal Server frontend can
+be exposed through the standard `ingress` interface. This works with any provider
+that implements it, such as [Traefik](https://charmhub.io/traefik-k8s) and the
+[Gateway API Integrator](https://charmhub.io/gateway-api-integrator), which manages
+external access via Kubernetes `Gateway` and `HTTPRoute` resources.
+
+[note]
+
+Only the `frontend` service can be exposed through ingress. Integrating a non-frontend
+deployment will send the charm into a blocked state. As with `nginx-route`, only one
+ingress solution can be used at a time - relating both `ingress` and `nginx-route`
+blocks the charm.
+
+The Temporal frontend is a gRPC (HTTP/2) server, so the charm automatically advertises
+the correct scheme to the ingress provider:
+
+* `h2c` (HTTP/2 cleartext) by default, and
+* `https` when the `frontend-certificates` relation is used to enable frontend TLS.
+
+[/note]
+
+### Expose the Temporal Server with the Gateway API Integrator
+
+1. Deploy and configure the integrator charm following its
+[documentation](https://charmhub.io/gateway-api-integrator), including its required
+`certificates` and `dns-record` providers.
+
+2. Integrate the Temporal Server frontend with the integrator's `gateway` endpoint:
+
+```
+juju integrate temporal-k8s:ingress gateway-api-integrator:gateway
+```
+
+The interface (`ingress`) is what matters, so the same command shape works for Traefik:
+
+```
+juju integrate temporal-k8s:ingress traefik-k8s:ingress
+```
+
+3. Because the Temporal frontend relies on host-based routing, configure the provider
+for subdomain/host routing and set up DNS resolution to the load balancer address, then
+connect clients through the proxied endpoint. For example, with Traefik:
+
+```
+juju config traefik-k8s routing_mode=subdomain external_hostname=<LOADBALANCER-IP>.nip.io
+
+temporal operator namespace list --address temporal-k8s.<LOADBALANCER-IP>.nip.io:80
+```
+
+When frontend TLS is enabled (via `frontend-certificates`), connect over the TLS port
+and provide the CA certificate to clients as described in
+[Frontend TLS](https://charmhub.io/temporal-k8s/docs/h-frontend-tls).

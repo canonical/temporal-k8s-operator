@@ -21,6 +21,7 @@ from charm import (
     FRONTEND_TLS_CONFIGURATION,
     render,
 )
+from literals import SERVICE_PORTS
 
 logger = logging.getLogger(__name__)
 
@@ -470,7 +471,6 @@ def test_blocked_on_two_ingresses(
     traefik_ingress_relation,
     all_required_relations,
 ):
-
     all_required_relations.append(traefik_ingress_relation)
     state = dataclasses.replace(state, relations=all_required_relations)
 
@@ -484,6 +484,39 @@ def test_blocked_on_two_ingresses(
     assert new_state.unit_status == ops.BlockedStatus(
         "Only one ingress solution is allowed - remove the ingress or the nginx-route relation."
     )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_ingress_happy_path(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    nginx_route_relation,
+    traefik_ingress_relation,
+    all_required_relations,
+):
+    # Swap the nginx-route relation for a traefik / gateway-api-integrator
+    # ingress relation so the single-ingress-solution constraint is satisfied.
+    all_required_relations.remove(nginx_route_relation)
+    all_required_relations.append(traefik_ingress_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    # Bring the charm up with the ingress relation present.
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    # Establishing ingress on a frontend service succeeds without blocking.
+    new_state = context.run(context.on.relation_changed(traefik_ingress_relation), new_state)
+    assert new_state.unit_status == ops.MaintenanceStatus("replanning application")
+
+    # The requirer publishes the frontend gRPC port and the h2c scheme
+    # (cleartext HTTP/2), since no frontend TLS certificates are configured.
+    ingress_app_data = "".join(new_state.get_relations("ingress")[0].local_app_data.values())
+    assert str(SERVICE_PORTS["frontend"]["grpc"]) in ingress_app_data
+    assert "h2c" in ingress_app_data
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)

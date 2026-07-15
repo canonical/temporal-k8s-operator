@@ -207,16 +207,21 @@ class TemporalK8SCharm(CharmBase):
         # Host Info
         self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["frontend"]["grpc"])
 
-        # Handle Ingress (Traefik)
-        # Only handle ingress for the Frontend service
-        # It is assumed that one application per deployment will be set to frontend
-        if self.model.get_relation("ingress") and not self.model.get_relation("nginx-route"):
-            if "frontend" not in self.config["services"]:
-                self.unit.status = BlockedStatus("Not a frontend service, please remove ingress integration.")
-            else:
-                self.ingress = IngressPerAppRequirer(self, port=SERVICE_PORTS["frontend"]["grpc"], relation_name="ingress")
-                self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
-                self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+        # Handle Ingress (Traefik / gateway-api-integrator)
+        # Temporal's frontend service speaks gRPC and is the only service
+        # exposed via ingress. The requirer is always instantiated so that its
+        # event handlers are registered even when the relation is added after
+        # the charm has started (e.g. relating to gateway-api-integrator or
+        # traefik-k8s post-deployment). Constraints on where ingress may be used
+        # (frontend only, single ingress solution) are enforced in `_validate`.
+        self.ingress = IngressPerAppRequirer(
+            self,
+            port=SERVICE_PORTS["frontend"]["grpc"],
+            relation_name="ingress",
+            scheme=self._ingress_scheme,
+        )
+        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
+        self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):
@@ -259,6 +264,23 @@ class TemporalK8SCharm(CharmBase):
             return
         self._delete_certificate()
         self._delete_private_key()
+
+    def _ingress_scheme(self) -> str:
+        """Return the scheme the ingress provider should use to reach the frontend.
+
+        Temporal's frontend speaks gRPC (HTTP/2). When frontend TLS certificates
+        are configured the backend serves HTTP/2 over TLS, so the ingress
+        (traefik-k8s or gateway-api-integrator) must connect over ``https``;
+        otherwise it forwards HTTP/2 cleartext (``h2c``). This avoids the
+        cleartext/TLS mismatch when the `frontend-certificates` relation is used
+        together with ingress.
+
+        Returns:
+            "https" if frontend TLS is configured, otherwise "h2c".
+        """
+        if self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+            return "https"
+        return "h2c"
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("This app's ingress URL: %s", event.url)
@@ -515,6 +537,10 @@ class TemporalK8SCharm(CharmBase):
                 raise ValueError(f"value of '{db_type}-max-idle-conns' must be >= 1")
             if not is_valid_time_duration(self.config[f"{db_type}-max-conn-time"]):
                 raise ValueError(f"value of '{db_type}-max-conn-time' must be a valid time duration e.g. 1h")
+
+        # Validate ingress relation - only the frontend service can be exposed.
+        if self.model.get_relation("ingress") and "frontend" not in self.config["services"]:
+            raise ValueError("Not a frontend service, please remove ingress integration.")
 
         # Validate admin relation.
         self.database_connections()
