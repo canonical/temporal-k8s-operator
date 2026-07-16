@@ -49,8 +49,8 @@ resources.
 1. Deploy the ingress chain:
 
 ```
-juju deploy gateway-api-integrator --trust
-juju deploy ingress-configurator
+juju deploy gateway-api-integrator --channel 1/stable --trust
+juju deploy ingress-configurator --trust
 juju deploy self-signed-certificates
 ```
 
@@ -59,7 +59,7 @@ juju deploy self-signed-certificates
 or `cilium` for an upstream Cilium install):
 
 ```
-juju config gateway-api-integrator gateway-class=<your-gateway-class> external-hostname=temporal-k8s.test
+juju config gateway-api-integrator gateway-class=<your-gateway-class>
 juju config ingress-configurator hostname=temporal-k8s.test backend-protocol=http
 ```
 
