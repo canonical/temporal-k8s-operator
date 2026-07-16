@@ -964,6 +964,18 @@ wheels = [
 ]
 
 [[package]]
+name = "jubilant"
+version = "1.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1c/0a/4112c6a16440efa7047b58ea7cd3751a75ef4b73e75fa4b4b4aadf7cbf1c/jubilant-1.11.0.tar.gz", hash = "sha256:69d13d2a0c9604a146fb7172732b9344f7aa14a35cdc29a37189831a724dc80a", size = 34642, upload-time = "2026-06-29T04:23:29.965Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/72/8ba367bc63f03b9f0a31c7975fec8e7f3c9da3516a8d1db668164fc1801b/jubilant-1.11.0-py3-none-any.whl", hash = "sha256:900427d616c75f1cfb6ee11212fefe9c7877111209630a87b2b2556a37d626e7", size = 36640, upload-time = "2026-06-29T04:23:28.667Z" },
+]
+
+[[package]]
 name = "juju"
 version = "3.5.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1934,6 +1946,44 @@ charm = [
     { name = "pydantic" },
     { name = "requests" },
 ]
+dev = [
+    { name = "async-timeout" },
+    { name = "black" },
+    { name = "boto3" },
+    { name = "codespell" },
+    { name = "cosl" },
+    { name = "coverage", extra = ["toml"] },
+    { name = "cryptography" },
+    { name = "flake8" },
+    { name = "flake8-builtins" },
+    { name = "flake8-copyright" },
+    { name = "flake8-docstrings" },
+    { name = "flake8-docstrings-complete" },
+    { name = "flake8-test-docs" },
+    { name = "grpcio" },
+    { name = "grpcio-health-checking" },
+    { name = "ipdb" },
+    { name = "isort" },
+    { name = "jinja2" },
+    { name = "jubilant" },
+    { name = "juju" },
+    { name = "mypy" },
+    { name = "openfga-sdk" },
+    { name = "ops", extra = ["testing"] },
+    { name = "pep8-naming" },
+    { name = "pydantic" },
+    { name = "pydocstyle" },
+    { name = "pylint" },
+    { name = "pyproject-flake8" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-operator" },
+    { name = "requests" },
+    { name = "temporalio" },
+    { name = "tenacity" },
+    { name = "types-pyyaml" },
+    { name = "types-requests" },
+]
 fmt = [
     { name = "black" },
     { name = "isort" },
@@ -1942,12 +1992,14 @@ integration = [
     { name = "grpcio" },
     { name = "grpcio-health-checking" },
     { name = "ipdb" },
+    { name = "jubilant" },
     { name = "juju" },
     { name = "ops" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-operator" },
     { name = "temporalio" },
+    { name = "tenacity" },
 ]
 lint = [
     { name = "black" },
@@ -2008,6 +2060,7 @@ requires-dist = [
     { name = "isort", marker = "extra == 'lint'", specifier = "==5.12.0" },
     { name = "jinja2", marker = "extra == 'charm'", specifier = "==3.1.4" },
     { name = "jinja2", marker = "extra == 'unit'", specifier = "==3.1.4" },
+    { name = "jubilant", marker = "extra == 'integration'", specifier = "~=1.0" },
     { name = "juju", marker = "extra == 'integration'", specifier = "==3.5.2.1" },
     { name = "mypy", marker = "extra == 'lint'" },
     { name = "openfga-sdk", marker = "extra == 'charm'", specifier = "==0.6.0" },
@@ -2027,11 +2080,13 @@ requires-dist = [
     { name = "pytest-operator", marker = "extra == 'integration'", specifier = "==0.31.1" },
     { name = "requests", marker = "extra == 'charm'", specifier = "==2.31.0" },
     { name = "requests", marker = "extra == 'unit'", specifier = "==2.31.0" },
+    { name = "temporal-k8s-operator", extras = ["charm", "unit", "integration", "lint", "fmt"], marker = "extra == 'dev'" },
     { name = "temporalio", marker = "extra == 'integration'", specifier = "==1.7.0" },
+    { name = "tenacity", marker = "extra == 'integration'", specifier = ">=8.2.0,<10" },
     { name = "types-pyyaml", marker = "extra == 'lint'" },
     { name = "types-requests", marker = "extra == 'lint'" },
 ]
-provides-extras = ["charm", "unit", "integration", "lint", "fmt"]
+provides-extras = ["charm", "unit", "integration", "lint", "fmt", "dev"]
 
 [[package]]
 name = "temporalio"

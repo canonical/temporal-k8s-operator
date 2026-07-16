@@ -178,42 +178,71 @@ deployment will send the charm into a blocked state. As with `nginx-route`, only
 ingress solution can be used at a time - relating both `ingress` and `nginx-route`
 blocks the charm.
 
-The Temporal frontend is a gRPC (HTTP/2) server, so the charm automatically advertises
-the correct scheme to the ingress provider:
-
-* `h2c` (HTTP/2 cleartext) by default, and
-* `https` when the `frontend-certificates` relation is used to enable frontend TLS.
+The Temporal frontend is a gRPC (HTTP/2) server. Over the `ingress` relation the charm
+advertises the `h2c` (HTTP/2 cleartext) scheme, meaning the frontend serves cleartext
+gRPC and TLS is terminated at the ingress. Terminating TLS at the frontend instead (the
+`frontend-certificates` relation) is **not compatible** with the `ingress` relation:
+providers such as Traefik and the Gateway API Integrator forward cleartext to the
+backend, so a TLS-terminating frontend would reject those connections. Relating both
+`ingress` and `frontend-certificates` therefore blocks the charm - terminate TLS at the
+ingress or at the frontend, but not both. See [Frontend TLS](https://charmhub.io/temporal-k8s/docs/h-frontend-tls)
+for the frontend-terminated option.
 
 [/note]
 
 ### Expose the Temporal Server with the Gateway API Integrator
 
-1. Deploy and configure the integrator charm following its
-[documentation](https://charmhub.io/gateway-api-integrator), including its required
-`certificates` and `dns-record` providers.
+Because the Temporal frontend is a gRPC server that needs host-based routing, it is
+exposed through the [Ingress Configurator](https://charmhub.io/ingress-configurator),
+which sits between the charm and the
+[Gateway API Integrator](https://charmhub.io/gateway-api-integrator) and configures the
+hostname and gRPC routing. The integrator terminates TLS and creates the Kubernetes
+`Gateway` and `HTTPRoute` resources.
 
-2. Integrate the Temporal Server frontend with the integrator's `gateway` endpoint:
-
-```
-juju integrate temporal-k8s:ingress gateway-api-integrator:gateway
-```
-
-The interface (`ingress`) is what matters, so the same command shape works for Traefik:
+1. On Canonical Kubernetes, enable the Gateway API and a load balancer so the gateway
+gets an external IP:
 
 ```
-juju integrate temporal-k8s:ingress traefik-k8s:ingress
+sudo k8s enable gateway        # provides the "ck-gateway" GatewayClass
+sudo k8s enable load-balancer
 ```
 
-3. Because the Temporal frontend relies on host-based routing, configure the provider
-for subdomain/host routing and set up DNS resolution to the load balancer address, then
-connect clients through the proxied endpoint. For example, with Traefik:
+2. Deploy the ingress chain (a TLS provider such as `self-signed-certificates` supplies
+the gateway certificate):
 
 ```
-juju config traefik-k8s routing_mode=subdomain external_hostname=<LOADBALANCER-IP>.nip.io
-
-temporal operator namespace list --address temporal-k8s.<LOADBALANCER-IP>.nip.io:80
+juju deploy gateway-api-integrator --trust
+juju deploy ingress-configurator
+juju deploy self-signed-certificates
 ```
 
-When frontend TLS is enabled (via `frontend-certificates`), connect over the TLS port
-and provide the CA certificate to clients as described in
-[Frontend TLS](https://charmhub.io/temporal-k8s/docs/h-frontend-tls).
+3. Configure the gateway class and the routing hostname:
+
+```
+juju config gateway-api-integrator gateway-class=ck-gateway external-hostname=temporal-k8s.test
+juju config ingress-configurator hostname=temporal-k8s.test backend-protocol=http
+```
+
+4. Integrate the chain:
+
+```
+juju integrate self-signed-certificates:certificates gateway-api-integrator:certificates
+juju integrate ingress-configurator:gateway-route     gateway-api-integrator:gateway-route
+juju integrate temporal-k8s:ingress                   ingress-configurator:ingress
+```
+
+5. The gateway's external IP appears in the integrator's status message
+(`Gateway addresses: <ip>` in `juju status`). TLS is terminated at the gateway, so
+clients connect over TLS using the configured hostname (resolve it to the gateway IP).
+For example, with the temporal CLI snap:
+
+```
+temporal operator namespace list --address temporal-k8s.test:443 --tls-server-name temporal-k8s.test --tls-ca-path <gateway CA>
+```
+
+Do not enable the `frontend-certificates` relation at the same time - TLS is terminated
+at the gateway, and the frontend must stay cleartext (`h2c`); see the note above.
+
+The interface (`ingress`) is what matters, so the same `temporal-k8s:ingress` endpoint
+can instead be related to any other provider that implements it, for example
+`traefik-k8s:ingress`.

@@ -520,6 +520,40 @@ def test_ingress_happy_path(
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_blocked_on_ingress_with_frontend_certificates(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    nginx_route_relation,
+    traefik_ingress_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # Combining ingress with frontend TLS termination is unsupported: the
+    # ingress providers forward cleartext to the backend, so the frontend must
+    # not terminate TLS on its gRPC port at the same time.
+    all_required_relations.remove(nginx_route_relation)
+    all_required_relations.append(traefik_ingress_relation)
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    # Fetch the current relation object from the state before emitting so the
+    # scenario consistency check sees the in-state instance.
+    frontend_certificates = new_state.get_relations(FRONTEND_CERTIFICATES_RELATION_NAME)[0]
+    new_state = context.run(context.on.relation_joined(frontend_certificates), new_state)
+    assert new_state.unit_status == ops.BlockedStatus(
+        "ingress and frontend-certificates are mutually exclusive - "
+        "terminate TLS at the ingress or the frontend, not both."
+    )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_ingress_with_nginx(
     context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
 ):
