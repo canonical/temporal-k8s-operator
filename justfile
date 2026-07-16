@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 set export
@@ -18,10 +18,6 @@ lint:
 # Run unit tests
 unit:
 	uv tool run --with tox-uv tox -e unit
-
-# Run static analysis checks
-static:
-	uv tool run --with tox-uv tox -e static
 
 # Run integration tests
 integration *args:
