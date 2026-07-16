@@ -520,7 +520,7 @@ def test_ingress_happy_path(
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-def test_blocked_on_ingress_with_frontend_certificates(
+def test_ingress_with_frontend_certificates_advertises_https(
     context,
     state,
     temporal_container,
@@ -531,9 +531,9 @@ def test_blocked_on_ingress_with_frontend_certificates(
     frontend_certificates_relation,
     all_required_relations,
 ):
-    # Combining ingress with frontend TLS termination is unsupported: the
-    # ingress providers forward cleartext to the backend, so the frontend must
-    # not terminate TLS on its gRPC port at the same time.
+    # ingress and frontend-certificates are complementary: the frontend serves
+    # gRPC over TLS, and the ingress provider connects to it over TLS. The charm
+    # must not block the combination, and must advertise the `https` scheme.
     all_required_relations.remove(nginx_route_relation)
     all_required_relations.append(traefik_ingress_relation)
     all_required_relations.append(frontend_certificates_relation)
@@ -545,12 +545,13 @@ def test_blocked_on_ingress_with_frontend_certificates(
 
     # Fetch the current relation object from the state before emitting so the
     # scenario consistency check sees the in-state instance.
-    frontend_certificates = new_state.get_relations(FRONTEND_CERTIFICATES_RELATION_NAME)[0]
-    new_state = context.run(context.on.relation_joined(frontend_certificates), new_state)
-    assert new_state.unit_status == ops.BlockedStatus(
-        "ingress and frontend-certificates are mutually exclusive - "
-        "terminate TLS at the ingress or the frontend, not both."
-    )
+    ingress = new_state.get_relations("ingress")[0]
+    new_state = context.run(context.on.relation_changed(ingress), new_state)
+
+    assert new_state.unit_status != ops.BlockedStatus("Not a frontend service, please remove ingress integration.")
+    # With frontend TLS configured, the advertised scheme is https.
+    ingress_app_data = "".join(new_state.get_relations("ingress")[0].local_app_data.values())
+    assert "https" in ingress_app_data
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
