@@ -1,0 +1,33 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Concierge (https://github.com/canonical/concierge) provisions the substrate
+# for the integration tests. The Gateway API exercised by
+# test_gateway_api_ingress.py is provided by Canonical Kubernetes' default
+# "ck-gateway" GatewayClass (shipped with the Cilium network layer), so no
+# explicit "gateway" feature is needed here - only a load balancer, which gives
+# the Gateway an external IP address.
+#
+# NOTE: this file is consumed once the repository moves to concierge-based CI
+# (https://github.com/canonical/temporal-k8s-operator/pull/146). Until that PR
+# is merged the integration workflow still runs via operator-workflows and does
+# not read this file.
+juju:
+  channel: 3.6/stable
+  model-defaults:
+    test-mode: "true"
+    automatically-retry-hooks: "false"
+
+providers:
+  k8s:
+    enable: true
+    bootstrap: true
+    channel: 1.33-classic/stable
+    bootstrap-constraints:
+      root-disk: "2G"
+    features:
+      load-balancer:
+        l2-mode: "true"
+        cidrs: "10.43.45.0/28"
+      local-storage: {}
+      network: {}
