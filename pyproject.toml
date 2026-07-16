@@ -79,7 +79,7 @@ integration = [
     "pytest-operator==0.31.1",
     "pytest-asyncio==0.21",
     "jubilant~=1.0",
-    "juju==3.5.2.1",
+    "juju==3.6.1.2",
     "temporalio==1.7.0",
     "grpcio==1.73.1",
     "grpcio-health-checking==1.73.1",
