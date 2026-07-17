@@ -8,28 +8,36 @@ on:
 jobs:
   tests:
     name: Release tests
-    uses: ./.github/workflows/integration_test.yaml
+    uses: ./.github/workflows/tests.yaml
+    secrets: inherit
 
   publish:
-    name: Release the charm
+    name: 'Publish charm to edge | amd64'
+    runs-on: ubuntu-latest
     needs:
       - tests
-    uses: canonical/observability/.github/workflows/_charm-release.yaml@v1
+    timeout-minutes: 60
     permissions:
       contents: write
-    secrets: inherit
-    with:
-      release-channel: "1.31/edge"
-      charm-path: "."
-      charmcraft-channel: "3.x/stable"
-      runners: '["ubuntu-latest"]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Upload charm package
+        uses: canonical/charming-actions/upload-charm@2.7.0
+        with:
+          credentials: ${{ secrets.CHARMHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          channel: 1.31/edge
+          tag-prefix: temporal-k8s
+          charmcraft-channel: 4.x/stable
 
   publish-libs:
     name: Publish charm libs
+    runs-on: ubuntu-latest
     needs:
       - tests
       - publish
-    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
@@ -42,4 +50,4 @@ jobs:
         with:
           credentials: ${{ secrets.CHARMHUB_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          charmcraft-channel: 3.x/stable
+          charmcraft-channel: 4.x/stable
