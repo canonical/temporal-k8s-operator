@@ -21,7 +21,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-TEMPORAL_CHANNEL = "1.23/edge"
+TEMPORAL_CHANNEL = "1.31/edge"
 POSTGRESQL_CHANNEL = "14/stable"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/stable"
 
