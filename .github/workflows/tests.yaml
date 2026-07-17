@@ -112,7 +112,7 @@ jobs:
           sudo snap install concierge --classic
 
           sudo concierge prepare \
-            -c concierge.yaml \
+            -c .github/workflows/concierge.yaml \
             --charmcraft-channel 4.x/stable \
             --extra-snaps="astral-uv,just,kubectl"
 
