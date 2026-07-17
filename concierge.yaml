@@ -1,17 +1,15 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-# Concierge (https://github.com/canonical/concierge) provisions the substrate
-# for the integration tests. The Gateway API exercised by
-# test_gateway_api_ingress.py is provided by Canonical Kubernetes' default
-# "ck-gateway" GatewayClass (shipped with the Cilium network layer), so no
-# explicit "gateway" feature is needed here - only a load balancer, which gives
-# the Gateway an external IP address.
+# Concierge (https://github.com/canonical/concierge) provisions the substrate for
+# the cross-model ingress integration test (tests/integration/test_ingress.py):
+# temporal-k8s + ingress-configurator run on the Kubernetes model, while HAProxy
+# (a machine charm) runs on the LXD model, related across models. Both a `k8s` and
+# an `lxd` controller are therefore bootstrapped.
 #
-# NOTE: this file is consumed once the repository moves to concierge-based CI
-# (https://github.com/canonical/temporal-k8s-operator/pull/146). Until that PR
-# is merged the integration workflow still runs via operator-workflows and does
-# not read this file.
+# The other integration tests only need Kubernetes and are provisioned separately
+# with `concierge prepare -p k8s` (see .github/workflows/tests.yaml); they do not
+# read this file.
 juju:
   channel: 3.6/stable
   model-defaults:
@@ -19,6 +17,9 @@ juju:
     automatically-retry-hooks: "false"
 
 providers:
+  lxd:
+    enable: true
+    bootstrap: true
   k8s:
     enable: true
     bootstrap: true

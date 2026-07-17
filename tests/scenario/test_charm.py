@@ -471,16 +471,19 @@ def test_blocked_on_two_ingresses(
     traefik_ingress_relation,
     all_required_relations,
 ):
+    # The default relations include nginx-route; add ingress so both are present.
     all_required_relations.append(traefik_ingress_relation)
     state = dataclasses.replace(state, relations=all_required_relations)
 
-    # Add initial relations
+    # Bring the charm to a point where it would otherwise reconcile to active
+    # (schema ready, initialized container).
     new_state = context.run(context.on.pebble_ready(temporal_container), state)
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
 
-    # Add the traefik relation
-    new_state = context.run(context.on.relation_changed(traefik_ingress_relation), new_state)
+    # config_changed runs a full _update -> _validate cycle; the block is raised
+    # in _validate and persists (it is not reset to active by the rest of _update).
+    new_state = context.run(context.on.config_changed(), new_state)
     assert new_state.unit_status == ops.BlockedStatus(
         "Only one ingress solution is allowed - remove the ingress or the nginx-route relation."
     )

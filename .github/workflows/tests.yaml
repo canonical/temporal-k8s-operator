@@ -94,3 +94,33 @@ jobs:
       - name: Get system state (if failure)
         if: failure()
         run: just get-system-state
+
+  # The ingress test exposes the gRPC frontend through ingress-configurator +
+  # HAProxy. HAProxy is a machine charm, so this needs both a Kubernetes and an
+  # LXD controller - provisioned from concierge.yaml (which enables both
+  # providers) rather than the k8s-only `-p k8s` preset used above.
+  ingress-integration-test:
+    name: Integration test (ingress)
+    runs-on: [self-hosted, linux, X64, large, noble]
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo snap install concierge --classic
+
+          sudo concierge prepare \
+            -c concierge.yaml \
+            --charmcraft-channel 4.x/stable \
+            --extra-snaps="astral-uv,just,kubectl"
+
+          sudo k8s kubectl config view --raw > ~/.kube/config
+
+      - name: Run ingress integration test
+        run: just integration tests/integration/test_ingress.py
+
+      - name: Get system state (if failure)
+        if: failure()
+        run: just get-system-state

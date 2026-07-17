@@ -207,20 +207,21 @@ class TemporalK8SCharm(CharmBase):
         # Host Info
         self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["frontend"]["grpc"])
 
-        # Handle Ingress (ingress-configurator / Traefik / gateway-api-integrator)
-        # Temporal's frontend service speaks gRPC and is the only service
-        # exposed via ingress. The requirer is always instantiated so that its
-        # event handlers are registered even when the relation is added after
-        # the charm has started (e.g. relating to the ingress provider
+        # Handle Ingress (via the `ingress` interface, e.g. ingress-configurator
+        # fronted by HAProxy). Temporal's frontend service speaks gRPC and is the
+        # only service exposed via ingress. The requirer is always instantiated so
+        # that its event handlers are registered even when the relation is added
+        # after the charm has started (e.g. relating to the ingress provider
         # post-deployment). The `frontend` constraint is enforced in `_validate`.
         #
         # The advertised scheme follows the frontend TLS state (see
         # `_ingress_scheme`): `https` when the frontend serves gRPC over TLS via
-        # `frontend-certificates`, otherwise `h2c` (HTTP/2 cleartext). Exposing a
-        # gRPC frontend through an ingress provider generally requires the
-        # frontend to terminate TLS (providers such as ingress-configurator +
-        # HAProxy do not support plaintext HTTP/2 to the backend), so the
-        # `frontend-certificates` relation is expected alongside `ingress`.
+        # `frontend-certificates`, otherwise `h2c` (HTTP/2 cleartext). Exposing the
+        # gRPC frontend requires end-to-end TLS: the supported providers
+        # (ingress-configurator + HAProxy) do NOT support plaintext HTTP/2 (h2c) to
+        # the backend, so `frontend-certificates` must be related alongside
+        # `ingress` (the frontend then terminates TLS and the charm advertises
+        # `https`). See documentation/how-to/configure-ingress.md.
         self.ingress = IngressPerAppRequirer(
             self,
             port=SERVICE_PORTS["frontend"]["grpc"],
@@ -308,12 +309,12 @@ class TemporalK8SCharm(CharmBase):
         self._update(event)
 
     def _require_nginx_route(self):
-        """Require nginx-route relation based on current configuration."""
-        if self.model.get_relation("ingress") and self.model.get_relation("nginx-route"):
-            self.unit.status = BlockedStatus(
-                "Only one ingress solution is allowed - remove the ingress or the nginx-route relation."
-            )
-            return
+        """Require nginx-route relation based on current configuration.
+
+        The single-ingress-solution constraint (`ingress` vs `nginx-route`) is
+        enforced in `_validate` so that the resulting blocked status persists
+        through `_update` instead of being reset when the charm reconciles.
+        """
         require_nginx_route(
             charm=self,
             service_hostname=self.external_hostname,
@@ -544,12 +545,18 @@ class TemporalK8SCharm(CharmBase):
             if not is_valid_time_duration(self.config[f"{db_type}-max-conn-time"]):
                 raise ValueError(f"value of '{db_type}-max-conn-time' must be a valid time duration e.g. 1h")
 
-        # Validate ingress relation - only the frontend service can be exposed.
-        # `frontend-certificates` is expected alongside `ingress` so the frontend
-        # serves gRPC over TLS (see `_ingress_scheme`); the two are complementary,
-        # not mutually exclusive.
-        if self.model.get_relation("ingress") and "frontend" not in self.config["services"]:
-            raise ValueError("Not a frontend service, please remove ingress integration.")
+        # Validate ingress relation. `frontend-certificates` is expected alongside
+        # `ingress` so the frontend serves gRPC over TLS (see `_ingress_scheme`);
+        # the two are complementary, not mutually exclusive.
+        if self.model.get_relation("ingress"):
+            # Only one ingress solution can be used at a time.
+            if self.model.get_relation("nginx-route"):
+                raise ValueError(
+                    "Only one ingress solution is allowed - remove the ingress or the nginx-route relation."
+                )
+            # Only the frontend service can be exposed through ingress.
+            if "frontend" not in self.config["services"]:
+                raise ValueError("Not a frontend service, please remove ingress integration.")
 
         # Validate admin relation.
         self.database_connections()
