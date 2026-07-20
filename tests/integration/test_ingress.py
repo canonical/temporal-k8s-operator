@@ -35,6 +35,7 @@ import grpc
 import jubilant
 import pytest
 import yaml
+from conftest import POSTGRESQL_CHANNEL, SELF_SIGNED_CERTIFICATES_CHANNEL, TEMPORAL_CHANNEL
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 logger = logging.getLogger(__name__)
@@ -42,17 +43,15 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 
+# temporal-admin-k8s must track the temporal-server image version (schema
+# versions are tied to the server): `TEMPORAL_CHANNEL` (from conftest) matches
+# the image in metadata.yaml. Reuse conftest's channels so there's a single
+# source of truth shared with the ops_test suite.
 TEMPORAL_ADMIN = "temporal-admin-k8s"
-# Must match the temporal-server image track (schema versions are tied to the
-# server version): the `stable` channel ships an older schema tool (up to v1.11)
-# while the server image expects >=1.19, which makes the server refuse to start.
-TEMPORAL_ADMIN_CHANNEL = "1.31/edge"
 POSTGRESQL_K8S = "postgresql-k8s"
-POSTGRESQL_K8S_CHANNEL = "14/stable"
 INGRESS_CONFIGURATOR = "ingress-configurator"
 INGRESS_CONFIGURATOR_CHANNEL = "latest/edge"
 SELF_SIGNED = "self-signed-certificates"
-SELF_SIGNED_CHANNEL = "latest/stable"
 HAPROXY = "haproxy"
 HAPROXY_CHANNEL = "2.8/edge"
 
@@ -123,9 +122,9 @@ def topology(request: pytest.FixtureRequest, charm_path):
 
             # --- Kubernetes model ---
             k8s_juju.deploy(charm_path, APP_NAME, resources=resources, config={"num-history-shards": 2})
-            k8s_juju.deploy(TEMPORAL_ADMIN, channel=TEMPORAL_ADMIN_CHANNEL)
-            k8s_juju.deploy(POSTGRESQL_K8S, channel=POSTGRESQL_K8S_CHANNEL, trust=True)
-            k8s_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CHANNEL)
+            k8s_juju.deploy(TEMPORAL_ADMIN, channel=TEMPORAL_CHANNEL)
+            k8s_juju.deploy(POSTGRESQL_K8S, channel=POSTGRESQL_CHANNEL, trust=True)
+            k8s_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
             k8s_juju.deploy(INGRESS_CONFIGURATOR, channel=INGRESS_CONFIGURATOR_CHANNEL, trust=True)
 
             k8s_juju.integrate(f"{APP_NAME}:db", f"{POSTGRESQL_K8S}:database")
@@ -139,7 +138,7 @@ def topology(request: pytest.FixtureRequest, charm_path):
 
             # --- Machine model ---
             lxd_juju.deploy(HAPROXY, channel=HAPROXY_CHANNEL)
-            lxd_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CHANNEL)
+            lxd_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
             lxd_juju.integrate(f"{HAPROXY}:certificates", SELF_SIGNED)
             lxd_juju.config(HAPROXY, {"external-hostname": HOSTNAME})
 
