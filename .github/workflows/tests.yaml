@@ -110,13 +110,10 @@ jobs:
       - name: Install dependencies
         run: |
           # concierge's config-file mode (-c) does not honour the
-          # --charmcraft-channel / --extra-snaps preset flags, so install the
-          # tooling explicitly. charmcraft is needed to pack the charms.
+          # --charmcraft-channel / --extra-snaps preset flags, so the tooling
+          # (charmcraft, astral-uv, just, kubectl) is declared under `host.snaps`
+          # in concierge.yaml instead and installed by `concierge prepare`.
           sudo snap install concierge --classic
-          sudo snap install charmcraft --classic --channel 4.x/stable
-          sudo snap install astral-uv --classic
-          sudo snap install just --classic
-          sudo snap install kubectl --classic
 
           sudo concierge prepare -c .github/workflows/concierge.yaml
 

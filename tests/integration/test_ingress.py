@@ -1,6 +1,8 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
-
+#
+# The integration tests use the Jubilant library. See https://documentation.ubuntu.com/jubilant/
+# To learn more about testing, see https://documentation.ubuntu.com/ops/latest/explanation/testing/
 
 """Integration test: expose the Temporal frontend via ingress-configurator + HAProxy.
 
@@ -25,9 +27,12 @@ import logging
 import socket
 import ssl
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 import grpc
+import jubilant
 import pytest
 import yaml
 from grpc_health.v1 import health_pb2, health_pb2_grpc
@@ -48,45 +53,96 @@ SELF_SIGNED_CHANNEL = "latest/stable"
 HAPROXY = "haproxy"
 HAPROXY_CHANNEL = "2.8/edge"
 
-MACHINE_MODEL = "haproxy"
 HOSTNAME = "temporal-k8s.test"
 FRONTEND_GRPC_SERVICE = "temporal.api.workflowservice.v1.WorkflowService"
-IDLE_TIMEOUT = "30m"
-
-
-def juju(*args: str, model: str | None = None) -> str:
-    """Run a juju CLI command and return its stdout.
-
-    Args:
-        args: juju subcommand and arguments.
-        model: optional fully-qualified `<controller>:<model>` to target with `-m`.
-
-    Returns:
-        The command's stdout.
-    """
-    cmd = ["juju", args[0]]
-    if model:
-        cmd += ["-m", model]
-    cmd += list(args[1:])
-    logger.info("running: %s", " ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)  # noqa: S603
-    return result.stdout
+IDLE_TIMEOUT = 1800
 
 
 def _controller_by_cloud(*clouds: str) -> str:
     """Return the name of the bootstrapped controller backed by one of ``clouds``."""
-    controllers = json.loads(juju("controllers", "--format", "json"))["controllers"]
+    output = jubilant.Juju().cli("controllers", "--format", "json", include_model=False)
+    controllers = json.loads(output)["controllers"]
     for name, info in controllers.items():
         if info.get("cloud") in clouds:
             return name
     raise RuntimeError(f"no controller found for clouds {clouds}; check concierge bootstrapped it")
 
 
-def _unit_address(model: str, unit: str) -> str:
-    """Return a unit's public address from ``juju status``."""
-    status = json.loads(juju("status", "--format", "json", model=model))
-    app = unit.split("/")[0]
-    return status["applications"][app]["units"][unit]["public-address"]
+@pytest.fixture(scope="module")
+def charm_path(pytestconfig) -> str:
+    """Path to the packed charm (built with charmcraft if not supplied)."""
+    supplied = pytestconfig.getoption("--charm-file", default=None)
+    if supplied:
+        return supplied
+    subprocess.run(["charmcraft", "pack"], check=True)  # noqa: S603, S607
+    return str(sorted(Path(".").glob(f"{APP_NAME}_*.charm"))[0])
+
+
+def _collect_debug_log(juju: jubilant.Juju) -> None:
+    """Print the model's Juju debug log to stderr (called on test failure)."""
+    logger.info("Collecting Juju logs for model %s...", juju.model)
+    time.sleep(0.5)  # Wait for Juju to process logs.
+    log = juju.debug_log(limit=1000)
+    print(log, end="", file=sys.stderr)
+
+
+@pytest.fixture(scope="module")
+def topology(request: pytest.FixtureRequest, charm_path):
+    """Deploy the full cross-model topology in temporary k8s and LXD models."""
+    k8s_ctrl = _controller_by_cloud("k8s", "microk8s")
+    lxd_ctrl = _controller_by_cloud("localhost", "lxd")
+
+    with jubilant.temp_model(controller=k8s_ctrl) as k8s_juju, jubilant.temp_model(controller=lxd_ctrl) as lxd_juju:
+        k8s_juju.wait_timeout = IDLE_TIMEOUT
+        lxd_juju.wait_timeout = IDLE_TIMEOUT
+
+        resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
+
+        # --- Kubernetes model ---
+        k8s_juju.deploy(charm_path, APP_NAME, resources=resources, config={"num-history-shards": 2})
+        k8s_juju.deploy(TEMPORAL_ADMIN, channel=TEMPORAL_ADMIN_CHANNEL)
+        k8s_juju.deploy(POSTGRESQL_K8S, channel=POSTGRESQL_K8S_CHANNEL, trust=True)
+        k8s_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CHANNEL)
+        k8s_juju.deploy(INGRESS_CONFIGURATOR, channel=INGRESS_CONFIGURATOR_CHANNEL, trust=True)
+
+        k8s_juju.integrate(f"{APP_NAME}:db", f"{POSTGRESQL_K8S}:database")
+        k8s_juju.integrate(f"{APP_NAME}:visibility", f"{POSTGRESQL_K8S}:database")
+        k8s_juju.integrate(f"{APP_NAME}:admin", f"{TEMPORAL_ADMIN}:admin")
+        # Frontend serves gRPC over TLS.
+        k8s_juju.integrate(f"{APP_NAME}:frontend-certificates", f"{SELF_SIGNED}:certificates")
+        # Workload -> ingress-configurator (backend spoken over TLS).
+        k8s_juju.integrate(f"{APP_NAME}:ingress", f"{INGRESS_CONFIGURATOR}:ingress")
+        k8s_juju.config(INGRESS_CONFIGURATOR, {"hostname": HOSTNAME, "backend-protocol": "https"})
+
+        # --- Machine model ---
+        lxd_juju.deploy(HAPROXY, channel=HAPROXY_CHANNEL)
+        lxd_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CHANNEL)
+        lxd_juju.integrate(f"{HAPROXY}:certificates", SELF_SIGNED)
+        lxd_juju.config(HAPROXY, {"external-hostname": HOSTNAME})
+
+        # --- Cross-model: route + backend-CA trust ---
+        # `.model` may carry a controller prefix (set by `add_model(controller=...)`); strip it
+        # since `consume()` takes the bare model name and the controller separately.
+        lxd_model = lxd_juju.model.rpartition(":")[2]
+        k8s_model = k8s_juju.model.rpartition(":")[2]
+
+        lxd_juju.offer(HAPROXY, endpoint="haproxy-route")
+        k8s_juju.consume(f"{lxd_model}.{HAPROXY}", "haproxy-cmr", controller=lxd_ctrl)
+        k8s_juju.integrate(f"{INGRESS_CONFIGURATOR}:haproxy-route", "haproxy-cmr")
+
+        k8s_juju.offer(SELF_SIGNED, endpoint="send-ca-cert")
+        lxd_juju.consume(f"{k8s_model}.{SELF_SIGNED}", "frontend-ca", controller=k8s_ctrl)
+        lxd_juju.integrate(f"{HAPROXY}:receive-ca-certs", "frontend-ca")
+
+        # --- Wait for both models to settle ---
+        k8s_juju.wait(lambda status: jubilant.all_active(status, APP_NAME), timeout=IDLE_TIMEOUT)
+        lxd_juju.wait(lambda status: jubilant.all_active(status, HAPROXY), timeout=IDLE_TIMEOUT)
+
+        yield {"k8s_juju": k8s_juju, "lxd_juju": lxd_juju}
+
+        if request.session.testsfailed:
+            _collect_debug_log(k8s_juju)
+            _collect_debug_log(lxd_juju)
 
 
 def _server_certificate(address: str, port: int, server_hostname: str) -> bytes:
@@ -104,73 +160,11 @@ def _server_certificate(address: str, port: int, server_hostname: str) -> bytes:
     return ssl.DER_cert_to_PEM_cert(der_cert).encode()
 
 
-@pytest.fixture(scope="module")
-def charm_path(pytestconfig) -> str:
-    """Path to the packed charm (built with charmcraft if not supplied)."""
-    supplied = pytestconfig.getoption("--charm-file", default=None)
-    if supplied:
-        return supplied
-    subprocess.run(["charmcraft", "pack"], check=True)  # noqa: S603, S607
-    return str(sorted(Path(".").glob(f"{APP_NAME}_*.charm"))[0])
-
-
-@pytest.fixture(scope="module")
-def topology(charm_path):
-    """Deploy the full cross-model topology and tear the machine model down after."""
-    k8s_ctrl = _controller_by_cloud("k8s", "microk8s")
-    lxd_ctrl = _controller_by_cloud("localhost", "lxd")
-    k8s_model = f"{k8s_ctrl}:testing"
-    lxd_model = f"{lxd_ctrl}:{MACHINE_MODEL}"
-
-    juju("add-model", "-c", k8s_ctrl, "testing")
-    juju("add-model", "-c", lxd_ctrl, MACHINE_MODEL)
-
-    resources = f"temporal-server-image={METADATA['resources']['temporal-server-image']['upstream-source']}"
-
-    # --- Kubernetes model ---
-    juju("deploy", charm_path, APP_NAME, "--resource", resources, "--config", "num-history-shards=2", model=k8s_model)
-    juju("deploy", TEMPORAL_ADMIN, "--channel", TEMPORAL_ADMIN_CHANNEL, model=k8s_model)
-    juju("deploy", POSTGRESQL_K8S, "--channel", POSTGRESQL_K8S_CHANNEL, "--trust", model=k8s_model)
-    juju("deploy", SELF_SIGNED, "--channel", SELF_SIGNED_CHANNEL, model=k8s_model)
-    juju("deploy", INGRESS_CONFIGURATOR, "--channel", INGRESS_CONFIGURATOR_CHANNEL, "--trust", model=k8s_model)
-
-    juju("integrate", f"{APP_NAME}:db", f"{POSTGRESQL_K8S}:database", model=k8s_model)
-    juju("integrate", f"{APP_NAME}:visibility", f"{POSTGRESQL_K8S}:database", model=k8s_model)
-    juju("integrate", f"{APP_NAME}:admin", f"{TEMPORAL_ADMIN}:admin", model=k8s_model)
-    # Frontend serves gRPC over TLS.
-    juju("integrate", f"{APP_NAME}:frontend-certificates", f"{SELF_SIGNED}:certificates", model=k8s_model)
-    # Workload -> ingress-configurator (backend spoken over TLS).
-    juju("integrate", f"{APP_NAME}:ingress", f"{INGRESS_CONFIGURATOR}:ingress", model=k8s_model)
-    juju("config", INGRESS_CONFIGURATOR, f"hostname={HOSTNAME}", "backend-protocol=https", model=k8s_model)
-
-    # --- Machine model ---
-    juju("deploy", HAPROXY, "--channel", HAPROXY_CHANNEL, model=lxd_model)
-    juju("deploy", SELF_SIGNED, "--channel", SELF_SIGNED_CHANNEL, model=lxd_model)
-    juju("integrate", f"{HAPROXY}:certificates", SELF_SIGNED, model=lxd_model)
-    juju("config", HAPROXY, f"external-hostname={HOSTNAME}", model=lxd_model)
-
-    # --- Cross-model: route + backend-CA trust ---
-    juju("offer", "-c", lxd_ctrl, f"{MACHINE_MODEL}.{HAPROXY}:haproxy-route")
-    juju("consume", f"{lxd_ctrl}:admin/{MACHINE_MODEL}.{HAPROXY}", "haproxy-cmr", model=k8s_model)
-    juju("integrate", f"{INGRESS_CONFIGURATOR}:haproxy-route", "haproxy-cmr", model=k8s_model)
-
-    juju("offer", "-c", k8s_ctrl, f"testing.{SELF_SIGNED}:send-ca-cert")
-    juju("consume", f"{k8s_ctrl}:admin/testing.{SELF_SIGNED}", "frontend-ca", model=lxd_model)
-    juju("integrate", f"{HAPROXY}:receive-ca-certs", "frontend-ca", model=lxd_model)
-
-    # --- Wait for both models to settle ---
-    juju("wait-for", "application", APP_NAME, "--query", 'status=="active"', "--timeout", IDLE_TIMEOUT, model=k8s_model)
-    juju("wait-for", "application", HAPROXY, "--query", 'status=="active"', "--timeout", IDLE_TIMEOUT, model=lxd_model)
-
-    yield {"k8s_model": k8s_model, "lxd_model": lxd_model, "lxd_ctrl": lxd_ctrl}
-
-    juju("destroy-model", f"{lxd_ctrl}:{MACHINE_MODEL}", "--no-prompt", "--force", "--destroy-storage")
-
-
 @pytest.mark.abort_on_fail
 def test_grpc_over_tls(topology):
     """The Temporal frontend is reachable via gRPC over TLS through HAProxy."""
-    haproxy_ip = _unit_address(topology["lxd_model"], f"{HAPROXY}/0")
+    lxd_status = topology["lxd_juju"].status()
+    haproxy_ip = lxd_status.apps[HAPROXY].units[f"{HAPROXY}/0"].public_address
 
     # Verified TLS: trust HAProxy's presented cert, and set SNI/authority to the
     # routing hostname so HAProxy's host-based route matches.

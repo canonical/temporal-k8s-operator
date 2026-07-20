@@ -21,7 +21,6 @@ from charm import (
     FRONTEND_TLS_CONFIGURATION,
     render,
 )
-from literals import SERVICE_PORTS
 
 logger = logging.getLogger(__name__)
 

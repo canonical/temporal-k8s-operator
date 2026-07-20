@@ -32,3 +32,14 @@ providers:
         cidrs: "10.43.45.0/28"
       local-storage: {}
       network: {}
+
+host:
+  snaps:
+    charmcraft:
+      channel: 4.x/stable
+    astral-uv:
+      channel: latest/stable
+    just:
+      channel: latest/stable
+    kubectl:
+      channel: latest/stable
