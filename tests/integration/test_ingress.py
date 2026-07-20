@@ -69,13 +69,19 @@ def _controller_by_cloud(*clouds: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def charm_path(pytestconfig) -> str:
-    """Path to the packed charm (built with charmcraft if not supplied)."""
+def charm_path(pytestconfig) -> Path:
+    """Path to the packed charm (built with charmcraft if not supplied).
+
+    Returned as a ``Path`` (not ``str``): jubilant only auto-prefixes relative
+    local-charm paths with ``./`` (to disambiguate them from Charmhub names) when
+    given a ``pathlib.Path`` - a bare filename string is passed to the Juju CLI
+    unprefixed and rejected as ambiguous.
+    """
     supplied = pytestconfig.getoption("--charm-file", default=None)
     if supplied:
-        return supplied
+        return Path(supplied)
     subprocess.run(["charmcraft", "pack"], check=True)  # noqa: S603, S607
-    return str(sorted(Path(".").glob(f"{APP_NAME}_*.charm"))[0])
+    return sorted(Path(".").glob(f"{APP_NAME}_*.charm"))[0]
 
 
 def _collect_debug_log(juju: jubilant.Juju) -> None:
