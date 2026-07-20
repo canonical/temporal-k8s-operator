@@ -528,22 +528,7 @@ class TemporalK8SCharm(CharmBase):
             if not is_valid_time_duration(self.config[f"{db_type}-max-conn-time"]):
                 raise ValueError(f"value of '{db_type}-max-conn-time' must be a valid time duration e.g. 1h")
 
-        # Validate ingress relation. `frontend-certificates` is required alongside
-        # `ingress` so the frontend serves gRPC over TLS; the two are
-        # complementary, not mutually exclusive.
-        if self.model.get_relation("ingress"):
-            # Only one ingress solution can be used at a time.
-            if self.model.get_relation("nginx-route"):
-                raise ValueError(
-                    "Only one ingress solution is allowed - remove the ingress or the nginx-route relation."
-                )
-            # Only the frontend service can be exposed through ingress.
-            if "frontend" not in self.config["services"]:
-                raise ValueError("Not a frontend service, please remove ingress integration.")
-            # The supported ingress providers don't support h2c to the backend, so
-            # frontend TLS is required to advertise `https` to the ingress relation.
-            if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
-                raise ValueError(f"ingress relation requires {FRONTEND_CERTIFICATES_RELATION_NAME} integration.")
+        self._validate_ingress()
 
         # Validate admin relation.
         self.database_connections()
@@ -568,6 +553,27 @@ class TemporalK8SCharm(CharmBase):
 
             if not self._state.s3.get("bucket_created"):
                 raise ValueError("s3:archival failed to create s3 bucket.")
+
+    def _validate_ingress(self):
+        """Validate the ingress relation.
+
+        Raises:
+            ValueError: in case of invalid ingress configuration.
+        """
+        if not self.model.get_relation("ingress"):
+            return
+        # Only one ingress solution can be used at a time.
+        if self.model.get_relation("nginx-route"):
+            raise ValueError("Only one ingress solution is allowed - remove the ingress or the nginx-route relation.")
+        # Only the frontend service can be exposed through ingress.
+        if "frontend" not in self.config["services"]:
+            raise ValueError("Not a frontend service, please remove ingress integration.")
+        # The supported ingress providers don't support h2c to the backend, so
+        # frontend TLS is required to advertise `https` to the ingress relation.
+        # `frontend-certificates` is required alongside `ingress` (the two are
+        # complementary, not mutually exclusive).
+        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+            raise ValueError(f"ingress relation requires {FRONTEND_CERTIFICATES_RELATION_NAME} integration.")
 
     def _open_service_ports(self):
         """Open the respective ports based on Temporal service."""

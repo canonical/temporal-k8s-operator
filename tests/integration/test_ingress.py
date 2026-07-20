@@ -157,6 +157,7 @@ def _server_certificate(address: str, port: int, server_hostname: str) -> bytes:
     with socket.create_connection((address, port), timeout=30) as sock:
         with context.wrap_socket(sock, server_hostname=server_hostname) as tls_sock:
             der_cert = tls_sock.getpeercert(binary_form=True)
+    assert der_cert is not None, "peer did not present a certificate"
     return ssl.DER_cert_to_PEM_cert(der_cert).encode()
 
 
