@@ -11,9 +11,11 @@ TLS.
 **gRPC through ingress requires TLS end-to-end.** The supported providers do **not**
 support plaintext HTTP/2 (h2c) to the backend, so the Temporal frontend must terminate
 TLS itself. Concretely: the `frontend-certificates` relation is **required** alongside
-`ingress` (the frontend then serves gRPC over TLS and the charm advertises the `https`
-scheme), and the proxy re-encrypts to it. Only the `frontend` service can be exposed, and
-only one ingress solution can be used at a time.
+`ingress` (the frontend then serves gRPC over TLS and the charm always advertises the
+`https` scheme), and the proxy re-encrypts to it. The charm enforces this: relating
+`ingress` without `frontend-certificates` blocks the unit rather than falling back to a
+cleartext (h2c) scheme the supported providers can't use. Only the `frontend` service can
+be exposed, and only one ingress solution can be used at a time.
 
 [/note]
 
