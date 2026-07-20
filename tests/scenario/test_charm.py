@@ -490,7 +490,7 @@ def test_blocked_on_two_ingresses(
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-def test_ingress_happy_path(
+def test_ingress_without_frontend_certificates_blocks(
     context,
     state,
     temporal_container,
@@ -511,15 +511,12 @@ def test_ingress_happy_path(
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
 
-    # Establishing ingress on a frontend service succeeds without blocking.
+    # The supported ingress providers can't use h2c to the backend, so ingress
+    # without frontend-certificates must block rather than advertise h2c.
     new_state = context.run(context.on.relation_changed(traefik_ingress_relation), new_state)
-    assert new_state.unit_status == ops.MaintenanceStatus("replanning application")
-
-    # The requirer publishes the frontend gRPC port and the h2c scheme
-    # (cleartext HTTP/2), since no frontend TLS certificates are configured.
-    ingress_app_data = "".join(new_state.get_relations("ingress")[0].local_app_data.values())
-    assert str(SERVICE_PORTS["frontend"]["grpc"]) in ingress_app_data
-    assert "h2c" in ingress_app_data
+    assert new_state.unit_status == ops.BlockedStatus(
+        f"ingress relation requires {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
+    )
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
