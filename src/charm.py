@@ -543,9 +543,7 @@ class TemporalK8SCharm(CharmBase):
             # The supported ingress providers don't support h2c to the backend, so
             # frontend TLS is required to advertise `https` to the ingress relation.
             if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
-                raise ValueError(
-                    f"ingress relation requires {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
-                )
+                raise ValueError(f"ingress relation requires {FRONTEND_CERTIFICATES_RELATION_NAME} integration.")
 
         # Validate admin relation.
         self.database_connections()
