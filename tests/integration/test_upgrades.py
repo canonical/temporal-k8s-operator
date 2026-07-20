@@ -52,6 +52,7 @@ async def deploy(ops_test: OpsTest):
         assert ops_test.model.applications[APP_NAME_UI].units[0].workload_status == "active"
 
 
+@pytest.mark.skip("Skipping because of canonical/temporal-k8s-operator/issues/150")
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("deploy")
 class TestUpgrade:
