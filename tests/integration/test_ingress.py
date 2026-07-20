@@ -43,7 +43,10 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 
 TEMPORAL_ADMIN = "temporal-admin-k8s"
-TEMPORAL_ADMIN_CHANNEL = "stable"
+# Must match the temporal-server image track (schema versions are tied to the
+# server version): the `stable` channel ships an older schema tool (up to v1.11)
+# while the server image expects >=1.19, which makes the server refuse to start.
+TEMPORAL_ADMIN_CHANNEL = "1.31/edge"
 POSTGRESQL_K8S = "postgresql-k8s"
 POSTGRESQL_K8S_CHANNEL = "14/stable"
 INGRESS_CONFIGURATOR = "ingress-configurator"
