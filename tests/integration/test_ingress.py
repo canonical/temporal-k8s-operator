@@ -62,6 +62,9 @@ HAPROXY_CHANNEL = "2.8/edge"
 HOSTNAME = "temporal-k8s.test"
 FRONTEND_GRPC_SERVICE = "temporal.api.workflowservice.v1.WorkflowService"
 IDLE_TIMEOUT = 1800
+# HAProxy may bind :443 slightly after Juju reports it active; retry the gRPC
+# health check for this long before giving up.
+GRPC_READY_TIMEOUT = 300
 
 
 def _controller_by_cloud(*clouds: str) -> str:
@@ -165,13 +168,19 @@ def topology(request: pytest.FixtureRequest, charm_path):
             # (e.g. `hook failed: "admin-relation-changed"`) instead of sitting
             # through the full IDLE_TIMEOUT and destroying the models before the
             # cause is ever captured.
+            #
+            # Wait for ingress-configurator (the haproxy-route provider) as well as
+            # agents-idle: HAProxy only requests its cert and binds :443 once the
+            # cross-model route has fully propagated, so waiting on the workload
+            # alone races the HAProxy config reload.
             k8s_juju.wait(
-                lambda status: jubilant.all_active(status, APP_NAME),
+                lambda status: jubilant.all_active(status, APP_NAME, INGRESS_CONFIGURATOR)
+                and jubilant.all_agents_idle(status, APP_NAME, INGRESS_CONFIGURATOR),
                 error=jubilant.any_error,
                 timeout=IDLE_TIMEOUT,
             )
             lxd_juju.wait(
-                lambda status: jubilant.all_active(status, HAPROXY),
+                lambda status: jubilant.all_active(status, HAPROXY) and jubilant.all_agents_idle(status, HAPROXY),
                 error=jubilant.any_error,
                 timeout=IDLE_TIMEOUT,
             )
@@ -206,23 +215,40 @@ def _server_certificate(address: str, port: int, server_hostname: str) -> bytes:
     return ssl.DER_cert_to_PEM_cert(der_cert).encode()
 
 
-@pytest.mark.abort_on_fail
-def test_grpc_over_tls(topology):
-    """The Temporal frontend is reachable via gRPC over TLS through HAProxy."""
-    lxd_status = topology["lxd_juju"].status()
-    haproxy_ip = lxd_status.apps[HAPROXY].units[f"{HAPROXY}/0"].public_address
+def _check_grpc_health(haproxy_ip: str) -> "health_pb2.HealthCheckResponse.ServingStatus":
+    """Run one gRPC health check against HAProxy's TLS frontend.
 
-    # Verified TLS: trust HAProxy's presented cert, and set SNI/authority to the
-    # routing hostname so HAProxy's host-based route matches.
+    Verified TLS: trust HAProxy's presented cert, and set SNI/authority to the
+    routing hostname so HAProxy's host-based route matches.
+    """
     root_certificate = _server_certificate(haproxy_ip, 443, HOSTNAME)
     credentials = grpc.ssl_channel_credentials(root_certificates=root_certificate)
     options = (
         ("grpc.ssl_target_name_override", HOSTNAME),
         ("grpc.default_authority", HOSTNAME),
     )
-
     with grpc.secure_channel(f"{haproxy_ip}:443", credentials, options=options) as channel:
         stub = health_pb2_grpc.HealthStub(channel)
         request = health_pb2.HealthCheckRequest(service=FRONTEND_GRPC_SERVICE)
-        response = stub.Check(request, timeout=30)
-        assert response.status == health_pb2.HealthCheckResponse.SERVING
+        return stub.Check(request, timeout=30).status
+
+
+@pytest.mark.abort_on_fail
+def test_grpc_over_tls(topology):
+    """The Temporal frontend is reachable via gRPC over TLS through HAProxy."""
+    lxd_status = topology["lxd_juju"].status()
+    haproxy_ip = lxd_status.apps[HAPROXY].units[f"{HAPROXY}/0"].public_address
+
+    # HAProxy binds :443 and reloads its config a moment after Juju reports it
+    # active (cert write + reload), so an immediate connect can hit "connection
+    # refused". Retry until the frontend serves or the deadline passes.
+    deadline = time.monotonic() + GRPC_READY_TIMEOUT
+    while True:
+        try:
+            status = _check_grpc_health(haproxy_ip)
+            assert status == health_pb2.HealthCheckResponse.SERVING
+            return
+        except (OSError, grpc.RpcError, AssertionError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(5)
