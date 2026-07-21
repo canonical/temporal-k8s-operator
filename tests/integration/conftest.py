@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 TEMPORAL_CHANNEL = "1.31/edge"
 POSTGRESQL_CHANNEL = "14/stable"
-SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/stable"
+SELF_SIGNED_CERTIFICATES_CHANNEL = "1/stable"
 
 
 @pytest_asyncio.fixture(scope="module", name="charm")
