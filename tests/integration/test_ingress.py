@@ -35,7 +35,11 @@ import grpc
 import jubilant
 import pytest
 import yaml
-from conftest import POSTGRESQL_CHANNEL, SELF_SIGNED_CERTIFICATES_CHANNEL, TEMPORAL_CHANNEL
+from conftest import (
+    POSTGRESQL_CHANNEL,
+    SELF_SIGNED_CERTIFICATES_CHANNEL,
+    TEMPORAL_CHANNEL,
+)
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 logger = logging.getLogger(__name__)
