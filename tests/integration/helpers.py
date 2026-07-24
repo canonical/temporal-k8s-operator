@@ -65,7 +65,7 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
         ops_test: PyTest object.
         count: Number of workflows to run.
     """
-    # FIXME: change port back to 7233 when https://github.com/canonical/temporal-k8s-operator/issues/152 is resolved
+    # FIXME: change port back to 7233 when canonical/temporal-k8s-operator#152 is resolved
     url = await get_application_url(ops_test, application=APP_NAME, port=7236)
     logger.info("running workflow on app address: %s", url)
     # Juju active may precede Temporal matching/worker scheduling readiness in CI.
