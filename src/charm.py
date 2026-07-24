@@ -205,7 +205,10 @@ class TemporalK8SCharm(CharmBase):
         )
 
         # Host Info
-        self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["frontend"]["grpc"])
+        # FIXME: for 1.31/edge, the internal-frontend will be shared with the UI and Admin
+        # charms so they can connect w/o needing a certificate to talk to the frontend
+        # behind https. This is a workaround for github.com/canonical/temporal-k8s-operator/issues/152
+        self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["internal-frontend"]["grpc"])
 
         # Handle Ingress (via the `ingress` interface, e.g. ingress-configurator
         # fronted by HAProxy). Temporal's frontend service speaks gRPC and is the
