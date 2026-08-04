@@ -461,7 +461,102 @@ def test_database_connections(
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-def test_ingress(context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation):
+def test_blocked_on_two_ingresses(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    traefik_ingress_relation,
+    all_required_relations,
+):
+    # The default relations include nginx-route; add ingress so both are present.
+    all_required_relations.append(traefik_ingress_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    # Bring the charm to a point where it would otherwise reconcile to active
+    # (schema ready, initialized container).
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    # config_changed runs a full _update -> _validate cycle; the block is raised
+    # in _validate and persists (it is not reset to active by the rest of _update).
+    new_state = context.run(context.on.config_changed(), new_state)
+    assert new_state.unit_status == ops.BlockedStatus(
+        "Only one ingress solution is allowed - remove the ingress or the nginx-route relation."
+    )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_ingress_without_frontend_certificates_blocks(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    nginx_route_relation,
+    traefik_ingress_relation,
+    all_required_relations,
+):
+    # Swap the nginx-route relation for a traefik / gateway-api-integrator
+    # ingress relation so the single-ingress-solution constraint is satisfied.
+    all_required_relations.remove(nginx_route_relation)
+    all_required_relations.append(traefik_ingress_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    # Bring the charm up with the ingress relation present.
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    # The supported ingress providers can't use h2c to the backend, so ingress
+    # without frontend-certificates must block rather than advertise h2c.
+    new_state = context.run(context.on.relation_changed(traefik_ingress_relation), new_state)
+    assert new_state.unit_status == ops.BlockedStatus(
+        f"ingress relation requires {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
+    )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_ingress_with_frontend_certificates_advertises_https(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    nginx_route_relation,
+    traefik_ingress_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # ingress and frontend-certificates are complementary: the frontend serves
+    # gRPC over TLS, and the ingress provider connects to it over TLS. The charm
+    # must not block the combination, and must advertise the `https` scheme.
+    all_required_relations.remove(nginx_route_relation)
+    all_required_relations.append(traefik_ingress_relation)
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    # Fetch the current relation object from the state before emitting so the
+    # scenario consistency check sees the in-state instance.
+    ingress = new_state.get_relations("ingress")[0]
+    new_state = context.run(context.on.relation_changed(ingress), new_state)
+
+    assert new_state.unit_status != ops.BlockedStatus("Not a frontend service, please remove ingress integration.")
+    # With frontend TLS configured, the advertised scheme is https.
+    ingress_app_data = "".join(new_state.get_relations("ingress")[0].local_app_data.values())
+    assert "https" in ingress_app_data
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_ingress_with_nginx(
+    context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
+):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 

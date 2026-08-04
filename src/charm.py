@@ -29,6 +29,11 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     ProviderCertificate,
     TLSCertificatesRequiresV4,
 )
+from charms.traefik_k8s.v2.ingress import (
+    IngressPerAppReadyEvent,
+    IngressPerAppRequirer,
+    IngressPerAppRevokedEvent,
+)
 from jinja2 import Environment, FileSystemLoader
 from ops import EventBase, main, pebble
 from ops.charm import CharmBase, RelationBrokenEvent
@@ -161,7 +166,7 @@ class TemporalK8SCharm(CharmBase):
         self.s3_client = S3Requirer(self, "s3-parameters")
         self.s3_relation = S3Integrator(self)
 
-        # Handle Ingress
+        # Handle Ingress (Nginx)
         self._require_nginx_route()
 
         # Prometheus
@@ -200,7 +205,33 @@ class TemporalK8SCharm(CharmBase):
         )
 
         # Host Info
-        self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["frontend"]["grpc"])
+        # FIXME: for 1.31/edge, the internal-frontend will be shared with the UI and Admin
+        # charms so they can connect w/o needing a certificate to talk to the frontend
+        # behind https. This is a workaround for github.com/canonical/temporal-k8s-operator/issues/152
+        self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["internal-frontend"]["grpc"])
+
+        # Handle Ingress (via the `ingress` interface, e.g. ingress-configurator
+        # fronted by HAProxy). Temporal's frontend service speaks gRPC and is the
+        # only service exposed via ingress. The requirer is always instantiated so
+        # that its event handlers are registered even when the relation is added
+        # after the charm has started (e.g. relating to the ingress provider
+        # post-deployment). The `frontend` constraint, and the requirement that
+        # `frontend-certificates` be related alongside `ingress`, are enforced in
+        # `_validate`.
+        #
+        # gRPC exposure through the supported providers (ingress-configurator +
+        # HAProxy) requires end-to-end TLS: they do NOT support plaintext HTTP/2
+        # (h2c) to the backend, so the scheme advertised is always `https` (the
+        # frontend terminates TLS via `frontend-certificates`). See
+        # documentation/how-to/configure-ingress.md.
+        self.ingress = IngressPerAppRequirer(
+            self,
+            port=SERVICE_PORTS["frontend"]["grpc"],
+            relation_name="ingress",
+            scheme="https",
+        )
+        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
+        self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):
@@ -244,6 +275,12 @@ class TemporalK8SCharm(CharmBase):
         self._delete_certificate()
         self._delete_private_key()
 
+    def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
+        logger.info("This app's ingress URL: %s", event.url)
+
+    def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent):
+        logger.info("This app no longer has ingress")
+
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
         """Handle peer relation changes.
@@ -258,7 +295,12 @@ class TemporalK8SCharm(CharmBase):
         self._update(event)
 
     def _require_nginx_route(self):
-        """Require nginx-route relation based on current configuration."""
+        """Require nginx-route relation based on current configuration.
+
+        The single-ingress-solution constraint (`ingress` vs `nginx-route`) is
+        enforced in `_validate` so that the resulting blocked status persists
+        through `_update` instead of being reset when the charm reconciles.
+        """
         require_nginx_route(
             charm=self,
             service_hostname=self.external_hostname,
@@ -489,6 +531,8 @@ class TemporalK8SCharm(CharmBase):
             if not is_valid_time_duration(self.config[f"{db_type}-max-conn-time"]):
                 raise ValueError(f"value of '{db_type}-max-conn-time' must be a valid time duration e.g. 1h")
 
+        self._validate_ingress()
+
         # Validate admin relation.
         self.database_connections()
         if "frontend" in self.config["services"] and not self._state.schema_ready:
@@ -512,6 +556,27 @@ class TemporalK8SCharm(CharmBase):
 
             if not self._state.s3.get("bucket_created"):
                 raise ValueError("s3:archival failed to create s3 bucket.")
+
+    def _validate_ingress(self):
+        """Validate the ingress relation.
+
+        Raises:
+            ValueError: in case of invalid ingress configuration.
+        """
+        if not self.model.get_relation("ingress"):
+            return
+        # Only one ingress solution can be used at a time.
+        if self.model.get_relation("nginx-route"):
+            raise ValueError("Only one ingress solution is allowed - remove the ingress or the nginx-route relation.")
+        # Only the frontend service can be exposed through ingress.
+        if "frontend" not in self.config["services"]:
+            raise ValueError("Not a frontend service, please remove ingress integration.")
+        # The supported ingress providers don't support h2c to the backend, so
+        # frontend TLS is required to advertise `https` to the ingress relation.
+        # `frontend-certificates` is required alongside `ingress` (the two are
+        # complementary, not mutually exclusive).
+        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+            raise ValueError(f"ingress relation requires {FRONTEND_CERTIFICATES_RELATION_NAME} integration.")
 
     def _open_service_ports(self):
         """Open the respective ports based on Temporal service."""

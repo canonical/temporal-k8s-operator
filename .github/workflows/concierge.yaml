@@ -1,0 +1,45 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Concierge (https://github.com/canonical/concierge) provisions the substrate for
+# the cross-model ingress integration test (tests/integration/test_ingress.py):
+# temporal-k8s + ingress-configurator run on the Kubernetes model, while HAProxy
+# (a machine charm) runs on the LXD model, related across models. Both a `k8s` and
+# an `lxd` controller are therefore bootstrapped.
+#
+# The other integration tests only need Kubernetes and are provisioned separately
+# with `concierge prepare -p k8s` (see .github/workflows/tests.yaml); they do not
+# read this file.
+juju:
+  channel: 3.6/stable
+  model-defaults:
+    test-mode: "true"
+    automatically-retry-hooks: "false"
+
+providers:
+  lxd:
+    enable: true
+    bootstrap: true
+  k8s:
+    enable: true
+    bootstrap: true
+    channel: 1.33-classic/stable
+    bootstrap-constraints:
+      root-disk: "2G"
+    features:
+      load-balancer:
+        l2-mode: "true"
+        cidrs: "10.43.45.0/28"
+      local-storage: {}
+      network: {}
+
+host:
+  snaps:
+    charmcraft:
+      channel: 4.x/stable
+    astral-uv:
+      channel: latest/stable
+    just:
+      channel: latest/stable
+    kubectl:
+      channel: latest/stable

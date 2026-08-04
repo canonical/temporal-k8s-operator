@@ -1,164 +1,147 @@
-# Configure ingress with Nginx Ingress Integrator
+# Configure ingress with the `ingress` interface
 
-Charmed Temporal components can be exposed through an ingress solution to make them available to clients outside the cluster and to handle TLS termination.
-In the Charming ecosystem, the [Nginx Ingress Integrator](https://charmhub.io/nginx-ingress-integrator)
-operator allows different applications to request `Ingress` resources from an underlying ingress controller.
-
-## Enable ingress
-
-### Requirements
-
-To follow this guide, consider having a Kubernetes cluster with the following configured:
-
-* Ingress controller: If using Kubernetes (K8s), the [nginx ingress controller](https://docs.nginx.com/nginx-ingress-controller/installation/installing-nic/installation-with-manifests) can be installed; if using MicroK8s, the `ingress` addon should suffice.
-* LoadBalancer: If using K8s, the [default LoadBalancer](https://documentation.ubuntu.com/canonical-kubernetes/latest/snap/howto/networking/default-loadbalancer/) works; on MicroK8s, the `metallb` addon should suffice.
-* [Temporal Command Line Interface (CLI) snap](https://snapcraft.io/temporal).
+Charmed Temporal's frontend can be exposed to clients outside the cluster through the
+standard `ingress` interface. The Temporal frontend is a **gRPC (HTTP/2)** server, so it
+is exposed through the [Ingress Configurator](https://charmhub.io/ingress-configurator)
+fronted by [HAProxy](https://charmhub.io/haproxy), which handles gRPC load balancing over
+TLS.
 
 [note]
 
-The `nginx-ingress-integrator` only allows one integration per `ingress` and `nginx-route` integration.
-Charmed Temporal is not designed to share the same integrator instance, and thus, an integrator
-charm per application must be deployed.
-
-See [Support multiple relations](https://charmhub.io/nginx-ingress-integrator/docs/support-multiple-relations) for more details.
+**gRPC through ingress requires TLS end-to-end.** The supported providers do **not**
+support plaintext HTTP/2 (h2c) to the backend, so the Temporal frontend must terminate
+TLS itself. Concretely: the `frontend-certificates` relation is **required** alongside
+`ingress` (the frontend then serves gRPC over TLS and the charm always advertises the
+`https` scheme), and the proxy re-encrypts to it. The charm enforces this: relating
+`ingress` without `frontend-certificates` blocks the unit rather than falling back to a
+cleartext (h2c) scheme the supported providers can't use. Only the `frontend` service can
+be exposed, and only one ingress solution can be used at a time.
 
 [/note]
 
-### Expose the Temporal Server
+## Prerequisites
 
-1. Deploy the integrator charm:
+* A **TLS certificate provider** charm (for example
+  [self-signed-certificates](https://charmhub.io/self-signed-certificates)) - one instance
+  on the Kubernetes model (for the frontend cert) and one where HAProxy runs (for the
+  client-facing cert).
+* **HAProxy** (`2.8/edge` or later). HAProxy is a machine charm, so it runs on a separate
+  machine model and is related to the Kubernetes applications through a **cross-model
+  integration**.
+* Network reachability from HAProxy to the Temporal frontend's Kubernetes endpoint (see
+  [Backend reachability](#backend-reachability)).
+* The [Temporal CLI snap](https://snapcraft.io/temporal) for connecting as a client.
 
-```
-juju deploy nginx-ingress-integrator temporal-server-ingress --trust
-```
+Throughout this guide the routing hostname is `temporal-k8s.test`; substitute your own.
 
-2. Check your cluster's `IngressClass`:
+## 1. Make the frontend serve gRPC over TLS
 
-```
-kubectl get ingressclass
-
-NAME             CONTROLLER                  PARAMETERS   AGE
-nginx            k8s.io/ingress-nginx        <none>       12d
-```
-
-3. Configure the integrator's `ingress-class` using the name from the previous step:
-
-```
-juju config temporal-server-ingress ingress-class nginx
-```
-
-4. Configure `backend-protocol`. Temporal server, specifically its frontend, is a `gRPC` server:
+On the Kubernetes model, give the Temporal frontend a certificate so it terminates TLS on
+its gRPC port:
 
 ```
-juju config temporal-server-ingress backend-protocol GRPC
+juju deploy self-signed-certificates
+juju integrate temporal-k8s:frontend-certificates self-signed-certificates:certificates
 ```
 
-5. Integrate and configure:
+Verify the frontend is now serving TLS (ALPN negotiates HTTP/2):
 
 ```
-juju config temporal-k8s tls-secret-name=""
-juju integrate temporal-k8s temporal-server-ingress
+juju ssh --container temporal temporal-k8s/0 grep -nE 'certFile|keyFile' /etc/temporal/config/charm.yaml
 ```
 
-6. Connect with clients. Assuming a `LoadBalancer` is enabled, and because the Temporal Server works with
-host-based routing, DNS resolution must be set up. For example:
+## 2. Deploy and configure the Ingress Configurator (Kubernetes model)
 
 ```
-cat /etc/hosts/
-[...]
-<LOADBALANCER-IP> temporal-k8s
-
-temporal operator namespace list --address temporal-k8s:80
-[...]
+juju deploy ingress-configurator --channel latest/edge --trust
+juju integrate temporal-k8s:ingress ingress-configurator:ingress
+juju config ingress-configurator hostname=temporal-k8s.test backend-protocol=https
 ```
 
-### Expose Temporal UI
+`backend-protocol=https` tells the proxy to connect to the frontend over TLS. Setting
+`external-grpc-port` is optional (gRPC is served on `443` by default).
 
-1. Deploy the integrator charm:
+## 3. Deploy and configure HAProxy (machine model)
 
-```
-juju deploy nginx-ingress-integrator temporal-ui-ingress --trust
-```
-
-2. Check your cluster's `IngressClass`:
+On the machine model:
 
 ```
-kubectl get ingressclass
-
-NAME             CONTROLLER                  PARAMETERS   AGE
-nginx            k8s.io/ingress-nginx        <none>       12d
+juju deploy haproxy --channel 2.8/edge
+juju deploy self-signed-certificates
+juju integrate haproxy:certificates self-signed-certificates
+juju config haproxy external-hostname=temporal-k8s.test
 ```
 
-3. Configure the integrator's `ingress-class` using the name from the previous step:
+[note]
+
+`external-hostname` is required - without it HAProxy never requests its own client-facing
+certificate and its `:443` listener fails to validate ("unable to stat SSL certificate").
+
+[/note]
+
+## 4. Wire the cross-model integrations
+
+HAProxy (machine) and the Kubernetes applications live on different models, so use offers.
+`juju offer` is run from the offering model (no controller prefix); `juju consume` uses the
+fully-qualified `<controller>:admin/<model>.<application>` offer URL.
+
+Route the ingress traffic to HAProxy:
 
 ```
-juju config temporal-server-ingress ingress-class nginx
+# machine model
+juju offer haproxy:haproxy-route
+# kubernetes model
+juju consume <machine-controller>:admin/<machine-model>.haproxy haproxy-cmr
+juju integrate ingress-configurator:haproxy-route haproxy-cmr
 ```
 
-4. Configure the integrator's `backend-protocol`:
+Let HAProxy trust the **frontend's** CA so the re-encrypted backend hop verifies (the CA is
+the certificate provider on the Kubernetes model):
 
 ```
-juju config temporal-ui-ingress backend-protocol HTTP
+# kubernetes model
+juju offer self-signed-certificates:send-ca-cert
+# machine model
+juju consume <k8s-controller>:admin/<k8s-model>.self-signed-certificates frontend-ca
+juju integrate haproxy:receive-ca-certs frontend-ca
 ```
 
-5. Integrate:
+## Backend reachability
+
+HAProxy must be able to reach the Temporal frontend's Kubernetes address. If HAProxy cannot
+route to the frontend's `ClusterIP`, expose the frontend on a routable address (for example
+a `NodePort` or `LoadBalancer` service) and point the configurator at it:
 
 ```
-juju config temporal-ui-k8s tls-secret-name=""
-juju integrate temporal-ui-k8s temporal-ui-ingress
+juju config ingress-configurator backend-addresses=<node-ip> backend-ports=<node-port>
 ```
 
-6. Access the Temporal UI on a web browser. Assuming a `LoadBalancer` is enabled, and because of Temporal's
-host-based routing, DNS resolution must be set up. For example:
+## 5. Connect a client
+
+Map the routing hostname to HAProxy's public address, then connect over TLS. Fetch the CA
+that signed HAProxy's client-facing certificate (the certificate provider on the machine
+model) and pass it to the client:
 
 ```
-cat /etc/hosts/
-[...]
-<LOADBALANCER-IP> temporal-ui-k8s
+echo "<haproxy-ip> temporal-k8s.test" | sudo tee -a /etc/hosts
 
-http://temporal-ui-k8s:80/
+temporal operator namespace list \
+  --address temporal-k8s.test:443 \
+  --tls \
+  --tls-ca-path <haproxy-ca>
 ```
 
-## Enable TLS termination at ingress
+The full path is TLS end-to-end: client → HAProxy (TLS) → Temporal frontend (TLS), with
+HAProxy verifying the frontend against the CA received in step 4.
 
-The integrator charm provides a way to perform TLS termination at ingress in conjunction with the ecosystem's TLS providers.
-Please refer to [Security with X.509 certificates](https://charmhub.io/topics/security-with-x-509-certificates) to understand
-the different certificate use cases and choose the solution that best fits each one.
+## Other ingress providers
 
-### Temporal Server
+The `ingress` interface is provider-agnostic, so `temporal-k8s:ingress` can be related to
+any charm that implements it.
 
-1. Reconfigure the integrator charm for a secured backend:
-
-
-```
-juju config temporal-server-ingress backend-protocol GRPCS
-```
-
-2. Integrate the integrator charm with a TLS certificate provider:
-
-```
-juju integrate temporal-server-ingress <tls-certificate-provider>
-```
-
-3. Get the Certificate Authority (CA) certificate from the TLS certificate provider charm and use it in further requests. For example,
-using the temporal CLI snap:
-
-```
-temporal operator namespace list --address temporal-k8s:443 --tls-ca-path <path to CA cert>
-```
-
-### Temporal UI
-
-1. Reconfigure the integrator charm for a secured backend
-
-```
-juju config temporal-ui-ingress backend-protocol HTTPS
-```
-
-2. Integrate the integrator charm with a TLS certificate provider:
-
-```
-juju integrate temporal-ui-ingress <tls-certificate-provider>
-```
-
-3. Use `https` when browsing, and and configure certificate trust settings as needed.
+* [traefik-k8s](https://charmhub.io/traefik-k8s) is approaching end-of-life; it may work
+  but is not part of our test suite and is left to the user to configure.
+* The [Gateway API Integrator](https://charmhub.io/gateway-api-integrator) implements the
+  same interface, but gRPC over TLS additionally needs the gateway to negotiate the `h2`
+  ALPN protocol. On Canonical Kubernetes the bundled Cilium gateway does not currently
+  expose ALPN configuration, so this path is not supported there.
