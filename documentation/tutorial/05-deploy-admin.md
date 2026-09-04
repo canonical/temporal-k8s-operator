@@ -47,6 +47,7 @@ temporal-k8s/0*        blocked   idle   10.1.0.152         admin:temporal relati
 Relate the admin interface:
 ```
 juju relate temporal-k8s:admin temporal-admin-k8s:admin
+juju integrate temporal-k8s:temporal-host-info temporal-admin-k8s:temporal-host-info
 ```
 Monitor relations until they settle:
 ```
