@@ -25,6 +25,27 @@ jobs:
       - name: Run promtool checks on Prometheus alert definitions
         run: promtool check rules $(find "$PWD" -name "*_rules.yaml")
 
+  lib-check:
+    name: Check libraries
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - name: Check libraries
+        id: checklibs
+        uses: canonical/charming-actions/check-libraries@2.7.0
+        with:
+          credentials: "${{ secrets.CHARMHUB_TOKEN }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          charm-path: "."
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

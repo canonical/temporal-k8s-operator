@@ -10,6 +10,10 @@ jobs:
     name: Release tests
     uses: ./.github/workflows/tests.yaml
     secrets: inherit
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
 
   publish:
     name: 'Publish charm to edge | amd64'
