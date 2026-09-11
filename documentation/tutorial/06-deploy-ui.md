@@ -26,6 +26,7 @@ temporal-ui-k8s/0*  blocked   idle   10.1.0.111         ui:temporal relation: no
 
 ```
 juju integrate temporal-k8s:ui temporal-ui-k8s:ui
+juju integrate temporal-k8s:temporal-host-info temporal-ui-k8s:temporal-host-info 
 ```
 
 4. Wait for both charms to be active and idle
