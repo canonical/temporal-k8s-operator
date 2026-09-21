@@ -5,6 +5,7 @@ import dataclasses
 import logging
 import textwrap
 import unittest.mock
+import json
 from unittest.mock import MagicMock
 
 import ops
@@ -825,3 +826,61 @@ def test_rendering():
 
     dynamic_config = render("dynamic_config.jinja", dynamic_context).strip()
     assert textwrap.dedent(dynamic_config).strip() == expected_output
+
+
+@pytest.mark.parametrize("tls_flag, expected_tls", [("True", True), ("False", False)])
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_db_tls_follows_relation_data(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    db_relation,
+    visibility_relation,
+    postgres_db_data,
+    postgres_visibility_data,
+    tls_flag,
+    expected_tls,
+):
+    """SQL TLS is taken only from the PostgreSQL relation databag."""
+    # Start from the opposite peer value so update-status must rewrite state.
+    peer = state.get_relations("peer")[0]
+    connections = json.loads(peer.local_app_data["database_connections"])
+    connections["db"]["tls"] = not expected_tls
+    connections["visibility"]["tls"] = not expected_tls
+    peer = dataclasses.replace(
+        peer,
+        local_app_data={
+            **peer.local_app_data,
+            "database_connections": json.dumps(connections),
+        },
+    )
+
+    db_relation = dataclasses.replace(
+        db_relation,
+        remote_app_data={**postgres_db_data, "tls": tls_flag},
+    )
+    visibility_relation = dataclasses.replace(
+        visibility_relation,
+        remote_app_data={**postgres_visibility_data, "tls": tls_flag},
+    )
+    other = [r for r in state.relations if r.endpoint not in ("peer", "db", "visibility")]
+    state = dataclasses.replace(
+        state,
+        relations=[peer, db_relation, visibility_relation, *other],
+    )
+
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.update_status(), state_out)
+
+    peer_out = json.loads(state_out.get_relations("peer")[0].local_app_data["database_connections"])
+    assert peer_out["db"]["tls"] is expected_tls
+    assert peer_out["visibility"]["tls"] is expected_tls
+    assert "db-tls-enabled" not in state_out.config
+    assert (
+        state_out.get_container("temporal").plan.services["temporal-server"].environment["SQL_TLS_ENABLED"]
+        is expected_tls
+    )
