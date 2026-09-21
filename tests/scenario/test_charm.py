@@ -2,10 +2,10 @@
 # See LICENSE file for licensing details.
 
 import dataclasses
+import json
 import logging
 import textwrap
 import unittest.mock
-import json
 from unittest.mock import MagicMock
 
 import ops
