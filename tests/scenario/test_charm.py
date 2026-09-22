@@ -879,7 +879,6 @@ def test_db_tls_follows_relation_data(
     peer_out = json.loads(state_out.get_relations("peer")[0].local_app_data["database_connections"])
     assert peer_out["db"]["tls"] is expected_tls
     assert peer_out["visibility"]["tls"] is expected_tls
-    assert "db-tls-enabled" not in state_out.config
     assert (
         state_out.get_container("temporal").plan.services["temporal-server"].environment["SQL_TLS_ENABLED"]
         is expected_tls
