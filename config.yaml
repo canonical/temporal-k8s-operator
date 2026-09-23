@@ -120,11 +120,6 @@ options:
     default: ""
     type: string
 
-  db-tls-enabled:
-    description: (Deprecated as of postgresql-k8s revision 462) Whether or not TLS is enabled on the database.
-    default: False
-    type: boolean
-
   long-poll-interval:
     description: |
         The long poll expiration interval in the matching service.
