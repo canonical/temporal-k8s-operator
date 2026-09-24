@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 import ops
 import ops.testing
 import pytest
+
 from relations.openfga import _get_ofga_client
 
 
