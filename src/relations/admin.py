@@ -10,6 +10,7 @@ from ops import framework
 from ops.charm import RelationEvent
 from ops.model import WaitingStatus
 
+from literals import WORKLOAD_VERSION
 from log import log_event_handler
 
 logger = logging.getLogger(__name__)
@@ -138,7 +139,8 @@ class Admin(framework.Object):
         if not self.charm.unit.is_leader():
             return
 
-        schema_ready = event.relation.data[event.app].get("schema_status") == "ready"
+        data = event.relation.data[event.app]
+        schema_ready = data.get("schema_status") == "ready" and data.get("schema_version") == WORKLOAD_VERSION
         logger.debug(f"admin:temporal: schema {'is ready' if schema_ready else 'is not ready'}")
         self.on.schema_changed.emit(relation=event.relation, app=event.app, unit=event.unit, schema_ready=schema_ready)
 
@@ -156,6 +158,14 @@ class Admin(framework.Object):
         self.charm.unit.status = WaitingStatus("handling schema ready change")
         self.charm._state.schema_ready = event.schema_ready
         self.charm._update(event)
+
+    @staticmethod
+    def schema_is_ready(relation):
+        """Require the admin to confirm the schema for this server version."""
+        if relation.app is None:
+            return False
+        data = relation.data[relation.app]
+        return data.get("schema_status") == "ready" and data.get("schema_version") == WORKLOAD_VERSION
 
     def _provide_db_info(self):
         """Provide DB info to the admin charm."""

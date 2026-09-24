@@ -86,5 +86,5 @@ resources:
   temporal-server-image:
     type: oci-image
     description: OCI image for Temporal
-    # TODO: Update the upstream-source to the appropriate OCI image for the desired Temporal version.
-    upstream-source: localhost:5000/temporal-server-upgrader:dev-1.24
+    # Local validation image; replace with a published digest before releasing this track.
+    upstream-source: localhost:5000/temporal-server-upgrader@sha256:85e4548819b5220d83288fc9bf804aabf1dcfc1a40eb7a738b984d953b777024

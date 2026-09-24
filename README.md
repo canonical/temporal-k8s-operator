@@ -1,3 +1,5 @@
+> **Unsupported transition track:** This is a migration waypoint only. It receives no bug fixes or backports. Do not remain on this track.
+
 [![Charmhub Badge](https://charmhub.io/temporal-k8s/badge.svg)](https://charmhub.io/temporal-k8s)
 [![Release Edge](https://github.com/canonical/temporal-k8s-operator/actions/workflows/test_and_publish_charm.yaml/badge.svg)](https://github.com/canonical/temporal-k8s-operator/actions/workflows/publish_charm.yaml)
 
