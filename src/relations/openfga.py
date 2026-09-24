@@ -127,16 +127,17 @@ class OpenFGA(framework.Object):
             return
 
         url_components = urlsplit(info.http_api_url)
-        scheme = url_components.scheme
-        address = url_components.hostname
         http_port = url_components.port
+        if http_port is None:
+            http_port = 443 if url_components.scheme == "https" else 80
 
         self.charm._state.openfga = {
             "store_id": info.store_id,
             "token": info.token,
-            "address": address,
+            "address": url_components.hostname,
             "port": http_port,
-            "scheme": scheme,
+            "scheme": url_components.scheme,
+            "full_http_url": info.http_api_url.rstrip("/"),
             "auth_model_id": None,
         }
 
@@ -183,7 +184,7 @@ class OpenFGA(framework.Object):
             return
 
         openfga_data = self.charm._state.openfga
-        url = f"{openfga_data['scheme']}://{openfga_data['address']}:{openfga_data['port']}/stores/{openfga_data['store_id']}/authorization-models"
+        url = f"{openfga_data['full_http_url']}/stores/{openfga_data['store_id']}/authorization-models"
         headers = _build_headers(openfga_data)
 
         try:
@@ -486,8 +487,7 @@ def _get_ofga_client(openfga_data):
         with the OpenFGA store.
     """
     configuration = ClientConfiguration(
-        api_scheme=openfga_data["scheme"],
-        api_host=f"{openfga_data['address']}:{openfga_data['port']}",
+        api_url=openfga_data["full_http_url"],
         store_id=openfga_data["store_id"],
         authorization_model_id=openfga_data["auth_model_id"],
         credentials=Credentials(
