@@ -682,7 +682,9 @@ class TemporalK8SCharm(CharmBase):
             "services": {
                 "temporal-server": {
                     "summary": "temporal server",
-                    "command": "temporal-server --env charm start " + services_args,
+                    # Upgrader rock ships version-suffixed binaries; the 1.24
+                    # transition charm runs the 1.24.3 server binary.
+                    "command": "temporal-server-1.24.3 --env charm start " + services_args,
                     "startup": "enabled",
                     "override": "replace",
                     # Including config values here so that a change in the
