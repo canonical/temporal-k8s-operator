@@ -24,7 +24,7 @@ variable "revision" {
 variable "channel" {
   type        = string
   description = "Charmhub channel to deploy the charm from"
-  default     = "1.23/stable"
+  default     = "1.24/stable"
 }
 
 variable "constraints" {
