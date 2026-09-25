@@ -347,17 +347,19 @@ def test_invalid_openfga_http_url_is_not_persisted_on_store_created(
     context,
     action_state,
     openfga_data,
+    admin_relation,
     http_api_url,
 ):
     """Malformed OpenFGA HTTP URLs are rejected and not written to peer state."""
     state = _with_openfga_http_url(action_state, openfga_data, http_api_url)
+    state = context.run(context.on.relation_changed(admin_relation), state)
     openfga = state.get_relations("openfga")[0]
     state_out = context.run(context.on.relation_changed(openfga), state)
 
     peer = state_out.get_relations("peer")[0]
     assert "openfga" not in peer.local_app_data
     assert isinstance(state_out.unit_status, ops.BlockedStatus)
-    assert "invalid OpenFGA HTTP API URL" in str(state_out.unit_status)
+    assert "openfga:temporal relation not ready" in str(state_out.unit_status)
 
 
 @unittest.mock.patch("socket.gethostbyname", return_value="127.0.0.1")

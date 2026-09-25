@@ -22,7 +22,6 @@ from openfga_sdk.exceptions import ApiException
 from openfga_sdk.models.check_response import CheckResponse
 from openfga_sdk.models.read_response import ReadResponse
 from ops import framework
-from ops.model import BlockedStatus
 from requests.exceptions import RequestException
 
 from literals import ALLOWED_OFGA_ROLES
@@ -136,8 +135,6 @@ class OpenFGA(framework.Object):
             self.charm._state.openfga = self._openfga_state_from_store_info(info)
         except ValueError as exc:
             logger.error("invalid OpenFGA store info: %s", exc)
-            self.charm.unit.status = BlockedStatus(str(exc))
-            return
 
         self.charm._update(event)
 
