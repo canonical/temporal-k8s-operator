@@ -22,6 +22,7 @@ from openfga_sdk.exceptions import ApiException
 from openfga_sdk.models.check_response import CheckResponse
 from openfga_sdk.models.read_response import ReadResponse
 from ops import framework
+from ops.model import BlockedStatus
 from requests.exceptions import RequestException
 
 from literals import ALLOWED_OFGA_ROLES
@@ -76,6 +77,11 @@ class OpenFGA(framework.Object):
         )
 
         charm.framework.observe(
+            charm.on.upgrade_charm,
+            self._on_upgrade_charm,
+        )
+
+        charm.framework.observe(
             charm.on.create_authorization_model_action,
             self._on_create_authorization_model_action,
         )
@@ -122,25 +128,101 @@ class OpenFGA(framework.Object):
             return
 
         info = self.charm.openfga.get_store_info()
-        if not info:
+        if not info or not info.http_api_url:
             logger.info("openfga relation revoked, no store info found")
             return
 
+        try:
+            self.charm._state.openfga = self._openfga_state_from_store_info(info)
+        except ValueError as exc:
+            logger.error("invalid OpenFGA store info: %s", exc)
+            self.charm.unit.status = BlockedStatus(str(exc))
+            return
+
+        self.charm._update(event)
+
+    def _openfga_state_from_store_info(self, info, auth_model_id=None):
+        """Build peer OpenFGA state from live store info.
+
+        Args:
+            info: OpenFGA store info from the relation.
+            auth_model_id: Existing authorization model ID to preserve, if any.
+
+        Returns:
+            dict: OpenFGA peer state.
+
+        Raises:
+            ValueError: If the OpenFGA HTTP API URL is invalid.
+        """
         url_components = urlsplit(info.http_api_url)
-        http_port = url_components.port
+
+        if url_components.scheme not in ("http", "https"):
+            raise ValueError(f"invalid OpenFGA HTTP API URL scheme: {url_components.scheme}")
+
+        if not url_components.hostname:
+            raise ValueError("invalid OpenFGA HTTP API URL: missing hostname")
+
+        if url_components.query or url_components.fragment:
+            raise ValueError("invalid OpenFGA HTTP API URL: query and fragment are not supported")
+
+        try:
+            http_port = url_components.port
+        except ValueError as exc:
+            raise ValueError(f"invalid OpenFGA HTTP API URL: {exc}") from exc
+
         if http_port is None:
             http_port = 443 if url_components.scheme == "https" else 80
 
-        self.charm._state.openfga = {
+        return {
             "store_id": info.store_id,
             "token": info.token,
             "address": url_components.hostname,
             "port": http_port,
             "scheme": url_components.scheme,
             "full_http_url": info.http_api_url.rstrip("/"),
-            "auth_model_id": None,
+            "auth_model_id": auth_model_id,
         }
 
+    def _migrate_openfga_state(self) -> bool:
+        """Backfill OpenFGA state written by older charm revisions.
+
+        Returns:
+            True if peer OpenFGA state was rewritten, False otherwise.
+        """
+        openfga = self.charm._state.openfga
+
+        if not openfga:
+            return False
+
+        if openfga.get("full_http_url") and openfga.get("port") is not None:
+            return False
+
+        info = self.charm.openfga.get_store_info()
+        if not info or not info.http_api_url:
+            return False
+
+        auth_model_id = openfga.get("auth_model_id") if openfga.get("store_id") == info.store_id else None
+
+        try:
+            new_state = self._openfga_state_from_store_info(info, auth_model_id)
+        except ValueError as exc:
+            logger.error("failed to migrate OpenFGA state: %s", exc)
+            return False
+
+        self.charm._state.openfga = new_state
+        return True
+
+    @log_event_handler(logger)
+    def _on_upgrade_charm(self, event):
+        """Migrate persisted OpenFGA peer state after a charm upgrade.
+
+        Args:
+            event: The event triggered when the charm is upgraded.
+        """
+        if not self.charm.unit.is_leader():
+            return
+
+        self._migrate_openfga_state()
         self.charm._update(event)
 
     @log_event_handler(logger)
