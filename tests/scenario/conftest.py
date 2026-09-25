@@ -264,6 +264,7 @@ def peer_relation(request, s3_config, openfga_store_id, openfga_secret):
                 "port": "8080",
                 "scheme": "http",
                 "auth_model_id": None if request.node.get_closest_marker("openfga_auth_skipped") else "123",
+                "full_http_url": "http://127.0.0.1:8080",
             }
         )
 
