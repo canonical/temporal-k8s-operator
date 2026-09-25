@@ -13,7 +13,7 @@ LOG_FORMAT = "json"
 DB_NAME = "temporal-k8s_db"
 VISIBILITY_DB_NAME = "temporal-k8s_visibility"
 ALLOWED_OFGA_ROLES = ["admin", "writer", "reader"]
-REQUIRED_OPENFGA_KEYS = ["store_id", "address", "port", "scheme", "token"]
+REQUIRED_OPENFGA_KEYS = ["store_id", "address", "port", "scheme", "token", "full_http_url"]
 REQUIRED_S3_PARAMETERS = ["region", "endpoint", "aws_access_key_id", "aws_secret_access_key"]
 DEFAULT_DB_DICT = {"db": None, "visibility": None}
 
