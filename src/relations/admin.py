@@ -73,6 +73,7 @@ class Admin(framework.Object):
 
     Attrs:
         on: AdminEvents object.
+        schema_ready: whether admin has migrated schemas for this workload version.
     """
 
     on = _AdminEvents()
@@ -158,7 +159,7 @@ class Admin(framework.Object):
 
     @property
     def schema_ready(self):
-        """Whether admin has migrated schemas for this workload version."""
+        """Return whether admin has migrated schemas for this workload version."""
         relation = self.charm.model.get_relation("admin")
         if not relation or not relation.app:
             return False

@@ -12,7 +12,9 @@ import pytest
 
 @pytest.mark.parametrize("leader", [True, False])
 @pytest.mark.parametrize("services", ["frontend", "history", "matching", "worker"])
-@pytest.mark.parametrize("status,version", [("ready", "1.23.1"), ("ready", ""), ("migrating", "1.24.3"), ("failed", "")])
+@pytest.mark.parametrize(
+    "status,version", [("ready", "1.23.1"), ("ready", ""), ("migrating", "1.24.3"), ("failed", "")]
+)
 def test_stale_readiness_cannot_start_server(
     context, peer_relation, admin_relation, temporal_container, leader, services, status, version
 ):

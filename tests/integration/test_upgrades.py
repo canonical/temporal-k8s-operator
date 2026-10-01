@@ -31,6 +31,19 @@ logger = logging.getLogger(__name__)
 ADMIN_TARGET_CHANNEL = "1.24/edge"
 
 
+def _read_workload_version() -> str:
+    """Read WORKLOAD_VERSION out of src/literals.py without importing ops.
+
+    The integration test environment does not install this charm's own
+    package, so we parse the constant directly out of the source file instead
+    of importing it.
+    """
+    text = Path("src/literals.py").read_text()
+    match = re.search(r'^WORKLOAD_VERSION\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    assert match, "WORKLOAD_VERSION constant not found in src/literals.py"
+    return match.group(1)
+
+
 async def _get_admin_schema_version(ops_test: OpsTest) -> str | None:
     """Fetch the schema_version the admin charm has published over the admin relation."""
     retcode, stdout, stderr = await ops_test.juju(

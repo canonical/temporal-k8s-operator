@@ -36,18 +36,18 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.pebble import CheckStatus
 
 from literals import (
+    CHECK_NAME,
     DB_NAME,
     LOG_FORMAT,
     LOG_OUTPUT_FILE,
     PROMETHEUS_PORT,
     REQUIRED_OPENFGA_KEYS,
     REQUIRED_S3_PARAMETERS,
+    SERVICE_NAME,
     SERVICE_PORTS,
     VALID_LOG_LEVELS,
     VISIBILITY_DB_NAME,
     WORKLOAD_VERSION,
-    CHECK_NAME,
-    SERVICE_NAME,
     ValidServiceTypes,
 )
 from log import log_event_handler
