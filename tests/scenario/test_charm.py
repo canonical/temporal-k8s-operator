@@ -152,7 +152,7 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
         "services": {
             "temporal-server": {
                 "summary": "temporal server",
-                "command": "temporal-server --env charm start "
+                "command": "/bin/temporal-server-1.25.2 --env charm start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                 "startup": "enabled",
                 "override": "replace",
@@ -187,10 +187,11 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
         },
         "checks": {
             "temporal-server-running": {
-                "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
+                "exec": {"command": "temporal operator cluster health --address=127.0.0.1:7236"},
                 "level": "alive",
                 "override": "replace",
                 "period": "300s",
+                "threshold": 3,
             }
         },
     }
@@ -346,7 +347,7 @@ def test_s3_archival_relation(
             "services": {
                 "temporal-server": {
                     "summary": "temporal server",
-                    "command": "temporal-server --env charm start "
+                    "command": "/bin/temporal-server-1.25.2 --env charm start "
                     "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                     "startup": "enabled",
                     "override": "replace",
@@ -387,10 +388,11 @@ def test_s3_archival_relation(
             },
             "checks": {
                 "temporal-server-running": {
-                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
+                    "exec": {"command": "temporal operator cluster health --address=127.0.0.1:7236"},
                     "level": "alive",
                     "override": "replace",
                     "period": "300s",
+                    "threshold": 3,
                 }
             },
         }
@@ -581,7 +583,7 @@ def test_authorization_ready(
         "services": {
             "temporal-server": {
                 "summary": "temporal server",
-                "command": "temporal-server --env charm start "
+                "command": "/bin/temporal-server-1.25.2 --env charm start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                 "startup": "enabled",
                 "override": "replace",
@@ -626,10 +628,11 @@ def test_authorization_ready(
         },
         "checks": {
             "temporal-server-running": {
-                "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
+                "exec": {"command": "temporal operator cluster health --address=127.0.0.1:7236"},
                 "level": "alive",
                 "override": "replace",
                 "period": "300s",
+                "threshold": 3,
             },
         },
     }
