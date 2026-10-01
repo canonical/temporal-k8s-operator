@@ -4,23 +4,25 @@
 """Temporal charm scaling integration tests."""
 
 import logging
+import pathlib
 
+import jubilant
 import pytest
-import pytest_asyncio
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import DEFAULT_WAIT_TIMEOUT, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
     APP_NAME_UI,
-    METADATA,
     PGBOUNCER_APP_NAME,
     PGBOUNCER_CHANNEL,
     POSTGRESQL_APP_NAME,
     create_default_namespace,
+    fast_forward,
     run_sample_workflow,
     scale,
+    wait_active,
+    wait_blocked,
 )
-from pytest_operator.plugin import OpsTest
 
 ALL_SERVICES = ["temporal-k8s", "temporal-k8s-history", "temporal-k8s-matching", "temporal-k8s-worker"]
 ALL_CONFIG = ["frontend", "history", "matching", "worker"]
@@ -30,22 +32,19 @@ _SCALE_TEST_WORKFLOW_COUNT = 150
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skip_if_deployed
-@pytest_asyncio.fixture(name="deploy", scope="module")
-async def deploy(ops_test: OpsTest):
+@pytest.fixture(name="deploy", scope="module")
+def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
     """The app is up and running."""
-    charm = await ops_test.build_charm(".")
-    resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
+    juju.wait_timeout = DEFAULT_WAIT_TIMEOUT
 
-    await ops_test.model.set_config({"update-status-hook-interval": "1m"})
+    juju.model_config({"update-status-hook-interval": "1m"})
 
     # Deploy temporal server, temporal admin and postgresql charms.
     for i in range(4):
-        # for service in ALL_SERVICES:
-        await ops_test.model.deploy(
+        juju.deploy(
             charm,
-            resources=resources,
-            application_name=ALL_SERVICES[i],
+            ALL_SERVICES[i],
+            resources=charm_resources,
             config={
                 "services": ALL_CONFIG[i],
                 "num-history-shards": 1,
@@ -56,59 +55,49 @@ async def deploy(ops_test: OpsTest):
             },
         )
 
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
-    await ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
-    await ops_test.model.deploy(
-        PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True, config={"max_db_connections": 20}
-    )
+    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
+    juju.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
+    juju.deploy(PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True, config={"max_db_connections": 20})
 
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME_ADMIN, APP_NAME_UI, PGBOUNCER_APP_NAME] + ALL_SERVICES,
-            status="blocked",
-            raise_on_blocked=False,
-            timeout=1200,
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[POSTGRESQL_APP_NAME], status="active", raise_on_blocked=False, timeout=1200
-        )
+    with fast_forward(juju):
+        wait_blocked(juju, APP_NAME_ADMIN, APP_NAME_UI, PGBOUNCER_APP_NAME, *ALL_SERVICES, timeout=1200)
+        wait_active(juju, POSTGRESQL_APP_NAME, timeout=1200)
 
-        await ops_test.model.integrate(PGBOUNCER_APP_NAME, POSTGRESQL_APP_NAME)
+        juju.integrate(PGBOUNCER_APP_NAME, POSTGRESQL_APP_NAME)
 
-        await ops_test.model.wait_for_idle(
-            apps=[POSTGRESQL_APP_NAME, PGBOUNCER_APP_NAME], status="active", raise_on_blocked=False, timeout=1200
-        )
+        wait_active(juju, POSTGRESQL_APP_NAME, PGBOUNCER_APP_NAME, timeout=1200)
 
+        status = juju.status()
         for service in ALL_SERVICES:
-            assert ops_test.model.applications[service].units[0].workload_status == "blocked"
+            assert status.apps[service].units[f"{service}/0"].is_blocked
 
         # Must integrate temporal-k8s frontend service first
-        await ops_test.model.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
-        await ops_test.model.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
-        await ops_test.model.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
-        await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
+        juju.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
+        juju.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
+        juju.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
+        juju.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
+        wait_active(juju, APP_NAME, timeout=600)
 
         for service in ALL_SERVICES:
             if service != "temporal-k8s":
-                await ops_test.model.integrate(f"{service}:db", f"{PGBOUNCER_APP_NAME}:database")
-                await ops_test.model.integrate(f"{service}:visibility", f"{PGBOUNCER_APP_NAME}:database")
+                juju.integrate(f"{service}:db", f"{PGBOUNCER_APP_NAME}:database")
+                juju.integrate(f"{service}:visibility", f"{PGBOUNCER_APP_NAME}:database")
 
-        await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
+        wait_active(juju, *ALL_SERVICES, timeout=1800)
 
-        await ops_test.model.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
-        await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_UI}:temporal-host-info")
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, APP_NAME_UI], status="active", raise_on_blocked=False, timeout=1200
-        )
+        juju.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
+        juju.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_UI}:temporal-host-info")
+        wait_active(juju, APP_NAME, APP_NAME_UI, timeout=1200)
 
-        await create_default_namespace(ops_test)
+        create_default_namespace(juju)
 
-        await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1200)
-        assert ops_test.model.applications["temporal-k8s"].units[0].workload_status == "active"
+        wait_active(juju, *ALL_SERVICES, timeout=1200)
+        assert juju.status().apps["temporal-k8s"].units["temporal-k8s/0"].is_active
 
-        await run_sample_workflow(ops_test)
+        run_sample_workflow(juju)
+
+    yield
 
 
 @pytest.mark.abort_on_fail
@@ -116,18 +105,18 @@ async def deploy(ops_test: OpsTest):
 class TestScaling:
     """Integration tests for Temporal charm."""
 
-    async def test_scaling_up(self, ops_test: OpsTest):
+    def test_scaling_up(self, juju: jubilant.Juju):
         """Scale Temporal charm up to 2 units."""
         for service in ALL_SERVICES:
-            await scale(ops_test, app=service, units=2)
+            scale(juju, app=service, units=2)
 
         # The count argument is an arbitrary number, keep it around 150 to allow
         # runners to complete this number of runs before timeouts.
-        await run_sample_workflow(ops_test, count=_SCALE_TEST_WORKFLOW_COUNT)
+        run_sample_workflow(juju, count=_SCALE_TEST_WORKFLOW_COUNT)
 
-    async def test_scaling_down(self, ops_test: OpsTest):
+    def test_scaling_down(self, juju: jubilant.Juju):
         """Scale Temporal charm down to 1 unit."""
         for service in ALL_SERVICES:
-            await scale(ops_test, app=service, units=1)
+            scale(juju, app=service, units=1)
 
-        await run_sample_workflow(ops_test, count=_SCALE_TEST_WORKFLOW_COUNT)
+        run_sample_workflow(juju, count=_SCALE_TEST_WORKFLOW_COUNT)

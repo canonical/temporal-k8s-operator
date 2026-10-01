@@ -8,6 +8,7 @@ import pathlib
 
 import jubilant
 import pytest
+from conftest import deploy  # noqa: F401, pylint: disable=W0611
 from helpers import APP_NAME, APP_NAME_ADMIN, APP_NAME_UI
 
 logger = logging.getLogger(__name__)
@@ -30,13 +31,6 @@ def _wait_stack_active(juju: jubilant.Juju, timeout: int = 900) -> None:
 def _wait_requirer_agent_idle(juju: jubilant.Juju, timeout: int = 600) -> None:
     """Wait until the mock requirer's unit agent is idle (install/config hooks done)."""
     juju.wait(lambda s: jubilant.all_agents_idle(s, "host-info-requirer"), timeout=timeout)
-
-
-@pytest.fixture(scope="module")
-def juju(deploy: str):
-    """Juju fixture for integration tests."""
-    juju = jubilant.Juju(model=deploy)
-    return juju
 
 
 @pytest.fixture(scope="module")
