@@ -263,6 +263,13 @@ class TemporalK8SCharm(CharmBase):
             event.defer()
             return
 
+        # Re-evaluate against current relation data: the cached flag only
+        # updates on admin_relation_changed, which won't fire here if admin's
+        # published schema_version didn't change (e.g. admin was refreshed to
+        # the target version before this charm was), leaving us blocked forever.
+        if self.unit.is_leader():
+            self._state.schema_ready = self.admin.schema_ready
+
         if SERVICE_NAME in container.get_services() and container.get_service(SERVICE_NAME).is_running():
             logger.info("stopping Temporal server before schema migration")
             container.stop(SERVICE_NAME)
