@@ -32,6 +32,28 @@ def test_stale_readiness_cannot_start_server(
 
 
 @pytest.mark.parametrize("leader", [True, False])
+def test_upgrade_recovers_from_stale_cached_readiness(
+    context, peer_relation, admin_relation, temporal_container, network, leader
+):
+    """A server refreshed after admin already matches must not stay blocked on a stale cache."""
+    peer_relation.local_app_data["schema_ready"] = "false"
+    state = ops.testing.State(
+        leader=leader,
+        config={"num-history-shards": 1},
+        relations=[peer_relation, admin_relation],
+        containers=[temporal_container],
+        networks=[network],
+    )
+    result = context.run(context.on.upgrade_charm(), state)
+    if leader:
+        assert result.unit_status == ops.MaintenanceStatus("replanning application")
+    else:
+        # Only the leader can write the shared peer-app cache; a follower
+        # relies on the leader having already refreshed it.
+        assert result.unit_status == ops.BlockedStatus("admin:temporal relation: schema is not ready")
+
+
+@pytest.mark.parametrize("leader", [True, False])
 def test_ready_relation_starts_fresh_container(
     context, peer_relation, admin_relation, temporal_container, network, leader
 ):
