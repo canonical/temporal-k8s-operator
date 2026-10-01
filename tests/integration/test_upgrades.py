@@ -3,8 +3,11 @@
 
 """Temporal charm upgrades integration tests."""
 
+import json
 import logging
+import re
 import time
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -23,6 +26,26 @@ from helpers import (
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
+
+
+ADMIN_TARGET_CHANNEL = "1.24/edge"
+
+
+async def _get_admin_schema_version(ops_test: OpsTest) -> str | None:
+    """Fetch the schema_version the admin charm has published over the admin relation."""
+    retcode, stdout, stderr = await ops_test.juju(
+        "show-unit", f"{APP_NAME}/0", "--format", "json", "-m", ops_test.model.name
+    )
+    assert retcode == 0, f"show-unit failed: {stderr}"
+    data = json.loads(stdout)
+    relation_info = data[f"{APP_NAME}/0"].get("relation-info", [])
+    for relation in relation_info:
+        if relation.get("endpoint") == "admin":
+            for related_unit_data in relation.get("related-units", {}).values():
+                app_data = related_unit_data.get("data", {})
+                if "schema_version" in app_data:
+                    return app_data["schema_version"]
+    return None
 
 
 @pytest.mark.skip_if_deployed
@@ -64,10 +87,29 @@ class TestUpgrade:
 
         await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
 
+        model_name = ops_test.model.name
+
+        # Refresh admin first and wait for the schema migration to complete.
+        # The server's post-upgrade schema-gate will block forever waiting for
+        # a matching schema_version if admin is refreshed after (or not at
+        # all) -- see the ADMIN_TARGET_CHANNEL comment above.
+        retcode, stdout, stderr = await ops_test.juju(
+            "refresh",
+            APP_NAME_ADMIN,
+            "--channel",
+            ADMIN_TARGET_CHANNEL,
+            "-m",
+            model_name,
+        )
+        assert retcode == 0, f"Admin refresh failed: {stderr}"
+
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME_ADMIN], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
+        )
+
         # This is to accmmodate for a self-resolving error which sometimes appears when Temporal
         # services attempt to connect to the cluster before the application is ready.
         # Use CLI directly to support --base parameter for 22.04→24.04 platform upgrade
-        model_name = ops_test.model.name
         retcode, stdout, stderr = await ops_test.juju(
             "refresh",
             APP_NAME,
@@ -92,6 +134,16 @@ class TestUpgrade:
             # becoming active while application is still waiting.
             time.sleep(10)
             assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+
+            # Version-sync guard: fail loudly (rather than leaving the server
+            # silently blocked) if admin's published schema_version doesn't
+            # match this charm's own WORKLOAD_VERSION.
+            admin_schema_version = await _get_admin_schema_version(ops_test)
+            assert admin_schema_version == _read_workload_version(), (
+                f"admin published schema_version={admin_schema_version!r} which does not match "
+                f"this charm's WORKLOAD_VERSION={_read_workload_version()!r}; ADMIN_TARGET_CHANNEL "
+                "in this test and WORKLOAD_VERSION in src/literals.py must be bumped together"
+            )
 
             await run_sample_workflow(ops_test)
 

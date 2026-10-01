@@ -46,6 +46,8 @@ from literals import (
     VALID_LOG_LEVELS,
     VISIBILITY_DB_NAME,
     WORKLOAD_VERSION,
+    CHECK_NAME,
+    SERVICE_NAME,
     ValidServiceTypes,
 )
 from log import log_event_handler
@@ -133,7 +135,6 @@ class TemporalK8SCharm(CharmBase):
 
         # Handle basic charm lifecycle.
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.upgrade_charm, self._update)
         self.framework.observe(self.on.temporal_pebble_ready, self._on_temporal_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.restart_action, self._on_restart_action)
@@ -262,9 +263,9 @@ class TemporalK8SCharm(CharmBase):
             event.defer()
             return
 
-        if "temporal-server" in container.get_services() and container.get_service("temporal-server").is_running():
+        if SERVICE_NAME in container.get_services() and container.get_service(SERVICE_NAME).is_running():
             logger.info("stopping Temporal server before schema migration")
-            container.stop("temporal-server")
+            container.stop(SERVICE_NAME)
 
         self._update(event)
 
@@ -387,15 +388,11 @@ class TemporalK8SCharm(CharmBase):
             return
         container = self.unit.get_container(self.name)
 
-        try:
-            self._validate()
-        except ValueError as err:
-            event.fail(str(err))
-            return
-
         logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
-        container.restart("temporal-server")
+        # container.restart() restarts a pebble *service* within this container,
+        # not the container itself; the service is named SERVICE_NAME, not self.name.
+        container.restart(SERVICE_NAME)
         self.set_active_unit_status()
 
     @log_event_handler(logger)
@@ -421,7 +418,7 @@ class TemporalK8SCharm(CharmBase):
             self._update(event)
             return
 
-        check = container.get_check("temporal-server-running")
+        check = container.get_check(CHECK_NAME)
         if check.status != CheckStatus.UP:
             self.unit.status = MaintenanceStatus("Status check: DOWN")
             return
@@ -445,7 +442,7 @@ class TemporalK8SCharm(CharmBase):
         """
         try:
             plan = container.get_plan().to_dict()
-            return bool(plan["services"]["temporal-server"]["on-check-failure"])
+            return bool(plan["services"][SERVICE_NAME]["on-check-failure"])
         except (KeyError, pebble.ConnectionError):
             return False
 
@@ -715,7 +712,7 @@ class TemporalK8SCharm(CharmBase):
         pebble_layer = {
             "summary": "temporal server layer",
             "services": {
-                "temporal-server": {
+                SERVICE_NAME: {
                     "summary": "temporal server",
                     "command": f"/bin/temporal-server-{WORKLOAD_VERSION} --env charm start " + services_args,
                     "startup": "enabled",
@@ -723,13 +720,13 @@ class TemporalK8SCharm(CharmBase):
                     # Including config values here so that a change in the
                     # config forces replanning to restart the service.
                     "environment": context,
-                    "on-check-failure": {"temporal-server-running": "ignore"},
+                    "on-check-failure": {CHECK_NAME: "ignore"},
                     "user": "ubuntu",
                     "working-dir": "/etc/temporal",
                 }
             },
             "checks": {
-                "temporal-server-running": {
+                CHECK_NAME: {
                     "override": "replace",
                     "level": "alive",
                     "period": "300s",

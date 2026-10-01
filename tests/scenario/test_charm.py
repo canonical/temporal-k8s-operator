@@ -187,10 +187,11 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
         },
         "checks": {
             "temporal-server-running": {
-                "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
+                "exec": {"command": "temporal operator cluster health --address=127.0.0.1:7236"},
                 "level": "alive",
                 "override": "replace",
                 "period": "300s",
+                "threshold": 3,
             }
         },
     }
@@ -387,10 +388,11 @@ def test_s3_archival_relation(
             },
             "checks": {
                 "temporal-server-running": {
-                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
+                    "exec": {"command": "temporal operator cluster health --address=127.0.0.1:7236"},
                     "level": "alive",
                     "override": "replace",
                     "period": "300s",
+                    "threshold": 3,
                 }
             },
         }
@@ -626,10 +628,11 @@ def test_authorization_ready(
         },
         "checks": {
             "temporal-server-running": {
-                "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
+                "exec": {"command": "temporal operator cluster health --address=127.0.0.1:7236"},
                 "level": "alive",
                 "override": "replace",
                 "period": "300s",
+                "threshold": 3,
             },
         },
     }

@@ -12,7 +12,7 @@ import pytest
 
 @pytest.mark.parametrize("leader", [True, False])
 @pytest.mark.parametrize("services", ["frontend", "history", "matching", "worker"])
-@pytest.mark.parametrize("status,version", [("ready", "1.23.1"), ("ready", ""), ("updating", "1.24.3"), ("failed", "")])
+@pytest.mark.parametrize("status,version", [("ready", "1.23.1"), ("ready", ""), ("migrating", "1.24.3"), ("failed", "")])
 def test_stale_readiness_cannot_start_server(
     context, peer_relation, admin_relation, temporal_container, leader, services, status, version
 ):
@@ -52,7 +52,7 @@ def test_ready_relation_resumes_waiting_unit(
     context, peer_relation, admin_relation, temporal_container, network, leader
 ):
     peer_relation.local_app_data["schema_ready"] = "true"
-    admin_relation.remote_app_data.update(schema_status="updating", schema_version="")
+    admin_relation.remote_app_data.update(schema_status="migrating", schema_version="")
     state = ops.testing.State(
         leader=leader,
         config={"num-history-shards": 1},
@@ -71,7 +71,7 @@ def test_ready_relation_resumes_waiting_unit(
 
 def test_refresh_stops_previous_server_while_schema_pending(context, peer_relation, admin_relation, temporal_container):
     peer_relation.local_app_data["schema_ready"] = "true"
-    admin_relation.remote_app_data.update(schema_status="updating", schema_version="")
+    admin_relation.remote_app_data.update(schema_status="migrating", schema_version="")
     container = dataclasses.replace(
         temporal_container,
         layers={
