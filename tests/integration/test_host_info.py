@@ -71,17 +71,39 @@ class TestTemporalHostInfoRelation:
         _wait_stack_active(juju)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
-        expected_status = "Temporal host: temporal.local.test, port: 7236"
+        expected_status = "Temporal host: temporal.local.test, port: 7233, tls: False"
         assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status
 
     def test_relation_no_ext_hostname(self, juju: jubilant.Juju):
-        """Test host falls back to pod IP when external-hostname is unset."""
+        """Test host falls back to the in-cluster service name when external-hostname is unset.
+
+        The service name is used rather than the pod address because it is
+        stable across restarts and can be covered by a DNS SAN, which a pod
+        address cannot -- requirers need a name they can verify the frontend's
+        certificate against.
+        """
         juju.config(APP_NAME, {"external-hostname": ""})
         _wait_stack_active(juju)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
-        server_ip = status.apps[APP_NAME].units[f"{APP_NAME}/0"].address
-        expected_status = f"Temporal host: {server_ip}, port: 7236"
+        expected_host = f"{APP_NAME}.{juju.model}.svc.cluster.local"
+        expected_status = f"Temporal host: {expected_host}, port: 7233, tls: False"
+        assert requirer_unit.workload_status.current == "active"
+        assert requirer_unit.workload_status.message == expected_status
+
+    def test_relation_tls_signal(self, juju: jubilant.Juju):
+        """Test tls flips to True once the frontend serves gRPC over TLS.
+
+        This is the signal requirers need in order to dial the frontend
+        correctly: without it a plaintext client hits the TLS listener and
+        fails with "error reading server preface: EOF".
+        """
+        juju.integrate(f"{APP_NAME}:frontend-certificates", "self-signed-certificates:certificates")
+        _wait_stack_active(juju)
+        status = juju.status()
+        requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
+        expected_host = f"{APP_NAME}.{juju.model}.svc.cluster.local"
+        expected_status = f"Temporal host: {expected_host}, port: 7233, tls: True"
         assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status

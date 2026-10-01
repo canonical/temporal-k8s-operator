@@ -205,33 +205,56 @@ class TemporalK8SCharm(CharmBase):
         )
 
         # Host Info
-        # FIXME: for 1.31/edge, the internal-frontend will be shared with the UI and Admin
-        # charms so they can connect w/o needing a certificate to talk to the frontend
-        # behind https. This is a workaround for github.com/canonical/temporal-k8s-operator/issues/152
-        self._host_info = TemporalHostInfoProvider(self, SERVICE_PORTS["internal-frontend"]["grpc"])
-
-        # Handle Ingress (via the `ingress` interface, e.g. ingress-configurator
-        # fronted by HAProxy). Temporal's frontend service speaks gRPC and is the
-        # only service exposed via ingress. The requirer is always instantiated so
-        # that its event handlers are registered even when the relation is added
-        # after the charm has started (e.g. relating to the ingress provider
-        # post-deployment). The `frontend` constraint, and the requirement that
-        # `frontend-certificates` be related alongside `ingress`, are enforced in
-        # `_validate`.
         #
-        # gRPC exposure through the supported providers (ingress-configurator +
-        # HAProxy) requires end-to-end TLS: they do NOT support plaintext HTTP/2
-        # (h2c) to the backend, so the scheme advertised is always `https` (the
-        # frontend terminates TLS via `frontend-certificates`). See
-        # documentation/how-to/configure-ingress.md.
+        # Requirers are told the frontend port and whether it serves gRPC over
+        # TLS, so they can dial it correctly either way. `tls` is a callable
+        # because it depends on the certificates relation, which is not
+        # resolved at charm initialisation.
+        self._host_info = TemporalHostInfoProvider(
+            self,
+            port=SERVICE_PORTS["frontend"]["grpc"],
+            tls=self._frontend_tls_enabled,
+        )
+
+        # Handle Ingress (via the `ingress` interface). Temporal's frontend
+        # service speaks gRPC and is the only service exposed via ingress. The
+        # requirer is always instantiated so that its event handlers are
+        # registered even when the relation is added after the charm has
+        # started (e.g. relating to the ingress provider post-deployment). The
+        # `frontend` constraint is enforced in `_validate`.
+        #
+        # The advertised scheme follows whether the frontend terminates TLS:
+        # `https` with `frontend-certificates`, `h2c` without. Which of those a
+        # provider accepts differs: Traefik handles h2c, while
+        # ingress-configurator fronted by HAProxy requires HTTP/2 over TLS to
+        # the backend and so needs `frontend-certificates`. The charm cannot
+        # tell the providers apart, so it advertises the truth and leaves the
+        # pairing to documentation rather than blocking.
+        # See documentation/how-to/configure-ingress.md.
         self.ingress = IngressPerAppRequirer(
             self,
             port=SERVICE_PORTS["frontend"]["grpc"],
             relation_name="ingress",
-            scheme="https",
+            scheme=self._ingress_scheme,
         )
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+
+    def _frontend_tls_enabled(self) -> bool:
+        """Return whether the frontend is serving gRPC over TLS.
+
+        This tracks what the workload actually serves, not merely what is
+        related: the TLS listener is only configured once the provider has
+        issued a certificate, so clients told `tls=True` any earlier would
+        fail their handshake against a still-plaintext frontend.
+        """
+        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+            return False
+        return self._certificate_is_available()
+
+    def _ingress_scheme(self) -> str:
+        """Return the scheme to advertise to the ingress provider."""
+        return "https" if self._frontend_tls_enabled() else "h2c"
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):
@@ -571,12 +594,19 @@ class TemporalK8SCharm(CharmBase):
         # Only the frontend service can be exposed through ingress.
         if "frontend" not in self.config["services"]:
             raise ValueError("Not a frontend service, please remove ingress integration.")
-        # The supported ingress providers don't support h2c to the backend, so
-        # frontend TLS is required to advertise `https` to the ingress relation.
-        # `frontend-certificates` is required alongside `ingress` (the two are
-        # complementary, not mutually exclusive).
+        # Without frontend TLS the charm advertises h2c. Traefik serves that
+        # fine; ingress-configurator/HAProxy cannot, and will not reach the
+        # backend. The provider is not identifiable from this side, so this is
+        # a warning rather than a blocking condition -- blocking would make the
+        # working Traefik topology impossible.
         if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
-            raise ValueError(f"ingress relation requires {FRONTEND_CERTIFICATES_RELATION_NAME} integration.")
+            logger.warning(
+                "ingress is related without %s: advertising the h2c scheme. Providers that require "
+                "HTTP/2 over TLS to the backend (ingress-configurator with HAProxy) will not be able "
+                "to reach the frontend; integrate %s if you are using one of those.",
+                FRONTEND_CERTIFICATES_RELATION_NAME,
+                FRONTEND_CERTIFICATES_RELATION_NAME,
+            )
 
     def _open_service_ports(self):
         """Open the respective ports based on Temporal service."""
@@ -705,6 +735,15 @@ class TemporalK8SCharm(CharmBase):
         self._remove_certificates(event)
         context.update(self._extra_context)
 
+        # The certificates relation is not observed by the host-info or ingress
+        # libraries, so republish both here: this runs on certificate_available
+        # and on the frontend-certificates relation joining and breaking, which
+        # are exactly the transitions that flip the advertised scheme and the
+        # published `tls` value. Without this the scheme stays at whatever it
+        # was when the ingress relation last changed.
+        self._host_info.publish()
+        self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
+
         # Ensure log directory exists
         log_dir = os.path.dirname(LOG_OUTPUT_FILE)
         container.make_dir(log_dir, make_parents=True, user="ubuntu", group="ubuntu")
@@ -817,13 +856,35 @@ class TemporalK8SCharm(CharmBase):
                 break
         common_name = self.config["frontend-cert-common-name"] or generated_common_name
 
-        # Generate SANS_DNS - set to the unit hostname if not set in configuration
-        sans_dns = self._dns_entries or [unit_fqdn]
+        # Generate SANS_DNS. The unit FQDN and the in-cluster service names are
+        # always included, on top of anything the user configured: in-model
+        # clients (the UI, the admin CLI) dial the Kubernetes service name, and
+        # a certificate that does not name it fails their hostname verification
+        # with "certificate is valid for <x>, not <y>". These must be added
+        # unconditionally -- folding them into the `or` below would mean that
+        # setting `frontend-cert-sans-dns` for an external name silently broke
+        # every internal client.
+        sans_dns = set(self._dns_entries) | {unit_fqdn} | set(self._in_cluster_dns_names())
 
         return CertificateRequestAttributes(
             common_name=common_name,
             sans_dns=frozenset(sans_dns),
         )
+
+    def _in_cluster_dns_names(self) -> list[str]:
+        """Return the Kubernetes service names in-model clients use to reach this app.
+
+        These mirror what `TemporalHostInfoProvider` publishes over
+        `temporal-host-info`; the published host must be covered by the
+        certificate or requirers cannot verify it.
+        """
+        app, model = self.app.name, self.model.name
+        return [
+            app,
+            f"{app}.{model}",
+            f"{app}.{model}.svc",
+            f"{app}.{model}.svc.cluster.local",
+        ]
 
     def _check_and_update_certificate(self) -> bool:
         """Check if the certificate or private key needs an update and perform the update.

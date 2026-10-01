@@ -8,14 +8,20 @@ TLS.
 
 [note]
 
-**gRPC through ingress requires TLS end-to-end.** The supported providers do **not**
-support plaintext HTTP/2 (h2c) to the backend, so the Temporal frontend must terminate
-TLS itself. Concretely: the `frontend-certificates` relation is **required** alongside
-`ingress` (the frontend then serves gRPC over TLS and the charm always advertises the
-`https` scheme), and the proxy re-encrypts to it. The charm enforces this: relating
-`ingress` without `frontend-certificates` blocks the unit rather than falling back to a
-cleartext (h2c) scheme the supported providers can't use. Only the `frontend` service can
-be exposed, and only one ingress solution can be used at a time.
+**This topology requires TLS end-to-end.** Ingress Configurator with HAProxy does **not**
+support plaintext HTTP/2 (h2c) to the backend, so for this topology the Temporal frontend
+must terminate TLS itself: integrate `frontend-certificates` alongside `ingress`, and the
+proxy re-encrypts to it.
+
+The charm does not enforce this, because other providers do not need it. The advertised
+scheme follows what the frontend actually serves - `https` with `frontend-certificates`,
+`h2c` without - and the charm cannot tell which provider is on the other end of the
+relation. Relating `ingress` without `frontend-certificates` is therefore allowed and
+logs a warning; with HAProxy the result is simply that the proxy cannot reach the
+backend. See [Other ingress providers](#other-ingress-providers) for the h2c path.
+
+Only the `frontend` service can be exposed, and only one ingress solution can be used at
+a time.
 
 [/note]
 
@@ -134,13 +140,37 @@ temporal operator namespace list \
 The full path is TLS end-to-end: client → HAProxy (TLS) → Temporal frontend (TLS), with
 HAProxy verifying the frontend against the CA received in step 4.
 
+## In-model clients
+
+Giving the frontend a certificate changes the wire protocol for **every** client, not
+just traffic arriving through the proxy. Applications inside the model that dial the
+frontend directly - the Web UI, the admin CLI - would otherwise keep speaking plaintext
+and fail with `error reading server preface: EOF`.
+
+The charm therefore publishes a `tls` flag over the `temporal-host-info` relation, which
+requirers use to decide how to dial. It also includes the in-cluster service names
+(`temporal-k8s`, `temporal-k8s.<model>`, `temporal-k8s.<model>.svc`,
+`temporal-k8s.<model>.svc.cluster.local`) in the certificate's SANs, so those clients can
+verify the certificate against the name they dial. Any names set in
+`frontend-cert-sans-dns` are added to these, not substituted for them.
+
+Verifying a certificate also requires the issuing CA. That is not carried on
+`temporal-host-info`; requirers receive it over the `certificate_transfer` interface,
+from the same provider that issues the frontend certificate:
+
+```
+juju integrate temporal-ui-k8s:receive-ca-cert self-signed-certificates:send-ca-cert
+```
+
 ## Other ingress providers
 
 The `ingress` interface is provider-agnostic, so `temporal-k8s:ingress` can be related to
 any charm that implements it.
 
-* [traefik-k8s](https://charmhub.io/traefik-k8s) is approaching end-of-life; it may work
-  but is not part of our test suite and is left to the user to configure.
+* [traefik-k8s](https://charmhub.io/traefik-k8s) serves gRPC over cleartext HTTP/2, so it
+  works **without** `frontend-certificates`: the charm advertises the `h2c` scheme and the
+  frontend stays plaintext, leaving in-model clients untouched. It is approaching
+  end-of-life and is not part of our test suite, so it is left to the user to configure.
 * The [Gateway API Integrator](https://charmhub.io/gateway-api-integrator) implements the
   same interface, but gRPC over TLS additionally needs the gateway to negotiate the `h2`
   ALPN protocol. On Canonical Kubernetes the bundled Cilium gateway does not currently
