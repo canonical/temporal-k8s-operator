@@ -65,7 +65,7 @@ class TestTemporalHostInfoRelation:
         _wait_stack_active(juju)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
-        expected_status = "Temporal host: temporal.local.test, port: 7236"
+        expected_status = "Temporal host: temporal.local.test, port: 7236, tls: False"
         assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status
 
@@ -76,6 +76,6 @@ class TestTemporalHostInfoRelation:
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
         server_ip = status.apps[APP_NAME].units[f"{APP_NAME}/0"].address
-        expected_status = f"Temporal host: {server_ip}, port: 7236"
+        expected_status = f"Temporal host: {server_ip}, port: 7236, tls: False"
         assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status
