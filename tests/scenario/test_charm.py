@@ -152,7 +152,7 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
         "services": {
             "temporal-server": {
                 "summary": "temporal server",
-                "command": "temporal-server --env charm start "
+                "command": "/bin/temporal-server-1.24.3 --env charm start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                 "startup": "enabled",
                 "override": "replace",
@@ -346,7 +346,7 @@ def test_s3_archival_relation(
             "services": {
                 "temporal-server": {
                     "summary": "temporal server",
-                    "command": "temporal-server --env charm start "
+                    "command": "/bin/temporal-server-1.24.3 --env charm start "
                     "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                     "startup": "enabled",
                     "override": "replace",
@@ -581,7 +581,7 @@ def test_authorization_ready(
         "services": {
             "temporal-server": {
                 "summary": "temporal server",
-                "command": "temporal-server --env charm start "
+                "command": "/bin/temporal-server-1.24.3 --env charm start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                 "startup": "enabled",
                 "override": "replace",

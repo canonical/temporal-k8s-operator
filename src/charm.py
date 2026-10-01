@@ -139,6 +139,7 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.restart_action, self._on_restart_action)
         self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
 
         # Handle postgresql relation.
         self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME, extra_user_roles="admin")
@@ -244,6 +245,28 @@ class TemporalK8SCharm(CharmBase):
             return
         self._delete_certificate()
         self._delete_private_key()
+
+    @log_event_handler(logger)
+    def _on_upgrade_charm(self, event):
+        """Handle a Temporal server charm upgrade.
+
+        Stop the previous workload and reconcile only when the admin relation
+        confirms that schemas for the target Temporal version are ready.
+
+        Args:
+            event: The upgrade-charm event.
+        """
+        container = self.unit.get_container(self.name)
+
+        if not container.can_connect():
+            event.defer()
+            return
+
+        if "temporal-server" in container.get_services() and container.get_service("temporal-server").is_running():
+            logger.info("stopping Temporal server before schema migration")
+            container.stop("temporal-server")
+
+        self._update(event)
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
@@ -363,6 +386,12 @@ class TemporalK8SCharm(CharmBase):
             event.fail(str(error))
             return
         container = self.unit.get_container(self.name)
+
+        try:
+            self._validate()
+        except ValueError as err:
+            event.fail(str(err))
+            return
 
         logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
@@ -497,12 +526,8 @@ class TemporalK8SCharm(CharmBase):
 
         # Validate admin relation.
         self.database_connections()
-        # Read the live relation on every event, including refresh. A persisted
-        # boolean from an earlier hop must never authorize the next binary.
-        admin_relation = self.model.get_relation("admin")
-        data = admin_relation.data[admin_relation.app] if admin_relation and admin_relation.app else {}
-        if data.get("schema_status") != "ready" or data.get("schema_version") != WORKLOAD_VERSION:
-            raise ValueError(f"admin:temporal relation: schema is not ready for {WORKLOAD_VERSION}")
+        if not self._state.schema_ready or not self.admin.schema_ready:
+            raise ValueError("admin:temporal relation: schema is not ready")
 
         # Validate OpenFGA relation.
         if self.config["auth-enabled"]:
@@ -692,9 +717,7 @@ class TemporalK8SCharm(CharmBase):
             "services": {
                 "temporal-server": {
                     "summary": "temporal server",
-                    # Upgrader rock ships version-suffixed binaries; the 1.24
-                    # transition charm runs the 1.24.3 server binary.
-                    "command": f"temporal-server-{WORKLOAD_VERSION} --env charm start " + services_args,
+                    "command": f"/bin/temporal-server-{WORKLOAD_VERSION} --env charm start " + services_args,
                     "startup": "enabled",
                     "override": "replace",
                     # Including config values here so that a change in the
