@@ -73,6 +73,8 @@ class TestAuth:
                     ):
                         break
                     time.sleep(2)
+                else:
+                    pytest.fail(f"create-authorization-model never succeeded: {task.status} {task.results}")
 
             wait_active(juju, APP_NAME, timeout=600, error=lambda status: jubilant.any_blocked(status, APP_NAME))
 
