@@ -12,3 +12,4 @@ __pycache__/
 .vscode
 src/*.egg-info/
 uv.lock.bak
+.logs/

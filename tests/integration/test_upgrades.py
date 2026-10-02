@@ -4,52 +4,51 @@
 """Temporal charm upgrades integration tests."""
 
 import logging
+import pathlib
 import time
 
+import jubilant
 import pytest
-import pytest_asyncio
 import requests
 from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
     APP_NAME_UI,
-    METADATA,
+    assert_unit_active,
     create_default_namespace,
+    fast_forward,
     get_unit_url,
     perform_temporal_integrations,
     run_sample_workflow,
+    wait_active,
+    wait_blocked,
 )
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skip_if_deployed
-@pytest_asyncio.fixture(name="deploy", scope="module")
-async def deploy(ops_test: OpsTest):
+@pytest.fixture(name="deploy", scope="module")
+def deploy(juju: jubilant.Juju):
     """The app is up and running."""
     # Deploy temporal server, temporal admin and postgresql charms.
-    await ops_test.model.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1})
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
-    await ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    await ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, revision=381)
+    juju.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1})
+    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
+    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, revision=381)
 
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, APP_NAME_ADMIN, APP_NAME_UI], status="blocked", raise_on_blocked=False, timeout=600
-        )
-        await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
-        )
+    with fast_forward(juju):
+        wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=600)
+        wait_active(juju, "postgresql-k8s", timeout=600)
 
-        await perform_temporal_integrations(ops_test)
+        perform_temporal_integrations(juju)
 
-        await create_default_namespace(ops_test)
+        create_default_namespace(juju)
 
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=300)
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
-        assert ops_test.model.applications[APP_NAME_UI].units[0].workload_status == "active"
+        wait_active(juju, APP_NAME, timeout=300)
+        assert_unit_active(juju, APP_NAME, APP_NAME_UI)
+
+    yield
 
 
 @pytest.mark.skip("Skipping because of canonical/temporal-k8s-operator/issues/150")
@@ -58,47 +57,29 @@ async def deploy(ops_test: OpsTest):
 class TestUpgrade:
     """Integration test for Temporal charm upgrade from previous release."""
 
-    async def test_upgrade(self, ops_test: OpsTest):
+    def test_upgrade(self, juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
         """Builds the current charm and refreshes the current deployment."""
-        charm = await ops_test.build_charm(".")
-        resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
-
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=600)
+        wait_active(juju, APP_NAME, timeout=600)
 
         # This is to accmmodate for a self-resolving error which sometimes appears when Temporal
         # services attempt to connect to the cluster before the application is ready.
-        # Use CLI directly to support --base parameter for 22.04→24.04 platform upgrade
-        model_name = ops_test.model.name
-        retcode, stdout, stderr = await ops_test.juju(
-            "refresh",
-            APP_NAME,
-            "--path",
-            str(charm),
-            "--resource",
-            f"temporal-server-image={resources['temporal-server-image']}",
-            "--base",
-            "ubuntu@24.04",
-            "-m",
-            model_name,
-        )
-        assert retcode == 0, f"Refresh failed: {stderr}"
+        # --base carries the 22.04->24.04 platform upgrade; refresh raises on failure.
+        juju.refresh(APP_NAME, path=charm, resources=charm_resources, base="ubuntu@24.04")
 
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
-        )
+        wait_active(juju, APP_NAME, timeout=600)
         time.sleep(10)
 
-        async with ops_test.fast_forward():
+        with fast_forward(juju):
             # Delay time for application to settle. This is to accommodate for unit
             # becoming active while application is still waiting.
             time.sleep(10)
-            assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+            assert_unit_active(juju, APP_NAME)
 
-            await run_sample_workflow(ops_test)
+            run_sample_workflow(juju)
 
-    async def test_ui_relation(self, ops_test: OpsTest):
+    def test_ui_relation(self, juju: jubilant.Juju):
         """Perform GET request on the Temporal UI host."""
-        url = await get_unit_url(ops_test, application=APP_NAME_UI, unit=0, port=8080)
+        url = get_unit_url(juju, application=APP_NAME_UI, unit=0, port=8080)
         logger.info("curling app address: %s", url)
 
         response = requests.get(url, timeout=300)

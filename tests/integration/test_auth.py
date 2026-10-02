@@ -8,19 +8,23 @@ import json
 import logging
 import time
 
+import jubilant
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
 from helpers import (
     APP_NAME,
+    fast_forward,
     perform_add_auth_rule_action,
     perform_check_auth_rule_action,
     perform_list_auth_rule_action,
     perform_list_system_admins_action,
     perform_remove_auth_rule_action,
+    run_action,
     run_sample_workflow,
     scale,
+    wait_active,
+    wait_blocked,
 )
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
@@ -30,46 +34,27 @@ logger = logging.getLogger(__name__)
 class TestAuth:
     """Integration tests for Temporal charm."""
 
-    async def test_openfga_relation(self, ops_test: OpsTest):
+    def test_openfga_relation(self, juju: jubilant.Juju):
         """Add OpenFGA relation and authorization model."""
-        await ops_test.model.set_config({"update-status-hook-interval": "1m"})
+        juju.model_config({"update-status-hook-interval": "1m"})
 
-        await ops_test.model.applications[APP_NAME].set_config(
-            {"auth-enabled": "true", "auth-admin-groups": "red,green"}
-        )
-        await ops_test.model.deploy("openfga-k8s", channel="2.0/stable")
+        juju.config(APP_NAME, {"auth-enabled": "true", "auth-admin-groups": "red,green"})
+        juju.deploy("openfga-k8s", channel="2.0/stable")
 
-        async with ops_test.fast_forward():
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME, "openfga-k8s"],
-                status="blocked",
-                raise_on_blocked=False,
-                raise_on_error=False,
-                timeout=1200,
-            )
+        with fast_forward(juju):
+            wait_blocked(juju, APP_NAME, "openfga-k8s", timeout=1200)
 
             logger.info("adding openfga postgresql relation")
-            await ops_test.model.integrate("openfga-k8s:database", "postgresql-k8s:database")
+            juju.integrate("openfga-k8s:database", "postgresql-k8s:database")
 
-            await ops_test.model.wait_for_idle(
-                apps=["openfga-k8s"],
-                status="active",
-                raise_on_blocked=False,
-                timeout=1200,
-            )
+            wait_active(juju, "openfga-k8s", timeout=1200)
 
             logger.info("adding openfga relation")
-            await ops_test.model.integrate(APP_NAME, "openfga-k8s")
+            juju.integrate(APP_NAME, "openfga-k8s")
 
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="blocked",
-                raise_on_blocked=False,
-                timeout=600,
-            )
+            wait_blocked(juju, APP_NAME, timeout=600)
 
             logger.info("running the create authorization model action")
-            temporal_unit = ops_test.model.applications[APP_NAME].units[0]
             with open("./temporal_auth_model.json", "r", encoding="utf-8") as model_file:
                 model_data = model_file.read()
 
@@ -79,81 +64,70 @@ class TestAuth:
                 model_data = json.dumps(data, separators=(",", ":"))
 
                 for i in range(10):
-                    action = await temporal_unit.run_action(
-                        "create-authorization-model",
-                        model=model_data,
-                    )
-                    result = await action.wait()
-                    logger.info(f"attempt {i} -> action result {result.status} {result.results}")
-                    if result.status == "completed" and result.results == {
-                        "result": "successfully created authorization model",
-                        "return-code": 0,
-                    }:
+                    task = run_action(juju, f"{APP_NAME}/0", "create-authorization-model", model=model_data)
+                    logger.info(f"attempt {i} -> action result {task.status} {task.results}")
+                    if (
+                        task.status == "completed"
+                        and task.return_code == 0
+                        and task.results == {"result": "successfully created authorization model"}
+                    ):
                         break
                     time.sleep(2)
+                else:
+                    pytest.fail(f"create-authorization-model never succeeded: {task.status} {task.results}")
 
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="active",
-                raise_on_blocked=True,
-                timeout=600,
-            )
+            wait_active(juju, APP_NAME, timeout=600, error=lambda status: jubilant.any_blocked(status, APP_NAME))
 
-            assert ops_test.model.applications[APP_NAME].status == "active"
+            assert juju.status().apps[APP_NAME].is_active
 
             try:
-                await run_sample_workflow(ops_test)
+                run_sample_workflow(juju)
             except RuntimeError as e:
                 assert "Request unauthorized." in str(e)
 
-    async def test_openfga_add_auth_rule_action(self, ops_test: OpsTest):
+    def test_openfga_add_auth_rule_action(self, juju: jubilant.Juju):
         """Test add-auth-rule action."""
-        await perform_add_auth_rule_action(ops_test, user="test@example.com", group="test_group")
-        await perform_add_auth_rule_action(ops_test, group="test_group", namespace="test_namespace", role="reader")
+        perform_add_auth_rule_action(juju, user="test@example.com", group="test_group")
+        perform_add_auth_rule_action(juju, group="test_group", namespace="test_namespace", role="reader")
 
-    async def test_openfga_check_auth_rule_action(self, ops_test: OpsTest):
+    def test_openfga_check_auth_rule_action(self, juju: jubilant.Juju):
         """Test check-auth-rule action."""
-        await perform_check_auth_rule_action(ops_test, exp_result=True, user="test@example.com", group="test_group")
-        await perform_check_auth_rule_action(ops_test, exp_result=False, user="faker@example.com", group="test_group")
-        await perform_check_auth_rule_action(
-            ops_test, exp_result=True, group="test_group", namespace="test_namespace", role="reader"
+        perform_check_auth_rule_action(juju, exp_result=True, user="test@example.com", group="test_group")
+        perform_check_auth_rule_action(juju, exp_result=False, user="faker@example.com", group="test_group")
+        perform_check_auth_rule_action(
+            juju, exp_result=True, group="test_group", namespace="test_namespace", role="reader"
         )
 
-    async def test_openfga_list_auth_rule_action(self, ops_test: OpsTest):
+    def test_openfga_list_auth_rule_action(self, juju: jubilant.Juju):
         """Test list-auth-rule action."""
-        await perform_list_auth_rule_action(ops_test, user="test@example.com")
-        await perform_list_auth_rule_action(ops_test, group="test_group")
-        await perform_list_auth_rule_action(ops_test, namespace="test_namespace")
+        perform_list_auth_rule_action(juju, user="test@example.com")
+        perform_list_auth_rule_action(juju, group="test_group")
+        perform_list_auth_rule_action(juju, namespace="test_namespace")
 
-    async def test_openfga_list_system_admins_action(self, ops_test: OpsTest):
+    def test_openfga_list_system_admins_action(self, juju: jubilant.Juju):
         """Test list-auth-rule action."""
-        await perform_add_auth_rule_action(ops_test, user="admin_one@example.com", group="red")
-        await perform_add_auth_rule_action(ops_test, user="admin_two@example.com", group="green")
-        await perform_list_system_admins_action(ops_test)
+        perform_add_auth_rule_action(juju, user="admin_one@example.com", group="red")
+        perform_add_auth_rule_action(juju, user="admin_two@example.com", group="green")
+        perform_list_system_admins_action(juju)
 
-    async def test_openfga_remove_auth_rule_action(self, ops_test: OpsTest):
+    def test_openfga_remove_auth_rule_action(self, juju: jubilant.Juju):
         """Test remove-auth-rule action."""
-        await perform_remove_auth_rule_action(ops_test, group="test_group", namespace="test_namespace", role="reader")
-        await perform_check_auth_rule_action(
-            ops_test, exp_result=False, group="test_group", namespace="test_namespace", role="reader"
+        perform_remove_auth_rule_action(juju, group="test_group", namespace="test_namespace", role="reader")
+        perform_check_auth_rule_action(
+            juju, exp_result=False, group="test_group", namespace="test_namespace", role="reader"
         )
 
-        await perform_remove_auth_rule_action(ops_test, user="test@example.com", group="test_group")
-        await perform_check_auth_rule_action(ops_test, exp_result=False, user="test@example.com", group="test_group")
+        perform_remove_auth_rule_action(juju, user="test@example.com", group="test_group")
+        perform_check_auth_rule_action(juju, exp_result=False, user="test@example.com", group="test_group")
 
-    async def test_scaling_auth(self, ops_test: OpsTest):
+    def test_scaling_auth(self, juju: jubilant.Juju):
         """Scale Temporal server to 2 units and test active status."""
-        await scale(ops_test, app=APP_NAME, units=2)
+        scale(juju, app=APP_NAME, units=2)
 
-    async def test_openfga_relation_removed(self, ops_test: OpsTest):
+    def test_openfga_relation_removed(self, juju: jubilant.Juju):
         """Remove OpenFGA relation."""
-        await ops_test.model.applications[APP_NAME].remove_relation(f"{APP_NAME}:openfga", "openfga-k8s:openfga")
+        juju.remove_relation(f"{APP_NAME}:openfga", "openfga-k8s:openfga")
 
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="blocked",
-            raise_on_blocked=False,
-            timeout=600,
-        )
+        wait_blocked(juju, APP_NAME, timeout=600)
 
-        assert ops_test.model.applications[APP_NAME].status == "blocked"
+        assert juju.status().apps[APP_NAME].is_blocked
