@@ -398,7 +398,7 @@ class TemporalK8SCharm(CharmBase):
         logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
         # container.restart() restarts a pebble *service* within this container,
-        # not the container itself; the service is named SERVICE_NAME, not self.name.
+        # the service is named SERVICE_NAME.
         container.restart(SERVICE_NAME)
         self.set_active_unit_status()
 

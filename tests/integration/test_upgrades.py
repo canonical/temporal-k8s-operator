@@ -104,8 +104,7 @@ class TestUpgrade:
 
         # Refresh admin first and wait for the schema migration to complete.
         # The server's post-upgrade schema-gate will block forever waiting for
-        # a matching migrated_workload_version if admin is refreshed after (or not at
-        # all) -- see the ADMIN_TARGET_CHANNEL comment above.
+        # a matching migrated_workload_version if admin is refreshed after
         retcode, stdout, stderr = await ops_test.juju(
             "refresh",
             APP_NAME_ADMIN,
@@ -120,7 +119,7 @@ class TestUpgrade:
             apps=[APP_NAME_ADMIN], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
         )
 
-        # This is to accmmodate for a self-resolving error which sometimes appears when Temporal
+        # This is to accommodate for a self-resolving error which sometimes appears when Temporal
         # services attempt to connect to the cluster before the application is ready.
         # Use CLI directly to support --base parameter for 22.04→24.04 platform upgrade
         retcode, stdout, stderr = await ops_test.juju(
