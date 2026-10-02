@@ -9,11 +9,12 @@ import time
 
 import jubilant
 import pytest
-from conftest import DEFAULT_WAIT_TIMEOUT, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
     APP_NAME_UI,
+    assert_unit_active,
     create_default_namespace,
     fast_forward,
     perform_temporal_integrations,
@@ -28,7 +29,6 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(name="deploy", scope="module")
 def deploy(juju: jubilant.Juju, charm: pathlib.Path):
     """The app is up and running."""
-    juju.wait_timeout = DEFAULT_WAIT_TIMEOUT
     juju.model_config({"update-status-hook-interval": "1m"})
 
     # Deploy Temporal server, Temporal admin, Temporal UI and postgresql charms.
@@ -55,9 +55,7 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path):
         create_default_namespace(juju)
 
         wait_active(juju, APP_NAME, timeout=300)
-        status = juju.status()
-        assert status.apps[APP_NAME].units[f"{APP_NAME}/0"].is_active
-        assert status.apps[APP_NAME_UI].units[f"{APP_NAME_UI}/0"].is_active
+        assert_unit_active(juju, APP_NAME, APP_NAME_UI)
         run_sample_workflow(juju)
 
     yield
@@ -104,8 +102,6 @@ class TestServerUpgrade:
         wait_active(juju, APP_NAME, timeout=600)
         time.sleep(10)
 
-        status = juju.status()
-        assert status.apps[APP_NAME].units[f"{APP_NAME}/0"].is_active
-        assert status.apps[APP_NAME_ADMIN].units[f"{APP_NAME_ADMIN}/0"].is_active
+        assert_unit_active(juju, APP_NAME, APP_NAME_ADMIN)
 
         run_sample_workflow(juju)

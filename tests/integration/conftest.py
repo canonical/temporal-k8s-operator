@@ -13,6 +13,7 @@ from helpers import (
     APP_NAME_ADMIN,
     APP_NAME_UI,
     METADATA,
+    assert_unit_active,
     create_default_namespace,
     fast_forward,
     perform_temporal_integrations,
@@ -25,9 +26,6 @@ logger = logging.getLogger(__name__)
 TEMPORAL_CHANNEL = "1.31/edge"
 POSTGRESQL_CHANNEL = "14/stable"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "1/stable"
-
-# python-libjuju's default, preserved for waits that pass no explicit timeout.
-DEFAULT_WAIT_TIMEOUT = 10 * 60
 
 
 @pytest.fixture(scope="module", name="charm")
@@ -60,8 +58,6 @@ def charm_resources_fixture() -> dict:
 @pytest.fixture(name="deploy", scope="module")
 def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
     """The app is up and running."""
-    juju.wait_timeout = DEFAULT_WAIT_TIMEOUT
-
     # Deploy temporal server, temporal admin and postgresql charms.
     juju.deploy(
         charm,
@@ -91,8 +87,6 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
         create_default_namespace(juju)
 
         wait_active(juju, APP_NAME, timeout=300)
-        status = juju.status()
-        assert status.apps[APP_NAME].units[f"{APP_NAME}/0"].is_active
-        assert status.apps[APP_NAME_UI].units[f"{APP_NAME_UI}/0"].is_active
+        assert_unit_active(juju, APP_NAME, APP_NAME_UI)
 
     yield

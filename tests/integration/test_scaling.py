@@ -8,7 +8,7 @@ import pathlib
 
 import jubilant
 import pytest
-from conftest import DEFAULT_WAIT_TIMEOUT, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -16,6 +16,7 @@ from helpers import (
     PGBOUNCER_APP_NAME,
     PGBOUNCER_CHANNEL,
     POSTGRESQL_APP_NAME,
+    assert_unit_active,
     create_default_namespace,
     fast_forward,
     run_sample_workflow,
@@ -35,8 +36,6 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(name="deploy", scope="module")
 def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
     """The app is up and running."""
-    juju.wait_timeout = DEFAULT_WAIT_TIMEOUT
-
     juju.model_config({"update-status-hook-interval": "1m"})
 
     # Deploy temporal server, temporal admin and postgresql charms.
@@ -93,7 +92,7 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
         create_default_namespace(juju)
 
         wait_active(juju, *ALL_SERVICES, timeout=1200)
-        assert juju.status().apps["temporal-k8s"].units["temporal-k8s/0"].is_active
+        assert_unit_active(juju, APP_NAME)
 
         run_sample_workflow(juju)
 

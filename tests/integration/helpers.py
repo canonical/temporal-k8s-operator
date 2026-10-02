@@ -94,6 +94,19 @@ def wait_blocked(juju: jubilant.Juju, *apps: str, timeout: float | None = None, 
     )
 
 
+def assert_unit_active(juju: jubilant.Juju, *apps: str, unit: int = 0):
+    """Assert the given unit of each app reports an active workload status.
+
+    Args:
+        juju: Jubilant Juju object.
+        apps: Applications whose unit should be active.
+        unit: Unit number to check.
+    """
+    status = juju.status()
+    for app in apps:
+        assert status.apps[app].units[f"{app}/{unit}"].is_active, f"{app}/{unit} is not active"
+
+
 def run_action(juju: jubilant.Juju, unit: str, action: str, **params) -> jubilant.Task:
     """Run an action and return its task, even if the action failed.
 
@@ -303,7 +316,7 @@ def perform_temporal_integrations(juju: jubilant.Juju):
     juju.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_UI}:temporal-host-info")
     wait_active(juju, APP_NAME, APP_NAME_UI, timeout=180)
 
-    assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].is_active
+    assert_unit_active(juju, APP_NAME)
 
 
 def perform_add_auth_rule_action(juju: jubilant.Juju, user=None, group=None, namespace=None, role=None):
