@@ -19,7 +19,7 @@ def test_stale_readiness_cannot_start_server(
     context, peer_relation, admin_relation, temporal_container, leader, services, status, version
 ):
     peer_relation.local_app_data["schema_ready"] = "true"
-    admin_relation.remote_app_data.update(schema_status=status, schema_version=version)
+    admin_relation.remote_app_data.update(schema_status=status, migrated_workload_version=version)
     state = ops.testing.State(
         leader=leader,
         config={"num-history-shards": 1, "services": services},
@@ -76,7 +76,7 @@ def test_ready_relation_resumes_waiting_unit(
     context, peer_relation, admin_relation, temporal_container, network, leader
 ):
     peer_relation.local_app_data["schema_ready"] = "true"
-    admin_relation.remote_app_data.update(schema_status="migrating", schema_version="")
+    admin_relation.remote_app_data.update(schema_status="migrating", migrated_workload_version="")
     state = ops.testing.State(
         leader=leader,
         config={"num-history-shards": 1},
@@ -86,7 +86,8 @@ def test_ready_relation_resumes_waiting_unit(
     )
     waiting = context.run(context.on.upgrade_charm(), state)
     ready = dataclasses.replace(
-        waiting.get_relation(admin_relation.id), remote_app_data={"schema_status": "ready", "schema_version": "1.24.3"}
+        waiting.get_relation(admin_relation.id),
+        remote_app_data={"schema_status": "ready", "migrated_workload_version": "1.24.3"},
     )
     waiting = dataclasses.replace(waiting, relations=[waiting.get_relation(peer_relation.id), ready])
     result = context.run(context.on.relation_changed(ready), waiting)
@@ -95,7 +96,7 @@ def test_ready_relation_resumes_waiting_unit(
 
 def test_refresh_stops_previous_server_while_schema_pending(context, peer_relation, admin_relation, temporal_container):
     peer_relation.local_app_data["schema_ready"] = "true"
-    admin_relation.remote_app_data.update(schema_status="migrating", schema_version="")
+    admin_relation.remote_app_data.update(schema_status="migrating", migrated_workload_version="")
     container = dataclasses.replace(
         temporal_container,
         layers={

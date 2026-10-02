@@ -45,7 +45,7 @@ def _read_workload_version() -> str:
 
 
 async def _get_admin_schema_version(ops_test: OpsTest) -> str | None:
-    """Fetch the schema_version the admin charm has published over the admin relation."""
+    """Fetch the migrated_workload_version admin publishes over the admin relation."""
     retcode, stdout, stderr = await ops_test.juju(
         "show-unit", f"{APP_NAME}/0", "--format", "json", "-m", ops_test.model.name
     )
@@ -56,8 +56,8 @@ async def _get_admin_schema_version(ops_test: OpsTest) -> str | None:
         if relation.get("endpoint") == "admin":
             for related_unit_data in relation.get("related-units", {}).values():
                 app_data = related_unit_data.get("data", {})
-                if "schema_version" in app_data:
-                    return app_data["schema_version"]
+                if "migrated_workload_version" in app_data:
+                    return app_data["migrated_workload_version"]
     return None
 
 
@@ -104,7 +104,7 @@ class TestUpgrade:
 
         # Refresh admin first and wait for the schema migration to complete.
         # The server's post-upgrade schema-gate will block forever waiting for
-        # a matching schema_version if admin is refreshed after (or not at
+        # a matching migrated_workload_version if admin is refreshed after (or not at
         # all) -- see the ADMIN_TARGET_CHANNEL comment above.
         retcode, stdout, stderr = await ops_test.juju(
             "refresh",
@@ -153,7 +153,7 @@ class TestUpgrade:
             # match this charm's own WORKLOAD_VERSION.
             admin_schema_version = await _get_admin_schema_version(ops_test)
             assert admin_schema_version == _read_workload_version(), (
-                f"admin published schema_version={admin_schema_version!r} which does not match "
+                f"admin published migrated_workload_version={admin_schema_version!r} which does not match "
                 f"this charm's WORKLOAD_VERSION={_read_workload_version()!r}; ADMIN_TARGET_CHANNEL "
                 "in this test and WORKLOAD_VERSION in src/literals.py must be bumped together"
             )

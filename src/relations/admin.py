@@ -164,7 +164,7 @@ class Admin(framework.Object):
         if not relation or not relation.app:
             return False
         data = relation.data[relation.app]
-        return data.get("schema_status") == "ready" and data.get("schema_version") == WORKLOAD_VERSION
+        return data.get("schema_status") == "ready" and data.get("migrated_workload_version") == WORKLOAD_VERSION
 
     def _on_admin_relation_broken(self, event):
         """Invalidate cached readiness when admin is removed."""
