@@ -11,7 +11,6 @@ import logging
 import pathlib
 import time
 import uuid
-from pathlib import Path
 
 import jubilant
 import tenacity
@@ -28,7 +27,7 @@ except ImportError:  # integration extra not installed (e.g. lint-only env)
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(pathlib.Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 APP_NAME_ADMIN = "temporal-admin-k8s"
 APP_NAME_UI = "temporal-ui-k8s"
