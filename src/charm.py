@@ -36,12 +36,14 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.pebble import CheckStatus
 
 from literals import (
+    CHECK_NAME,
     DB_NAME,
     LOG_FORMAT,
     LOG_OUTPUT_FILE,
     PROMETHEUS_PORT,
     REQUIRED_OPENFGA_KEYS,
     REQUIRED_S3_PARAMETERS,
+    SERVICE_NAME,
     SERVICE_PORTS,
     VALID_LOG_LEVELS,
     VISIBILITY_DB_NAME,
@@ -138,6 +140,7 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.restart_action, self._on_restart_action)
         self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
 
         # Handle postgresql relation.
         self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME, extra_user_roles="admin")
@@ -243,6 +246,35 @@ class TemporalK8SCharm(CharmBase):
             return
         self._delete_certificate()
         self._delete_private_key()
+
+    @log_event_handler(logger)
+    def _on_upgrade_charm(self, event):
+        """Handle a Temporal server charm upgrade.
+
+        Stop the previous workload and reconcile only when the admin relation
+        confirms that schemas for the target Temporal version are ready.
+
+        Args:
+            event: The upgrade-charm event.
+        """
+        container = self.unit.get_container(self.name)
+
+        if not container.can_connect():
+            event.defer()
+            return
+
+        # Re-evaluate against current relation data: the cached flag only
+        # updates on admin_relation_changed, which won't fire here if admin's
+        # published schema_version didn't change (e.g. admin was refreshed to
+        # the target version before this charm was), leaving us blocked forever.
+        if self.unit.is_leader():
+            self._state.schema_ready = self.admin.schema_ready
+
+        if SERVICE_NAME in container.get_services() and container.get_service(SERVICE_NAME).is_running():
+            logger.info("stopping Temporal server before schema migration")
+            container.stop(SERVICE_NAME)
+
+        self._update(event)
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
@@ -356,11 +388,18 @@ class TemporalK8SCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
+        try:
+            self._validate()
+        except ValueError as error:
+            event.fail(str(error))
+            return
         container = self.unit.get_container(self.name)
 
         logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
-        container.restart(self.name)
+        # container.restart() restarts a pebble *service* within this container,
+        # the service is named SERVICE_NAME.
+        container.restart(SERVICE_NAME)
         self.set_active_unit_status()
 
     @log_event_handler(logger)
@@ -386,7 +425,7 @@ class TemporalK8SCharm(CharmBase):
             self._update(event)
             return
 
-        check = container.get_check("temporal-server-running")
+        check = container.get_check(CHECK_NAME)
         if check.status != CheckStatus.UP:
             self.unit.status = MaintenanceStatus("Status check: DOWN")
             return
@@ -410,7 +449,7 @@ class TemporalK8SCharm(CharmBase):
         """
         try:
             plan = container.get_plan().to_dict()
-            return bool(plan["services"]["temporal-server"]["on-check-failure"])
+            return bool(plan["services"][SERVICE_NAME]["on-check-failure"])
         except (KeyError, pebble.ConnectionError):
             return False
 
@@ -491,7 +530,7 @@ class TemporalK8SCharm(CharmBase):
 
         # Validate admin relation.
         self.database_connections()
-        if "frontend" in self.config["services"] and not self._state.schema_ready:
+        if not self._state.schema_ready or not self.admin.schema_ready:
             raise ValueError("admin:temporal relation: schema is not ready")
 
         # Validate OpenFGA relation.
@@ -680,26 +719,31 @@ class TemporalK8SCharm(CharmBase):
         pebble_layer = {
             "summary": "temporal server layer",
             "services": {
-                "temporal-server": {
+                SERVICE_NAME: {
                     "summary": "temporal server",
-                    "command": "temporal-server --env charm start " + services_args,
+                    "command": f"/bin/temporal-server-{WORKLOAD_VERSION} --env charm start " + services_args,
                     "startup": "enabled",
                     "override": "replace",
                     # Including config values here so that a change in the
                     # config forces replanning to restart the service.
                     "environment": context,
-                    "on-check-failure": {"temporal-server-running": "ignore"},
+                    "on-check-failure": {CHECK_NAME: "ignore"},
                     "user": "ubuntu",
                     "working-dir": "/etc/temporal",
                 }
             },
             "checks": {
-                "temporal-server-running": {
+                CHECK_NAME: {
                     "override": "replace",
                     "level": "alive",
                     "period": "300s",
+                    "threshold": 3,
                     # curl cluster health of internal-frontend service
-                    "exec": {"command": "temporal operator cluster health --address=temporal-k8s:7236"},
+                    **(
+                        {"exec": {"command": "temporal operator cluster health --address=127.0.0.1:7236"}}
+                        if "frontend" in services
+                        else {"tcp": {"host": "127.0.0.1", "port": SERVICE_PORTS[services[0]]["grpc"]}}
+                    ),
                 }
             },
         }
