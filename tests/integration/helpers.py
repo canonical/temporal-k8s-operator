@@ -65,7 +65,7 @@ def wait_active(juju: jubilant.Juju, *apps: str, timeout: float | None = None, s
         juju: Jubilant Juju object.
         apps: Applications to wait for. If empty, every app in the model is checked.
         timeout: Overall deadline in seconds.
-        successes: Consecutive polls that must pass (``idle_period`` equivalent).
+        successes: Consecutive polls the condition must hold for
         error: Optional predicate that aborts the wait early.
     """
     juju.wait(
@@ -85,7 +85,7 @@ def wait_blocked(juju: jubilant.Juju, *apps: str, timeout: float | None = None, 
         juju: Jubilant Juju object.
         apps: Applications to wait for. If empty, every app in the model is checked.
         timeout: Overall deadline in seconds.
-        successes: Consecutive polls that must pass (``idle_period`` equivalent).
+        successes: Consecutive polls the condition must hold for
     """
     juju.wait(
         lambda status: jubilant.all_blocked(status, *apps) and jubilant.all_agents_idle(status, *apps),
@@ -144,7 +144,7 @@ def scale(juju: jubilant.Juju, app: str, units: int):
         lambda status: jubilant.all_active(status, app)
         and jubilant.all_agents_idle(status, app)
         and len(status.apps[app].units) == units,
-        error=jubilant.any_blocked,
+        error=lambda status: jubilant.any_blocked(status, app),
         successes=30,
         timeout=600,
     )

@@ -74,7 +74,7 @@ class TestAuth:
                         break
                     time.sleep(2)
 
-            wait_active(juju, APP_NAME, timeout=600, error=jubilant.any_blocked)
+            wait_active(juju, APP_NAME, timeout=600, error=lambda status: jubilant.any_blocked(status, APP_NAME))
 
             assert juju.status().apps[APP_NAME].is_active
 
