@@ -817,13 +817,36 @@ class TemporalK8SCharm(CharmBase):
                 break
         common_name = self.config["frontend-cert-common-name"] or generated_common_name
 
-        # Generate SANS_DNS - set to the unit hostname if not set in configuration
-        sans_dns = self._dns_entries or [unit_fqdn]
+        # Generate SANS_DNS. By default, request the unit FQDN and the
+        # in-cluster service FQDN: in-model clients (e.g. the UI) dial the
+        # service FQDN published over temporal-host-info, and a certificate that
+        # does not name it fails their hostname verification.
+        #
+        # Configured names replace the defaults rather than adding to them.
+        # Some providers (public CAs, restrictive Vault roles) refuse internal
+        # names such as `*.svc.cluster.local` and reject the whole request, so
+        # operators using them must be able to request public names only.
+        if self._dns_entries:
+            sans_dns = set(self._dns_entries)
+            if self._in_cluster_fqdn not in sans_dns:
+                logger.warning(
+                    "frontend-cert-sans-dns does not include %s: in-model clients that verify the "
+                    "frontend certificate over TLS will fail hostname verification. Add it if your "
+                    "certificate provider allows internal names.",
+                    self._in_cluster_fqdn,
+                )
+        else:
+            sans_dns = {unit_fqdn, self._in_cluster_fqdn}
 
         return CertificateRequestAttributes(
             common_name=common_name,
             sans_dns=frozenset(sans_dns),
         )
+
+    @property
+    def _in_cluster_fqdn(self) -> str:
+        """Return the Kubernetes service FQDN in-model clients use to reach this app."""
+        return f"{self.app.name}.{self.model.name}.svc.cluster.local"
 
     def _check_and_update_certificate(self) -> bool:
         """Check if the certificate or private key needs an update and perform the update.

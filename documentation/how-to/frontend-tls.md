@@ -46,6 +46,10 @@ juju config temporal-k8s frontend-cert-common-name=<common_name>
 juju config temporal-k8s frontend-cert-sans-dns=<sans_dns_comma_separated_list>
 ```
 
+By default, the certificate includes the unit hostname and the in-cluster service name (`temporal-k8s.<model>.svc.cluster.local`), which in-model clients such as the Temporal UI dial and verify against. Setting `frontend-cert-sans-dns` replaces these defaults. If in-model clients need to verify the certificate, include `temporal-k8s.<model>.svc.cluster.local` in the list.
+
+Some certificate providers, such as public CAs, refuse internal names like `*.svc.cluster.local` and reject the whole request. With those providers, set `frontend-cert-sans-dns` to public names only. In-model clients then can't verify the frontend certificate by hostname.
+
 3. All requests from Temporal clients to the frontend must now trust the Certificate Authority (CA) that signed the Temporal frontend certificate. You can retrieve the CA certificate from the TLS certificate provider charms by running:
 
 ```
