@@ -326,6 +326,60 @@ def test_frontend_certificates_relation(
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
+@pytest.mark.parametrize(
+    "configured_sans, expected_sans, warns",
+    [
+        # Defaults: the unit FQDN and the in-cluster service FQDN, which
+        # in-model clients dial and verify against.
+        (
+            "",
+            {
+                "temporal-k8s-0.temporal-k8s-endpoints.test.svc.cluster.local",
+                "temporal-k8s.{model}.svc.cluster.local",
+            },
+            False,
+        ),
+        # Configured names replace the defaults, so operators whose provider
+        # refuses internal names can request public names only. Missing the
+        # in-cluster service FQDN is warned about.
+        ("temporal.example.com", {"temporal.example.com"}, True),
+        # Operators whose provider allows internal names can add it themselves.
+        (
+            "temporal.example.com,temporal-k8s.{model}.svc.cluster.local",
+            {"temporal.example.com", "temporal-k8s.{model}.svc.cluster.local"},
+            False,
+        ),
+    ],
+)
+def test_certificate_sans(
+    context,
+    state,
+    temporal_container,
+    all_required_relations,
+    configured_sans,
+    expected_sans,
+    warns,
+    caplog,
+):
+    model = state.model.name
+    state = dataclasses.replace(
+        state,
+        relations=all_required_relations,
+        config={"num-history-shards": 1, "frontend-cert-sans-dns": configured_sans.format(model=model)},
+    )
+
+    with context(context.on.pebble_ready(temporal_container), state=state) as manager, unittest.mock.patch(
+        "socket.getfqdn", return_value="temporal-k8s-0.temporal-k8s-endpoints.test.svc.cluster.local"
+    ), unittest.mock.patch("socket.gethostbyname", return_value="10.1.0.1"):
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            sans = manager.charm._get_certificate_request_attributes().sans_dns
+
+    assert sans == {name.format(model=model) for name in expected_sans}
+    assert ("frontend-cert-sans-dns does not include" in caplog.text) == warns
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_s3_archival_relation(
     context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
 ):
