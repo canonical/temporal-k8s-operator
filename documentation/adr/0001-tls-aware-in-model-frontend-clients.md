@@ -74,6 +74,17 @@ consumer that needs it:
 Keying on availability rather than relation presence means clients are never
 told `tls=true` while the frontend is still serving plaintext.
 
+"Available" means precisely: `frontend-certificates` is related **and** the
+certificates library returns both a certificate and a private key assigned to
+the charm's *current* certificate request (`get_assigned_certificate` with the
+current CSR attributes).
+
+The flip side: whenever the library reports no assigned certificate, the
+frontend falls back to plaintext and `tls=false` is published with it. The
+previously stored certificate files are not used. This happens on a transient
+library failure, and also while a new certificate is being issued after the
+request changes (for example, after `frontend-cert-sans-dns` is updated).
+
 ### 2. The UI keeps dialling the public frontend (`:7233`)
 
 An in-tree `FIXME` had pointed `temporal-host-info` at internal-frontend
@@ -212,10 +223,9 @@ released.
   must set `tls-root-cas` on the worker to the PEM bundle of the CA that issued
   the frontend certificate, so the workload dials TLS and trusts it:
   `juju config temporal-worker-k8s tls-root-cas="$(cat ca-bundle.pem)"`. The
-  worker dials the
-  published in-cluster service FQDN, which the frontend certificate names by
-  default (decision 4). Giving the worker the same `tls` signal and
-  `certificate_transfer` relation as the UI is a possible follow-up.
+  worker dials the published in-cluster service FQDN, which the frontend
+  certificate names by default (decision 4). Giving the worker the same `tls`
+  signal and `certificate_transfer` relation as the UI is a possible follow-up.
 
 ### Failure modes
 
