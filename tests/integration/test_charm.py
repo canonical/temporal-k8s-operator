@@ -4,8 +4,11 @@
 
 """Temporal charm integration tests."""
 
+import asyncio
 import logging
+import pathlib
 
+import jubilant
 import pytest
 import requests
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
@@ -17,7 +20,6 @@ from helpers import (
     run_sample_workflow,
     simulate_charm_crash,
 )
-from pytest_operator.plugin import OpsTest
 from temporal_client.workflows import GreetingWorkflow
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -30,26 +32,35 @@ logger = logging.getLogger(__name__)
 class TestDeployment:
     """Integration tests for Temporal charm."""
 
-    async def test_ui_relation(self, ops_test: OpsTest):
+    def test_ui_relation(self, juju: jubilant.Juju):
         """Perform GET request on the Temporal UI host."""
-        url = await get_unit_url(ops_test, application=APP_NAME_UI, unit=0, port=8080)
+        url = get_unit_url(juju, application=APP_NAME_UI, unit=0, port=8080)
         logger.info("curling app address: %s", url)
 
         response = requests.get(url, timeout=300)
         assert response.status_code == 200
 
-    async def test_basic_client(self, ops_test: OpsTest):
+    def test_basic_client(self, juju: jubilant.Juju):
         """Connects a client and runs a basic Temporal workflow."""
-        await run_sample_workflow(ops_test)
+        run_sample_workflow(juju)
 
-    async def test_charm_crash(self, ops_test: OpsTest):
+    def test_charm_crash(self, juju: jubilant.Juju, charm: pathlib.Path):
         """Test backup and restore functionality.
 
         This tests the charm's ability to continue workflow execution after simulating
         a crash in the charm. Essentially, it should prove that the charm is stateless
         and relies only on the db to store its workflow execution status.
         """
-        url = await get_application_url(ops_test, application=APP_NAME, port=7233)
+        asyncio.run(self._signal_workflow_across_crash(juju, charm))
+
+    async def _signal_workflow_across_crash(self, juju: jubilant.Juju, charm: pathlib.Path):
+        """Signal a workflow, crash and redeploy the charm, then finish the workflow.
+
+        Args:
+            juju: Jubilant Juju object.
+            charm: Path to the locally packed temporal-k8s charm.
+        """
+        url = get_application_url(juju, application=APP_NAME, port=7233)
         logger.info("running signal workflow on app address: %s", url)
 
         client = await Client.connect(url)
@@ -74,9 +85,10 @@ class TestDeployment:
             await handle.signal(GreetingWorkflow.submit_greeting, "user2")
             await handle.signal(GreetingWorkflow.submit_greeting, "user3")
 
-            await simulate_charm_crash(ops_test)
+            # Off-thread so the running worker keeps polling, as it did under libjuju.
+            await asyncio.to_thread(simulate_charm_crash, juju, charm)
 
-            url = await get_application_url(ops_test, application=APP_NAME, port=7233)
+            url = get_application_url(juju, application=APP_NAME, port=7233)
 
             new_client = await Client.connect(url)
             handle = new_client.get_workflow_handle("hello-signal-workflow-id")

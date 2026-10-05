@@ -112,6 +112,15 @@ jobs:
       - name: Run integration tests
         run: just integration tests/integration/${{ matrix.test }}.py
 
+      - name: Upload Juju debug logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: juju-debug-logs-${{ matrix.test }}
+          path: .logs/
+          include-hidden-files: true
+          if-no-files-found: warn
+
       - name: Get system state (if failure)
         if: failure()
         run: just get-system-state
@@ -142,6 +151,15 @@ jobs:
 
       - name: Run ingress integration test
         run: just integration tests/integration/test_ingress.py
+
+      - name: Upload Juju debug logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: juju-debug-logs-test_ingress
+          path: .logs/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
       - name: Get system state (if failure)
         if: failure()

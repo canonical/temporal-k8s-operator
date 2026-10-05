@@ -3,21 +3,23 @@
 
 """Temporal charm integration test config."""
 
-import asyncio
 import logging
-from pathlib import Path
+import pathlib
 
-import pytest_asyncio
+import jubilant
+import pytest
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
     APP_NAME_UI,
     METADATA,
+    assert_unit_active,
     create_default_namespace,
+    fast_forward,
     perform_temporal_integrations,
+    wait_active,
+    wait_blocked,
 )
-from pytest import FixtureRequest
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
@@ -26,59 +28,65 @@ POSTGRESQL_CHANNEL = "14/stable"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "1/stable"
 
 
-@pytest_asyncio.fixture(scope="module", name="charm")
-async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Path:
-    """Fetch the path to charm."""
-    charms = request.config.getoption("--charm-file")
-    if not charms:
-        charm = await ops_test.build_charm(".")
-        assert charm, "Charm not built"
-        return charm
-    return charms[0]
+@pytest.fixture(scope="module", name="charm")
+def charm_fixture(request: pytest.FixtureRequest) -> pathlib.Path:
+    """Return the path to the locally packed temporal-k8s charm.
+
+    Uses ``--charm-file`` when provided, otherwise requires exactly one ``*.charm``
+    in the project root (``tox -e integration`` packs it before invoking pytest).
+    """
+    if charms := request.config.getoption("--charm-file"):
+        assert len(charms) == 1, f"expected a single --charm-file, got: {charms}"
+        charm = pathlib.Path(charms[0])
+    else:
+        packed = sorted(pathlib.Path(".").glob("*.charm"))
+        assert packed, "*.charm not found in project root; pack the charm first (charmcraft pack)"
+        assert len(packed) == 1, f"more than one *.charm in project root, unsure which to use: {packed}"
+        charm = packed[0]
+
+    charm = charm.resolve()
+    assert charm.is_file(), f"{charm} is not a file"
+    return charm
 
 
-@pytest_asyncio.fixture(name="deploy", scope="module")
-async def deploy(ops_test: OpsTest, charm: str):
+@pytest.fixture(scope="module", name="charm_resources")
+def charm_resources_fixture() -> dict:
+    """Return the resources for the locally built temporal-k8s charm."""
+    return {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
+
+
+@pytest.fixture(name="deploy", scope="module")
+def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
     """The app is up and running."""
-    resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
-
     # Deploy temporal server, temporal admin and postgresql charms.
-    await asyncio.gather(
-        ops_test.model.deploy(
-            charm,
-            resources=resources,
-            application_name=APP_NAME,
-            config={
-                "num-history-shards": 1,
-                "global-rps-limit": 100,
-                "namespace-rps-limit": "default:50|test:40",
-            },
-        ),
-        ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL),
-        ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL),
-        ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True),
-        ops_test.model.deploy("self-signed-certificates", channel=SELF_SIGNED_CERTIFICATES_CHANNEL),
+    juju.deploy(
+        charm,
+        APP_NAME,
+        resources=charm_resources,
+        config={
+            "num-history-shards": 1,
+            "global-rps-limit": 100,
+            "namespace-rps-limit": "default:50|test:40",
+        },
     )
+    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
+    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True)
+    juju.deploy("self-signed-certificates", channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
 
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s", "self-signed-certificates"], status="active", raise_on_blocked=False, timeout=1200
-        )
+    with fast_forward(juju):
+        wait_active(juju, "postgresql-k8s", "self-signed-certificates", timeout=1200)
 
-        await ops_test.model.integrate("postgresql-k8s:certificates", "self-signed-certificates:certificates")
-        await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s", "self-signed-certificates"], status="active", raise_on_blocked=False, timeout=1200
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, APP_NAME_ADMIN, APP_NAME_UI], status="blocked", raise_on_blocked=False, timeout=600
-        )
+        juju.integrate("postgresql-k8s:certificates", "self-signed-certificates:certificates")
+        wait_active(juju, "postgresql-k8s", "self-signed-certificates", timeout=1200)
 
-        await perform_temporal_integrations(ops_test)
+        wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=600)
 
-        await create_default_namespace(ops_test)
+        perform_temporal_integrations(juju)
 
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=False, timeout=300)
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
-        assert ops_test.model.applications[APP_NAME_UI].units[0].workload_status == "active"
+        create_default_namespace(juju)
 
-    yield ops_test.model.name
+        wait_active(juju, APP_NAME, timeout=300)
+        assert_unit_active(juju, APP_NAME, APP_NAME_UI)
+
+    yield

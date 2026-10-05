@@ -26,14 +26,13 @@ import json
 import logging
 import socket
 import ssl
-import subprocess
-import sys
 import time
 from pathlib import Path
 
 import grpc
 import jubilant
 import pytest
+import pytest_jubilant
 import yaml
 from conftest import (
     POSTGRESQL_CHANNEL,
@@ -50,7 +49,7 @@ APP_NAME = METADATA["name"]
 # temporal-admin-k8s must track the temporal-server image version (schema
 # versions are tied to the server): `TEMPORAL_CHANNEL` (from conftest) matches
 # the image in metadata.yaml. Reuse conftest's channels so there's a single
-# source of truth shared with the ops_test suite.
+# source of truth shared with the rest of the suite.
 TEMPORAL_ADMIN = "temporal-admin-k8s"
 POSTGRESQL_K8S = "postgresql-k8s"
 INGRESS_CONFIGURATOR = "ingress-configurator"
@@ -78,125 +77,77 @@ def _controller_by_cloud(*clouds: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def charm_path(pytestconfig) -> Path:
-    """Path to the packed charm (built with charmcraft if not supplied).
-
-    Returned as a ``Path`` (not ``str``): jubilant only auto-prefixes relative
-    local-charm paths with ``./`` (to disambiguate them from Charmhub names) when
-    given a ``pathlib.Path`` - a bare filename string is passed to the Juju CLI
-    unprefixed and rejected as ambiguous.
-    """
-    supplied = pytestconfig.getoption("--charm-file", default=None)
-    if supplied:
-        return Path(supplied)
-    subprocess.run(["charmcraft", "pack"], check=True)  # noqa: S603, S607
-    return sorted(Path(".").glob(f"{APP_NAME}_*.charm"))[0]
-
-
-def _collect_debug_log(juju: jubilant.Juju) -> None:
-    """Print the model's status and Juju debug log to stderr.
-
-    Called on any failure (setup or test) so CI always has something to go on.
-    Both the final status and the replayed debug log are dumped: a hook
-    traceback (e.g. ``hook failed: "admin-relation-changed"``) shows up in the
-    debug log, which the bare timeout status dump never captures.
-    """
-    time.sleep(0.5)  # Wait for Juju to process logs.
-    banner = f"{'=' * 30} debug output for model {juju.model} {'=' * 30}"
-    print(banner, file=sys.stderr)
-    try:
-        print(juju.status(), file=sys.stderr)
-        # 3000 lines and --level covers the deploy window without burying the
-        # traceback; replay is on by default so earlier hook errors are included.
-        print(juju.debug_log(limit=3000), end="", file=sys.stderr)
-    except Exception as err:  # noqa: BLE001 - best-effort diagnostics, never mask the real failure
-        print(f"failed to collect debug output for {juju.model}: {err}", file=sys.stderr)
-    print("=" * len(banner), file=sys.stderr)
-
-
-@pytest.fixture(scope="module")
-def topology(request: pytest.FixtureRequest, charm_path):
+def topology(juju_factory: pytest_jubilant.JujuFactory, charm: Path):
     """Deploy the full cross-model topology in temporary k8s and LXD models."""
     k8s_ctrl = _controller_by_cloud("k8s", "microk8s")
     lxd_ctrl = _controller_by_cloud("localhost", "lxd")
 
-    with jubilant.temp_model(controller=k8s_ctrl) as k8s_juju, jubilant.temp_model(controller=lxd_ctrl) as lxd_juju:
-        k8s_juju.wait_timeout = IDLE_TIMEOUT
-        lxd_juju.wait_timeout = IDLE_TIMEOUT
+    k8s_juju = juju_factory.get_juju("k8s", controller=k8s_ctrl)
+    lxd_juju = juju_factory.get_juju("lxd", controller=lxd_ctrl)
+    k8s_juju.wait_timeout = IDLE_TIMEOUT
+    lxd_juju.wait_timeout = IDLE_TIMEOUT
 
-        try:
-            resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
+    resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
 
-            # --- Kubernetes model ---
-            k8s_juju.deploy(charm_path, APP_NAME, resources=resources, config={"num-history-shards": 2})
-            k8s_juju.deploy(TEMPORAL_ADMIN, channel=TEMPORAL_CHANNEL)
-            k8s_juju.deploy(POSTGRESQL_K8S, channel=POSTGRESQL_CHANNEL, trust=True)
-            k8s_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
-            k8s_juju.deploy(INGRESS_CONFIGURATOR, channel=INGRESS_CONFIGURATOR_CHANNEL, trust=True)
+    # --- Kubernetes model ---
+    k8s_juju.deploy(charm, APP_NAME, resources=resources, config={"num-history-shards": 2})
+    k8s_juju.deploy(TEMPORAL_ADMIN, channel=TEMPORAL_CHANNEL)
+    k8s_juju.deploy(POSTGRESQL_K8S, channel=POSTGRESQL_CHANNEL, trust=True)
+    k8s_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
+    k8s_juju.deploy(INGRESS_CONFIGURATOR, channel=INGRESS_CONFIGURATOR_CHANNEL, trust=True)
 
-            k8s_juju.integrate(f"{APP_NAME}:db", f"{POSTGRESQL_K8S}:database")
-            k8s_juju.integrate(f"{APP_NAME}:visibility", f"{POSTGRESQL_K8S}:database")
-            k8s_juju.integrate(f"{APP_NAME}:admin", f"{TEMPORAL_ADMIN}:admin")
-            # Frontend serves gRPC over TLS.
-            k8s_juju.integrate(f"{APP_NAME}:frontend-certificates", f"{SELF_SIGNED}:certificates")
-            # Workload -> ingress-configurator (backend spoken over TLS).
-            k8s_juju.integrate(f"{APP_NAME}:ingress", f"{INGRESS_CONFIGURATOR}:ingress")
-            k8s_juju.config(INGRESS_CONFIGURATOR, {"hostname": HOSTNAME, "backend-protocol": "https"})
+    k8s_juju.integrate(f"{APP_NAME}:db", f"{POSTGRESQL_K8S}:database")
+    k8s_juju.integrate(f"{APP_NAME}:visibility", f"{POSTGRESQL_K8S}:database")
+    k8s_juju.integrate(f"{APP_NAME}:admin", f"{TEMPORAL_ADMIN}:admin")
+    # Frontend serves gRPC over TLS.
+    k8s_juju.integrate(f"{APP_NAME}:frontend-certificates", f"{SELF_SIGNED}:certificates")
+    # Workload -> ingress-configurator (backend spoken over TLS).
+    k8s_juju.integrate(f"{APP_NAME}:ingress", f"{INGRESS_CONFIGURATOR}:ingress")
+    k8s_juju.config(INGRESS_CONFIGURATOR, {"hostname": HOSTNAME, "backend-protocol": "https"})
 
-            # --- Machine model ---
-            lxd_juju.deploy(HAPROXY, channel=HAPROXY_CHANNEL)
-            lxd_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
-            lxd_juju.integrate(f"{HAPROXY}:certificates", SELF_SIGNED)
-            lxd_juju.config(HAPROXY, {"external-hostname": HOSTNAME})
+    # --- Machine model ---
+    lxd_juju.deploy(HAPROXY, channel=HAPROXY_CHANNEL)
+    lxd_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
+    lxd_juju.integrate(f"{HAPROXY}:certificates", SELF_SIGNED)
+    lxd_juju.config(HAPROXY, {"external-hostname": HOSTNAME})
 
-            # --- Cross-model: route + backend-CA trust ---
-            # `.model` may carry a controller prefix (set by `add_model(controller=...)`); strip it
-            # since `consume()` takes the bare model name and the controller separately.
-            lxd_model = lxd_juju.model.rpartition(":")[2]
-            k8s_model = k8s_juju.model.rpartition(":")[2]
+    # --- Cross-model: route + backend-CA trust ---
+    # `.model` carries the controller prefix set by the factory; strip it since
+    # `consume()` takes the bare model name and the controller separately.
+    lxd_model = lxd_juju.model.rpartition(":")[2]
+    k8s_model = k8s_juju.model.rpartition(":")[2]
 
-            lxd_juju.offer(HAPROXY, endpoint="haproxy-route")
-            k8s_juju.consume(f"{lxd_model}.{HAPROXY}", "haproxy-cmr", controller=lxd_ctrl)
-            k8s_juju.integrate(f"{INGRESS_CONFIGURATOR}:haproxy-route", "haproxy-cmr")
+    lxd_juju.offer(HAPROXY, endpoint="haproxy-route")
+    k8s_juju.consume(f"{lxd_model}.{HAPROXY}", "haproxy-cmr", controller=lxd_ctrl)
+    k8s_juju.integrate(f"{INGRESS_CONFIGURATOR}:haproxy-route", "haproxy-cmr")
 
-            k8s_juju.offer(SELF_SIGNED, endpoint="send-ca-cert")
-            lxd_juju.consume(f"{k8s_model}.{SELF_SIGNED}", "frontend-ca", controller=k8s_ctrl)
-            lxd_juju.integrate(f"{HAPROXY}:receive-ca-certs", "frontend-ca")
+    k8s_juju.offer(SELF_SIGNED, endpoint="send-ca-cert")
+    lxd_juju.consume(f"{k8s_model}.{SELF_SIGNED}", "frontend-ca", controller=k8s_ctrl)
+    lxd_juju.integrate(f"{HAPROXY}:receive-ca-certs", "frontend-ca")
 
-            # --- Wait for both models to settle ---
-            # `error=jubilant.any_error` aborts in seconds on a hook failure
-            # (e.g. `hook failed: "admin-relation-changed"`) instead of sitting
-            # through the full IDLE_TIMEOUT and destroying the models before the
-            # cause is ever captured.
-            #
-            # Wait for ingress-configurator (the haproxy-route provider) as well as
-            # agents-idle: HAProxy only requests its cert and binds :443 once the
-            # cross-model route has fully propagated, so waiting on the workload
-            # alone races the HAProxy config reload.
-            k8s_juju.wait(
-                lambda status: jubilant.all_active(status, APP_NAME, INGRESS_CONFIGURATOR)
-                and jubilant.all_agents_idle(status, APP_NAME, INGRESS_CONFIGURATOR),
-                error=jubilant.any_error,
-                timeout=IDLE_TIMEOUT,
-            )
-            lxd_juju.wait(
-                lambda status: jubilant.all_active(status, HAPROXY) and jubilant.all_agents_idle(status, HAPROXY),
-                error=jubilant.any_error,
-                timeout=IDLE_TIMEOUT,
-            )
-        except Exception:
-            # Setup failures happen before `yield`, so the post-yield block below
-            # never runs; capture logs here too or CI is left with only jubilant's
-            # status dump and no juju debug-log.
-            _collect_debug_log(k8s_juju)
-            _collect_debug_log(lxd_juju)
-            raise
+    # --- Wait for both models to settle ---
+    # `error=jubilant.any_error` aborts in seconds on a hook failure
+    # (e.g. `hook failed: "admin-relation-changed"`) instead of sitting
+    # through the full IDLE_TIMEOUT and destroying the models before the
+    # cause is ever captured.
+    #
+    # Wait for ingress-configurator (the haproxy-route provider) as well as
+    # agents-idle: HAProxy only requests its cert and binds :443 once the
+    # cross-model route has fully propagated, so waiting on the workload
+    # alone races the HAProxy config reload.
+    k8s_juju.wait(
+        lambda status: jubilant.all_active(status, APP_NAME, INGRESS_CONFIGURATOR)
+        and jubilant.all_agents_idle(status, APP_NAME, INGRESS_CONFIGURATOR),
+        error=jubilant.any_error,
+        timeout=IDLE_TIMEOUT,
+    )
+    lxd_juju.wait(
+        lambda status: jubilant.all_active(status, HAPROXY) and jubilant.all_agents_idle(status, HAPROXY),
+        error=jubilant.any_error,
+        timeout=IDLE_TIMEOUT,
+    )
 
-        yield {"k8s_juju": k8s_juju, "lxd_juju": lxd_juju}
-
-        if request.session.testsfailed:
-            _collect_debug_log(k8s_juju)
-            _collect_debug_log(lxd_juju)
+    return {"k8s_juju": k8s_juju, "lxd_juju": lxd_juju}
 
 
 def _server_certificate(address: str, port: int, server_hostname: str) -> bytes:
