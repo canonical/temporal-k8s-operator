@@ -212,17 +212,18 @@ class TemporalK8SCharm(CharmBase):
         )
 
         # Host Info
-        # FIXME: for 1.31/edge, the internal-frontend will be shared with the UI and Admin
-        # charms so they can connect w/o needing a certificate to talk to the frontend
-        # behind https. This is a workaround for github.com/canonical/temporal-k8s-operator/issues/152
         #
-        # The published host is the in-cluster service FQDN: temporal-host-info
-        # serves in-model clients, and it is the name the frontend certificate
-        # carries by default, so TLS clients can verify it.
+        # Requirers are told the frontend's in-cluster address and whether it
+        # serves gRPC over TLS, so they can dial it correctly either way. The
+        # frontend port is published, not internal-frontend: the internal
+        # frontend bypasses the authorizer, which must not apply to the UI.
+        # `tls` is a callable because it depends on the certificates relation,
+        # which is not resolved at charm initialisation.
         self._host_info = TemporalHostInfoProvider(
             self,
-            SERVICE_PORTS["internal-frontend"]["grpc"],
+            port=SERVICE_PORTS["frontend"]["grpc"],
             host=self._in_cluster_fqdn,
+            tls=self._frontend_tls_enabled,
         )
 
         # Handle Ingress (via the `ingress` interface, e.g. ingress-configurator
@@ -247,6 +248,18 @@ class TemporalK8SCharm(CharmBase):
         )
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+
+    def _frontend_tls_enabled(self) -> bool:
+        """Return whether the frontend is serving gRPC over TLS.
+
+        This tracks what the workload actually serves, not merely what is
+        related: the TLS listener is only configured once the provider has
+        issued a certificate, so clients told `tls=True` any earlier would
+        fail their handshake against a still-plaintext frontend.
+        """
+        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+            return False
+        return self._certificate_is_available()
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):
@@ -739,6 +752,12 @@ class TemporalK8SCharm(CharmBase):
         # Handle frontend TLS
         self._handle_frontend_tls()
         context.update(self._extra_context)
+
+        # The certificates relation is not observed by the host-info library,
+        # so republish here: this runs on certificate_available and on the
+        # frontend-certificates relation joining and breaking, which are exactly
+        # the transitions that flip the published `tls` value.
+        self._host_info.publish()
 
         # Ensure log directory exists
         log_dir = os.path.dirname(LOG_OUTPUT_FILE)

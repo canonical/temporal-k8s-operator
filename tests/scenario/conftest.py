@@ -282,6 +282,11 @@ def frontend_certificates_relation():
 
 
 @pytest.fixture(scope="function")
+def host_info_relation():
+    return ops.testing.Relation("temporal-host-info")
+
+
+@pytest.fixture(scope="function")
 def db_relation(postgres_db_data):
     return ops.testing.Relation("db", remote_app_data=postgres_db_data)
 
