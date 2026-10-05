@@ -3,7 +3,7 @@
 [project]
 name = "temporal-k8s-operator"
 version = "0.0"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<3.15"
 
 [tool.bandit]
 exclude_dirs = ["/venv/"]
@@ -52,7 +52,7 @@ charm = [
     "Jinja2==3.1.4",
     "ops==2.21.1",
     "async-timeout==4.0.3",
-    "pydantic>=2.0",  # traefik-k8s ingress, tls-certificates requirement
+    "pydantic>=2.12,<3",  # traefik-k8s ingress, tls-certificates requirement
     "boto3==1.34.31",
     "cosl==0.0.51",
     "requests==2.31.0",

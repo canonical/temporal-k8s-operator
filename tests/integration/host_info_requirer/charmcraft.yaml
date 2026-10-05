@@ -3,7 +3,7 @@
 name: temporal-host-info-requirer
 summary: A test charm for the temporal-host-info relation.
 description: This charm is used for testing purposes only.
-base: ubuntu@24.04
+base: ubuntu@26.04
 type: charm
 platforms:
   amd64:
