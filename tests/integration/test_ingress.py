@@ -13,10 +13,12 @@ Validated topology (end-to-end TLS):
     haproxy:receive-ca-certs <- self-signed-certificates:send-ca-cert   (frontend CA, cross-model)
 
 The Temporal frontend is a gRPC (HTTP/2) server that terminates TLS itself
-(`frontend-certificates`); the supported providers do not do plaintext HTTP/2 to
-the backend, so the charm advertises the `https` scheme and HAProxy re-encrypts to
-the frontend. HAProxy is a machine charm, so it runs on a separate (LXD) model and
-is related across models.
+(`frontend-certificates`); ingress-configurator with HAProxy does not do plaintext
+HTTP/2 to the backend, so this topology relates the certificates, the charm then
+advertises the `https` scheme, and HAProxy re-encrypts to the frontend. Providers
+that accept h2c (Traefik) need no certificates; that path is not exercised here.
+HAProxy is a machine charm, so it runs on a separate (LXD) model and is related
+across models.
 
 This test needs a substrate with both a Kubernetes and a machine (LXD) controller;
 `concierge.yaml` provisions exactly that.

@@ -62,7 +62,7 @@ class TestTemporalHostInfoRelation:
         _wait_stack_active(juju)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
-        expected_status = f"Temporal host: {APP_NAME}.{juju.model}.svc.cluster.local, port: 7236, tls: False"
+        expected_status = f"Temporal host: {APP_NAME}.{juju.model}.svc.cluster.local, port: 7233, tls: False"
         assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status
 
@@ -72,6 +72,22 @@ class TestTemporalHostInfoRelation:
         _wait_stack_active(juju)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
-        expected_status = f"Temporal host: {APP_NAME}.{juju.model}.svc.cluster.local, port: 7236, tls: False"
+        expected_status = f"Temporal host: {APP_NAME}.{juju.model}.svc.cluster.local, port: 7233, tls: False"
+        assert requirer_unit.workload_status.current == "active"
+        assert requirer_unit.workload_status.message == expected_status
+
+    def test_relation_tls_signal(self, juju: jubilant.Juju):
+        """Test tls flips to True once the frontend serves gRPC over TLS.
+
+        This is the signal requirers need in order to dial the frontend
+        correctly: without it a plaintext client hits the TLS listener and
+        fails with "error reading server preface: EOF".
+        """
+        juju.integrate(f"{APP_NAME}:frontend-certificates", "self-signed-certificates:certificates")
+        _wait_stack_active(juju)
+        status = juju.status()
+        requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
+        expected_host = f"{APP_NAME}.{juju.model}.svc.cluster.local"
+        expected_status = f"Temporal host: {expected_host}, port: 7233, tls: True"
         assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status
