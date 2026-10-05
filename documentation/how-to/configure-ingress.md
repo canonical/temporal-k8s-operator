@@ -8,14 +8,20 @@ TLS.
 
 [note]
 
-**gRPC through ingress requires TLS end-to-end.** The supported providers do **not**
-support plaintext HTTP/2 (h2c) to the backend, so the Temporal frontend must terminate
-TLS itself. Concretely: the `frontend-certificates` relation is **required** alongside
-`ingress` (the frontend then serves gRPC over TLS and the charm always advertises the
-`https` scheme), and the proxy re-encrypts to it. The charm enforces this: relating
-`ingress` without `frontend-certificates` blocks the unit rather than falling back to a
-cleartext (h2c) scheme the supported providers can't use. Only the `frontend` service can
-be exposed, and only one ingress solution can be used at a time.
+**This topology requires TLS end-to-end.** Ingress Configurator with HAProxy does **not**
+support plaintext HTTP/2 (h2c) to the backend, so for this topology the Temporal frontend
+must terminate TLS itself: integrate `frontend-certificates` alongside `ingress`, and the
+proxy re-encrypts to it.
+
+The charm does not enforce this, because other providers do not need it. The advertised
+scheme follows what the frontend actually serves - `https` with `frontend-certificates`,
+`h2c` without - and the charm cannot tell which provider is on the other end of the
+relation. Relating `ingress` without `frontend-certificates` is therefore allowed and
+logs a warning; with HAProxy the result is simply that the proxy cannot reach the
+backend. See [Other ingress providers](#other-ingress-providers) for the h2c path.
+
+Only the `frontend` service can be exposed, and only one ingress solution can be used at
+a time.
 
 [/note]
 
@@ -139,8 +145,10 @@ HAProxy verifying the frontend against the CA received in step 4.
 The `ingress` interface is provider-agnostic, so `temporal-k8s:ingress` can be related to
 any charm that implements it.
 
-* [traefik-k8s](https://charmhub.io/traefik-k8s) is approaching end-of-life; it may work
-  but is not part of our test suite and is left to the user to configure.
+* [traefik-k8s](https://charmhub.io/traefik-k8s) serves gRPC over cleartext HTTP/2, so it
+  works **without** `frontend-certificates`: the charm advertises the `h2c` scheme and the
+  frontend stays plaintext, leaving in-model clients untouched. It is approaching
+  end-of-life and is not part of our test suite, so it is left to the user to configure.
 * The [Gateway API Integrator](https://charmhub.io/gateway-api-integrator) implements the
   same interface, but gRPC over TLS additionally needs the gateway to negotiate the `h2`
   ALPN protocol. On Canonical Kubernetes the bundled Cilium gateway does not currently
