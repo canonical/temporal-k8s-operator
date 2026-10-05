@@ -937,3 +937,21 @@ def test_db_tls_follows_relation_data(
         state_out.get_container("temporal").plan.services["temporal-server"].environment["SQL_TLS_ENABLED"]
         is expected_tls
     )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_host_info_publishes_in_cluster_fqdn(context, state):
+    # temporal-host-info serves in-model clients, so it publishes the in-cluster
+    # service FQDN -- the name the frontend certificate carries by default --
+    # and never external-hostname, which is for nginx-route only.
+    host_info_relation = ops.testing.Relation("temporal-host-info")
+    state = dataclasses.replace(
+        state,
+        relations=[host_info_relation],
+        config={"num-history-shards": 4, "external-hostname": "temporal.example.com"},
+    )
+
+    state_out = context.run(context.on.relation_changed(host_info_relation), state)
+
+    app_data = state_out.get_relations("temporal-host-info")[0].local_app_data
+    assert app_data["host"] == f"temporal-k8s.{state.model.name}.svc.cluster.local"
