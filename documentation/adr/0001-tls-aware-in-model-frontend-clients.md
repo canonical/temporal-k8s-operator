@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-02
 - **Issue:** [#152](https://github.com/canonical/temporal-k8s-operator/issues/152)
-- **Affects:** temporal-k8s, temporal-ui-k8s, temporal-admin-k8s
+- **Affects:** temporal-k8s, temporal-ui-k8s, temporal-admin-k8s, temporal-worker-k8s
 
 ## Context
 
@@ -21,6 +21,10 @@ listener, including the in-model ones:
   `error reading server preface: EOF` (HTTP 503).
 - **temporal-admin-k8s**, whose `tctl`/`temporal` actions dial the same
   frontend and fail the same way.
+- **temporal-worker-k8s**, which also takes the frontend address from
+  `temporal-host-info`. The charm doesn't read a TLS signal; it passes its
+  `tls-root-cas` config to the worker workload (`TEMPORAL_TLS_ROOT_CAS`), and
+  the workload dials the frontend accordingly.
 
 Relations stay healthy, so `juju status` reports everything `active`; only the
 runtime gRPC dial fails, which no test exercised.
@@ -202,6 +206,16 @@ released.
 - Until temporal-admin-k8s gets the same changes as the UI (Delivery step 8),
   its CLI actions fail against a TLS frontend, since `temporal-host-info` no
   longer points it at internal-frontend.
+- After the charm wiring (Delivery step 7), a temporal-worker-k8s in the same
+  cluster is pointed at the frontend (`:7233`) instead of internal-frontend
+  (`:7236`), and fails against a TLS frontend unless it dials TLS. Operators
+  must set `tls-root-cas` on the worker to the PEM bundle of the CA that issued
+  the frontend certificate, so the workload dials TLS and trusts it:
+  `juju config temporal-worker-k8s tls-root-cas="$(cat ca-bundle.pem)"`. The
+  worker dials the
+  published in-cluster service FQDN, which the frontend certificate names by
+  default (decision 4). Giving the worker the same `tls` signal and
+  `certificate_transfer` relation as the UI is a possible follow-up.
 
 ### Failure modes
 
