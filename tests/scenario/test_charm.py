@@ -402,6 +402,96 @@ def test_s3_archival_relation(
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_host_info_published_without_tls(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    host_info_relation,
+    all_required_relations,
+):
+    # Without frontend certificates the frontend serves plaintext gRPC, and
+    # requirers must be told so: a requirer that dials TLS against a plaintext
+    # frontend fails its handshake.
+    all_required_relations.append(host_info_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    host_info = new_state.get_relations("temporal-host-info")[0]
+    new_state = context.run(context.on.relation_changed(host_info), new_state)
+
+    app_data = new_state.get_relations("temporal-host-info")[0].local_app_data
+    assert app_data["tls"] == "false"
+    # The frontend port, not the internal-frontend port: the internal frontend
+    # bypasses the authorizer.
+    assert app_data["port"] == "7233"
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_host_info_published_with_tls(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    host_info_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # Once the frontend serves gRPC over TLS, requirers must learn about it so
+    # they can dial accordingly. This is the signal missing in #152, whose
+    # absence surfaces as "error reading server preface: EOF" in the UI.
+    all_required_relations.append(host_info_relation)
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    host_info = new_state.get_relations("temporal-host-info")[0]
+    with unittest.mock.patch("charm.TemporalK8SCharm._certificate_is_available", return_value=True):
+        new_state = context.run(context.on.relation_changed(host_info), new_state)
+
+    app_data = new_state.get_relations("temporal-host-info")[0].local_app_data
+    assert app_data["tls"] == "true"
+    assert app_data["port"] == "7233"
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_host_info_tls_requires_issued_certificate(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    host_info_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # A related but not-yet-issued certificate means the frontend still serves
+    # plaintext, so requirers must not be told `tls=true` yet.
+    all_required_relations.append(host_info_relation)
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+
+    host_info = new_state.get_relations("temporal-host-info")[0]
+    with unittest.mock.patch("charm.TemporalK8SCharm._certificate_is_available", return_value=False):
+        new_state = context.run(context.on.relation_changed(host_info), new_state)
+
+    app_data = new_state.get_relations("temporal-host-info")[0].local_app_data
+    assert app_data["tls"] == "false"
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_invalid_config_value(
     context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
 ):
