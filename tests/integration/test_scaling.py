@@ -7,7 +7,7 @@ import logging
 
 import pytest
 import pytest_asyncio
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import ADMIN_CHANNEL, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -56,7 +56,7 @@ async def deploy(ops_test: OpsTest):
             },
         )
 
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    await ops_test.model.deploy(APP_NAME_ADMIN, channel=ADMIN_CHANNEL)
     await ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
     await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
     await ops_test.model.deploy(

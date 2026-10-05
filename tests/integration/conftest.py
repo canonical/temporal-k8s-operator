@@ -22,6 +22,9 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 TEMPORAL_CHANNEL = "1.23/edge"
+# The local 1.24 server only leaves Blocked once admin publishes a matching
+# migrated_workload_version, so tests running the local charm need a 1.24 admin.
+ADMIN_CHANNEL = "1.24/edge"
 POSTGRESQL_CHANNEL = "14/stable"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/stable"
 
@@ -54,7 +57,7 @@ async def deploy(ops_test: OpsTest, charm: str):
                 "namespace-rps-limit": "default:50|test:40",
             },
         ),
-        ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL),
+        ops_test.model.deploy(APP_NAME_ADMIN, channel=ADMIN_CHANNEL),
         ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL),
         ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True),
         ops_test.model.deploy("self-signed-certificates", channel=SELF_SIGNED_CERTIFICATES_CHANNEL),
