@@ -495,7 +495,12 @@ class TemporalK8SCharm(CharmBase):
 
         # Validate admin relation.
         self.database_connections()
-        if not self.admin.schema_ready:
+        admin = self.model.get_relation("admin")
+        admin_data = admin.data[admin.app] if admin and admin.app else {}
+        if (admin_data.get("schema_status"), admin_data.get("migrated_workload_version")) != (
+            "ready",
+            WORKLOAD_VERSION,
+        ):
             raise SchemaPendingError("admin:temporal relation: schema is pending migration")
 
         # Validate OpenFGA relation.

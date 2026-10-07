@@ -10,7 +10,6 @@ from ops import framework
 from ops.charm import RelationEvent
 from ops.model import WaitingStatus
 
-from literals import WORKLOAD_VERSION
 from log import log_event_handler
 
 logger = logging.getLogger(__name__)
@@ -73,7 +72,6 @@ class Admin(framework.Object):
 
     Attrs:
         on: AdminEvents object.
-        schema_ready: whether admin has migrated the schema for this workload version.
     """
 
     on = _AdminEvents()
@@ -137,7 +135,7 @@ class Admin(framework.Object):
         Args:
             event: The event triggered when the relation changed.
         """
-        schema_ready = self.schema_ready
+        schema_ready = event.relation.data[event.app].get("schema_status") == "ready"
         logger.debug(f"admin:temporal: schema {'is ready' if schema_ready else 'is not ready'}")
         self.on.schema_changed.emit(relation=event.relation, app=event.app, unit=event.unit, schema_ready=schema_ready)
 
@@ -154,15 +152,6 @@ class Admin(framework.Object):
 
         self.charm.unit.status = WaitingStatus("handling schema ready change")
         self.charm._update(event)
-
-    @property
-    def schema_ready(self):
-        """Return whether admin has migrated the schema for this workload version."""
-        relation = self.charm.model.get_relation("admin")
-        if not relation or not relation.app:
-            return False
-        data = relation.data[relation.app]
-        return data.get("schema_status") == "ready" and data.get("migrated_workload_version") == WORKLOAD_VERSION
 
     def _provide_db_info(self):
         """Provide DB info to the admin charm."""
