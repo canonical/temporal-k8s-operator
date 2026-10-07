@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 
 ADMIN_TARGET_CHANNEL = "1.24/edge"
-ADMIN_TARGET_BASE = "ubuntu@26.04"
 
 
 def _read_workload_version() -> str:
@@ -55,10 +54,7 @@ async def _get_admin_schema_version(ops_test: OpsTest) -> str | None:
     relation_info = data[f"{APP_NAME}/0"].get("relation-info", [])
     for relation in relation_info:
         if relation.get("endpoint") == "admin":
-            for related_unit_data in relation.get("related-units", {}).values():
-                app_data = related_unit_data.get("data", {})
-                if "migrated_workload_version" in app_data:
-                    return app_data["migrated_workload_version"]
+            return relation.get("application-data", {}).get("migrated_workload_version")
     return None
 
 
@@ -106,15 +102,11 @@ class TestUpgrade:
         # Refresh admin first and wait for the schema migration to complete.
         # The server's post-upgrade schema-gate will block forever waiting for
         # a matching migrated_workload_version if admin is refreshed after.
-        # --base is required: the admin charm of the target track is built on 26.04 while the
-        # deployed one is not, and without it juju reports "already up-to-date" and does nothing.
         retcode, stdout, stderr = await ops_test.juju(
             "refresh",
             APP_NAME_ADMIN,
             "--channel",
             ADMIN_TARGET_CHANNEL,
-            "--base",
-            ADMIN_TARGET_BASE,
             "-m",
             model_name,
         )
