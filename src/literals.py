@@ -42,9 +42,6 @@ SERVICE_PORTS = {
 
 PROMETHEUS_PORT = 9090
 WORKLOAD_VERSION = "1.24.3"
-# Pebble service/check names. These identify the service within the pebble plan.
-SERVICE_NAME = "temporal-server"
-CHECK_NAME = "temporal-server-running"
 
 
 class ValidServiceTypes(Enum):

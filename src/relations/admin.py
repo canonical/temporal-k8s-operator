@@ -73,7 +73,7 @@ class Admin(framework.Object):
 
     Attrs:
         on: AdminEvents object.
-        schema_ready: whether admin has migrated schemas for this workload version.
+        schema_ready: whether admin has migrated the schema for this workload version.
     """
 
     on = _AdminEvents()
@@ -88,7 +88,6 @@ class Admin(framework.Object):
         self.charm = charm
         charm.framework.observe(charm.on.admin_relation_joined, self._on_admin_relation_joined)
         charm.framework.observe(charm.on.admin_relation_changed, self._on_admin_relation_changed)
-        charm.framework.observe(charm.on.admin_relation_broken, self._on_admin_relation_broken)
         charm.framework.observe(self.on.schema_changed, self._on_schema_changed)
 
         charm.framework.observe(charm.db.on.database_created, self._on_database_changed)
@@ -152,25 +151,18 @@ class Admin(framework.Object):
         if not self.charm._state.is_ready():
             event.defer()
             return
-        if self.charm.unit.is_leader():
-            self.charm._state.schema_ready = self.schema_ready
+
         self.charm.unit.status = WaitingStatus("handling schema ready change")
         self.charm._update(event)
 
     @property
     def schema_ready(self):
-        """Return whether admin has migrated schemas for this workload version."""
+        """Return whether admin has migrated the schema for this workload version."""
         relation = self.charm.model.get_relation("admin")
         if not relation or not relation.app:
             return False
         data = relation.data[relation.app]
         return data.get("schema_status") == "ready" and data.get("migrated_workload_version") == WORKLOAD_VERSION
-
-    def _on_admin_relation_broken(self, event):
-        """Invalidate cached readiness when admin is removed."""
-        if self.charm.unit.is_leader() and self.charm._state.is_ready():
-            self.charm._state.schema_ready = False
-        self.charm.unit.status = WaitingStatus("admin:temporal relation: not available")
 
     def _provide_db_info(self):
         """Provide DB info to the admin charm."""

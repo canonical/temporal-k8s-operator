@@ -93,19 +93,14 @@ class Postgresql(framework.Object):
             return False
 
         should_update = False
-        for rel_name in ["db", "visibility"]:
-            if self.charm.model.get_relation(rel_name) is None:
+        for rel_name, requirer in (("db", self.charm.db), ("visibility", self.charm.visibility)):
+            # `requirer.relations` skips relations whose data is unreadable (e.g. while being removed),
+            # unlike `model.get_relation`, so check it rather than indexing blindly.
+            if not requirer.relations:
                 continue
 
-            if rel_name == "db":
-                relation_id = self.charm.db.relations[0].id
-                relation_data = self.charm.db.fetch_relation_data()[relation_id]
-            elif rel_name == "visibility":
-                relation_id = self.charm.visibility.relations[0].id
-                relation_data = self.charm.visibility.fetch_relation_data()[relation_id]
-            else:
-                return False
-
+            relation_id = requirer.relations[0].id
+            relation_data = requirer.fetch_relation_data().get(relation_id, {})
             endpoints = relation_data.get("endpoints", "").split(",")
             if len(endpoints) < 1:
                 continue
