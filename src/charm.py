@@ -251,8 +251,18 @@ class TemporalK8SCharm(CharmBase):
             certificate_request=self._get_certificate_request_attributes()
         )
 
-        # Set unit to WaitingStatus if certificate or key is not yet available
         if not provider_certificate or not private_key:
+            # The library only returns a certificate matching the current
+            # request, so after the request changes (new SANs, e.g. on refresh
+            # or a `frontend-cert-sans-dns` change) there is a window before the
+            # provider issues the new one. Keep serving the previously stored
+            # certificate meanwhile rather than dropping the frontend to
+            # plaintext; it is only removed when the relation is broken.
+            if self._stored_certificate_is_usable():
+                logger.info("Certificate renewal pending; serving the previously stored certificate.")
+                self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
+                return
+            # Set unit to WaitingStatus if no certificate has been issued yet
             logger.info("The certificate is not available yet.")
             self.unit.status = WaitingStatus("Waiting for certificates to be available")
             return
@@ -699,10 +709,12 @@ class TemporalK8SCharm(CharmBase):
                 }
             )
 
+        # If the relation is broken, remove certificates. This runs first so
+        # that the stored-certificate fallback in `_handle_frontend_tls` can't
+        # keep TLS configured with files that are about to be deleted.
+        self._remove_certificates(event)
         # Handle frontend TLS
         self._handle_frontend_tls()
-        # If the relation is broken, remove certificates
-        self._remove_certificates(event)
         context.update(self._extra_context)
 
         # Ensure log directory exists
@@ -778,10 +790,28 @@ class TemporalK8SCharm(CharmBase):
         return bool(self.model.relations.get(relation_name))
 
     def _certificate_is_available(self) -> bool:
+        """Return whether the frontend has a certificate to serve TLS with.
+
+        Mirrors `_handle_frontend_tls`: either a certificate is assigned for the
+        current request, or a previously stored one keeps serving while a
+        renewal for a changed request is pending.
+        """
         cert, key = self.certificates.get_assigned_certificate(
             certificate_request=self._get_certificate_request_attributes()
         )
-        return bool(cert and key)
+        return bool(cert and key) or self._stored_certificate_is_usable()
+
+    def _stored_certificate_is_usable(self) -> bool:
+        """Return whether a previously stored certificate and key can keep serving TLS.
+
+        Used while a renewal for a changed certificate request is pending. The
+        files are removed when the frontend-certificates relation is broken.
+        """
+        return (
+            self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME)
+            and self._certificate_is_stored()
+            and self._private_key_is_stored()
+        )
 
     def _valid_dns(self, dns: str) -> bool:
         """Return True if the DNS is RFC compliant, False otherwise.

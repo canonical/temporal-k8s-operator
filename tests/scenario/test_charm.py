@@ -341,7 +341,7 @@ def test_frontend_certificates_relation(
         ),
         # Configured names replace the defaults, so operators whose provider
         # refuses internal names can request public names only. Missing the
-        # in-cluster service FQDN is warned about.
+        # in-cluster service FQDN is warned about when frontend TLS is in use.
         ("temporal.example.com", {"temporal.example.com"}, True),
         # Operators whose provider allows internal names can add it themselves.
         (
@@ -351,16 +351,23 @@ def test_frontend_certificates_relation(
         ),
     ],
 )
+@pytest.mark.parametrize("related", [True, False], ids=["frontend-certificates", "no-frontend-certificates"])
 def test_certificate_sans(
     context,
     state,
     temporal_container,
     all_required_relations,
+    frontend_certificates_relation,
     configured_sans,
     expected_sans,
     warns,
+    related,
     caplog,
 ):
+    # The requested SANs don't depend on the relation; the warning only fires
+    # when frontend TLS is in use.
+    if related:
+        all_required_relations.append(frontend_certificates_relation)
     model = state.model.name
     state = dataclasses.replace(
         state,
@@ -376,7 +383,90 @@ def test_certificate_sans(
             sans = manager.charm._get_certificate_request_attributes().sans_dns
 
     assert sans == {name.format(model=model) for name in expected_sans}
-    assert ("frontend-cert-sans-dns does not include" in caplog.text) == warns
+    assert ("frontend-cert-sans-dns does not include" in caplog.text) == (warns and related)
+
+
+def _with_stored_certificate(container, tmp_path, stored):
+    """Return the container with /etc/temporal mounted, optionally holding a stored cert and key.
+
+    Args:
+        container: The temporal container.
+        tmp_path: Directory backing the mount.
+        stored: Whether to write a previously stored certificate and key.
+
+    Returns:
+        The container with the mount.
+    """
+    if stored:
+        (tmp_path / "temporal-frontend.pem").write_text("previous certificate")
+        (tmp_path / "temporal-frontend.key").write_text("previous key")
+    return dataclasses.replace(
+        container, mounts={"etc-temporal": ops.testing.Mount(location="/etc/temporal", source=tmp_path)}
+    )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+@pytest.mark.parametrize("stored", [True, False], ids=["stored-certificate", "no-stored-certificate"])
+def test_frontend_tls_while_certificate_not_assigned(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+    tmp_path,
+    stored,
+):
+    # No certificate is assigned for the current request: either none was ever
+    # issued, or the request changed (new SANs, e.g. on refresh) and the renewal
+    # is pending. A previously stored certificate keeps the frontend on TLS
+    # rather than dropping it to plaintext; without one, TLS is not configured.
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(
+        new_state, containers=[_with_stored_certificate(temporal_container_initialized, tmp_path, stored)]
+    )
+
+    with context(context.on.relation_joined(frontend_certificates_relation), new_state) as manager:
+        manager.charm.certificates.get_assigned_certificate = MagicMock(return_value=(None, None))
+        state_out = manager.run()
+        assert manager.charm._certificate_is_available() is stored
+
+    environment = state_out.get_container("temporal").plan.services["temporal-server"].environment
+    assert (FRONTEND_TLS_CONFIGURATION.items() <= environment.items()) is stored
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_frontend_certificates_relation_broken_with_stored_certificate(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+    tmp_path,
+):
+    # Breaking the relation removes the stored certificate before TLS is
+    # evaluated, so the renewal fallback can't keep TLS configured with files
+    # that are being deleted.
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(
+        new_state, containers=[_with_stored_certificate(temporal_container_initialized, tmp_path, stored=True)]
+    )
+
+    new_state = context.run(context.on.relation_broken(frontend_certificates_relation), new_state)
+
+    environment = new_state.get_container("temporal").plan.services["temporal-server"].environment
+    assert not FRONTEND_TLS_CONFIGURATION.items() <= environment.items()
+    assert not (tmp_path / "temporal-frontend.pem").exists()
+    assert not (tmp_path / "temporal-frontend.key").exists()
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
