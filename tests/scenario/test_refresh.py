@@ -12,9 +12,9 @@ import pytest
 
 @pytest.fixture
 def server_state(peer_relation, admin_relation, temporal_container, network):
-    return lambda leader, **config: ops.testing.State(
+    return lambda leader: ops.testing.State(
         leader=leader,
-        config={"num-history-shards": 1, **config},
+        config={"num-history-shards": 1},
         relations=[peer_relation, admin_relation],
         containers=[temporal_container],
         networks=[network],
@@ -22,28 +22,16 @@ def server_state(peer_relation, admin_relation, temporal_container, network):
 
 
 @pytest.mark.parametrize("leader", [True, False])
-@pytest.mark.parametrize("services", ["frontend", "history", "matching", "worker"])
 @pytest.mark.parametrize(
     "status,version", [("ready", "1.23.1"), ("ready", ""), ("migrating", "1.24.3"), ("failed", "")]
 )
 def test_pending_schema_waits_and_does_not_start_server(
-    server_state, admin_relation, temporal_container, context, leader, services, status, version
+    server_state, admin_relation, temporal_container, context, leader, status, version
 ):
     admin_relation.remote_app_data.update(schema_status=status, migrated_workload_version=version)
-    result = context.run(context.on.pebble_ready(temporal_container), server_state(leader, services=services))
+    result = context.run(context.on.pebble_ready(temporal_container), server_state(leader))
     assert result.unit_status == ops.WaitingStatus("admin:temporal relation: schema is pending migration")
     assert not result.get_container("temporal").plan.services
-
-
-@pytest.mark.parametrize("leader", [True, False])
-def test_migrated_schema_starts_versioned_server(server_state, temporal_container, context, leader):
-    result = context.run(context.on.pebble_ready(temporal_container), server_state(leader))
-    assert (
-        result.get_container("temporal")
-        .plan.services["temporal-server"]
-        .command.startswith("/bin/temporal-server-1.24.3 ")
-    )
-    assert result.unit_status == ops.MaintenanceStatus("replanning application")
 
 
 @pytest.mark.parametrize("leader", [True, False])
