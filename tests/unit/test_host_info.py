@@ -4,6 +4,7 @@
 """Unit tests for the temporal_host_info charm library."""
 
 import dataclasses
+from typing import Callable, Union
 
 import ops
 import ops.testing
@@ -27,6 +28,7 @@ class ProviderCharm(ops.CharmBase):
     Attributes:
         META: Charm metadata defining the temporal-host-info relation.
         CONFIG: Charm config options for services and external-hostname.
+        TLS: Value passed as the provider's `tls`; the library default when False.
     """
 
     META = {
@@ -39,6 +41,7 @@ class ProviderCharm(ops.CharmBase):
             "external-hostname": {"type": "string", "default": ""},
         }
     }
+    TLS: Union[Callable[[], bool], bool] = False
 
     def __init__(self, framework: ops.Framework):
         """Initialize the provider charm and its TemporalHostInfoProvider.
@@ -47,7 +50,47 @@ class ProviderCharm(ops.CharmBase):
             framework: The charm framework.
         """
         super().__init__(framework)
-        self.host_info = TemporalHostInfoProvider(self, port=PROVIDER_PORT)
+        self.host_info = TemporalHostInfoProvider(self, port=PROVIDER_PORT, tls=self.provider_tls())
+
+    def provider_tls(self) -> Union[Callable[[], bool], bool]:
+        """Return the value passed as the provider's `tls`.
+
+        Returns:
+            The class's TLS attribute.
+        """
+        return self.TLS
+
+
+class TlsProviderCharm(ProviderCharm):
+    """Provider charm whose frontend serves TLS, passed as a plain value.
+
+    Attributes:
+        TLS: Always True.
+    """
+
+    TLS = True
+
+
+class CallableTlsProviderCharm(ProviderCharm):
+    """Provider charm that passes `tls` as a callable, as temporal-k8s does.
+
+    The callable reads `tls_enabled` on the charm, so tests can change it after
+    the charm is initialised and check that the provider evaluates it when it
+    publishes rather than when it is constructed.
+
+    Attributes:
+        tls_enabled: The value the `tls` callable returns.
+    """
+
+    tls_enabled = False
+
+    def provider_tls(self) -> Callable[[], bool]:
+        """Return a callable that reads `tls_enabled` when the provider publishes.
+
+        Returns:
+            The `tls` callable.
+        """
+        return lambda: self.tls_enabled
 
 
 # Minimal requirer charm
@@ -278,6 +321,109 @@ class TestTemporalHostInfoProvider:
         relation_out = state_out.get_relations(RELATION_NAME)[0]
         assert relation_out.local_app_data == {}
 
+    def test_provider_writes_tls_false_by_default(
+        self,
+        provider_context,
+        provider_state_with_ext_hostname,
+        provider_relation,
+    ):
+        """Provider publishes tls=false when the charm doesn't pass `tls`."""
+        state_out = provider_context.run(
+            provider_context.on.relation_joined(provider_relation),
+            provider_state_with_ext_hostname,
+        )
+
+        assert state_out.get_relations(RELATION_NAME)[0].local_app_data["tls"] == "false"
+
+    def test_provider_writes_tls_true(self, provider_state_with_ext_hostname, provider_relation):
+        """Provider publishes tls=true when the charm passes `tls=True`."""
+        context = ops.testing.Context(TlsProviderCharm, meta=ProviderCharm.META, config=ProviderCharm.CONFIG)
+
+        state_out = context.run(context.on.relation_joined(provider_relation), provider_state_with_ext_hostname)
+
+        assert state_out.get_relations(RELATION_NAME)[0].local_app_data["tls"] == "true"
+
+    @pytest.mark.parametrize("tls_enabled, expected", [(False, "false"), (True, "true")])
+    def test_provider_evaluates_tls_callable_when_publishing(
+        self,
+        provider_state_with_ext_hostname,
+        provider_relation,
+        tls_enabled,
+        expected,
+    ):
+        """Provider calls a `tls` callable when it publishes, not when it is constructed.
+
+        temporal-k8s passes a callable because TLS depends on the certificates
+        relation, which isn't known at charm init.
+        """
+        context = ops.testing.Context(CallableTlsProviderCharm, meta=ProviderCharm.META, config=ProviderCharm.CONFIG)
+
+        with context(context.on.relation_joined(provider_relation), provider_state_with_ext_hostname) as manager:
+            # Changed after the provider was constructed with the callable.
+            manager.charm.tls_enabled = tls_enabled
+            state_out = manager.run()
+
+        assert state_out.get_relations(RELATION_NAME)[0].local_app_data["tls"] == expected
+
+    def test_provider_publish_updates_all_relations(self, provider_network):
+        """Calling publish() with no argument writes host, port and tls to every relation."""
+        context = ops.testing.Context(CallableTlsProviderCharm, meta=ProviderCharm.META, config=ProviderCharm.CONFIG)
+        relation_a = ops.testing.Relation(RELATION_NAME)
+        relation_b = ops.testing.Relation(RELATION_NAME)
+        state = ops.testing.State(
+            leader=True,
+            config={"services": "frontend", "external-hostname": EXTERNAL_HOSTNAME},
+            relations=[relation_a, relation_b],
+            networks={provider_network},
+        )
+
+        # update_status isn't observed by the library, so only the direct
+        # publish() call writes anything.
+        with context(context.on.update_status(), state) as manager:
+            manager.charm.tls_enabled = True
+            manager.charm.host_info.publish()
+            state_out = manager.run()
+
+        for rel in state_out.get_relations(RELATION_NAME):
+            assert rel.local_app_data == {"host": EXTERNAL_HOSTNAME, "port": str(PROVIDER_PORT), "tls": "true"}
+
+    def test_provider_publish_updates_only_the_given_relation(self, provider_context):
+        """Calling publish(relation) writes only to that relation."""
+        relation_a = ops.testing.Relation(RELATION_NAME)
+        relation_b = ops.testing.Relation(RELATION_NAME)
+        state = ops.testing.State(
+            leader=True,
+            config={"services": "frontend", "external-hostname": EXTERNAL_HOSTNAME},
+            relations=[relation_a, relation_b],
+        )
+
+        with provider_context(provider_context.on.update_status(), state) as manager:
+            charm = manager.charm
+            charm.host_info.publish(charm.model.get_relation(RELATION_NAME, relation_a.id))
+            state_out = manager.run()
+
+        assert state_out.get_relation(relation_a.id).local_app_data["tls"] == "false"
+        assert state_out.get_relation(relation_b.id).local_app_data == {}
+
+    @pytest.mark.parametrize(
+        "leader, services",
+        [(False, "frontend"), (True, "history,matching")],
+        ids=["not-leader", "frontend-not-in-services"],
+    )
+    def test_provider_publish_noop(self, provider_context, provider_relation, leader, services):
+        """publish() writes nothing when the unit isn't the leader or doesn't run the frontend."""
+        state = ops.testing.State(
+            leader=leader,
+            config={"services": services, "external-hostname": EXTERNAL_HOSTNAME},
+            relations=[provider_relation],
+        )
+
+        with provider_context(provider_context.on.update_status(), state) as manager:
+            manager.charm.host_info.publish()
+            state_out = manager.run()
+
+        assert state_out.get_relations(RELATION_NAME)[0].local_app_data == {}
+
 
 # Requirer tests
 class TestTemporalHostInfoRequirer:
@@ -382,3 +528,78 @@ class TestTemporalHostInfoRequirer:
 
         assert charm.host_info.host == EXTERNAL_HOSTNAME
         assert charm.host_info.port == PROVIDER_PORT
+
+    @pytest.mark.parametrize(
+        "published, expected",
+        [("true", True), ("True", True), ("false", False), (None, False)],
+        ids=["true", "true-mixed-case", "false", "absent"],
+    )
+    def test_requirer_tls_property(self, requirer_context, published, expected):
+        """Requirer tls property reflects the published value; absent means False.
+
+        An absent field is what a provider older than LIBPATCH 2 publishes, and
+        those never served the frontend over TLS.
+        """
+        remote_app_data = {"host": EXTERNAL_HOSTNAME, "port": str(PROVIDER_PORT)}
+        if published is not None:
+            remote_app_data["tls"] = published
+        state = ops.testing.State(
+            leader=True,
+            relations=[ops.testing.Relation(RELATION_NAME, remote_app_data=remote_app_data)],
+        )
+
+        with requirer_context(requirer_context.on.config_changed(), state) as manager:
+            charm = manager.charm
+            manager.run()
+
+        assert charm.host_info.tls is expected
+
+    def test_requirer_tls_property_false_when_no_relation(self, requirer_context):
+        """Requirer tls property is False when no relation is present."""
+        state = ops.testing.State(leader=True, relations=[])
+
+        with requirer_context(requirer_context.on.config_changed(), state) as manager:
+            charm = manager.charm
+            manager.run()
+
+        assert charm.host_info.tls is False
+
+    @pytest.mark.parametrize(
+        "published, expected",
+        [("true", True), ("false", False), (None, False)],
+        ids=["true", "false", "absent"],
+    )
+    def test_requirer_changed_event_carries_tls(self, requirer_context, published, expected):
+        """temporal_host_info_changed carries the published tls value; absent means False."""
+        remote_app_data = {"host": EXTERNAL_HOSTNAME, "port": str(PROVIDER_PORT)}
+        if published is not None:
+            remote_app_data["tls"] = published
+        relation = ops.testing.Relation(RELATION_NAME, remote_app_data=remote_app_data)
+        state = ops.testing.State(leader=True, relations=[relation])
+
+        with requirer_context(requirer_context.on.relation_changed(relation), state) as manager:
+            charm = manager.charm
+            manager.run()
+
+        assert len(charm.received_host_info_changed) == 1
+        assert charm.received_host_info_changed[0].tls is expected
+
+    @pytest.mark.parametrize(
+        "snapshot, expected",
+        [
+            ({"host": EXTERNAL_HOSTNAME, "port": PROVIDER_PORT, "tls": True}, True),
+            # Deferred by a charm running a library older than LIBPATCH 2.
+            ({"host": EXTERNAL_HOSTNAME, "port": PROVIDER_PORT}, False),
+        ],
+        ids=["with-tls", "pre-libpatch-2"],
+    )
+    def test_changed_event_restores_tls_from_snapshot(self, snapshot, expected):
+        """A deferred changed event keeps tls across snapshot/restore; no key means False."""
+        event = TemporalHostInfoChangedEvent(ops.Handle(None, "test", "1"), host="", port=0)
+
+        event.restore(snapshot)
+
+        assert event.host == EXTERNAL_HOSTNAME
+        assert event.port == PROVIDER_PORT
+        assert event.tls is expected
+        assert event.snapshot()["tls"] is expected
