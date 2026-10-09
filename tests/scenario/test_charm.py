@@ -18,6 +18,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 )
 
 from charm import (
+    FRONTEND_CERTIFICATE_HASH_ENV,
     FRONTEND_CERTIFICATES_RELATION_NAME,
     FRONTEND_TLS_CONFIGURATION,
     render,
@@ -309,6 +310,8 @@ def test_frontend_certificates_relation(
         "charm.TemporalK8SCharm._store_certificate"
     ), unittest.mock.patch(
         "charm.TemporalK8SCharm._store_private_key"
+    ), unittest.mock.patch(
+        "charm.TemporalK8SCharm._stored_certificate_hash", return_value="certificate-hash"
     ):
         # Required mocks
         manager.charm.certificates.get_assigned_certificate = MagicMock(
@@ -319,10 +322,9 @@ def test_frontend_certificates_relation(
         manager.charm._update(certificate_available_event)
 
         assert FRONTEND_TLS_CONFIGURATION.items() <= manager.charm._extra_context.items()
-        assert (
-            FRONTEND_TLS_CONFIGURATION.items()
-            <= manager.charm.container.get_plan().services["temporal-server"].environment.items()
-        )
+        environment = manager.charm.container.get_plan().services["temporal-server"].environment
+        assert FRONTEND_TLS_CONFIGURATION.items() <= environment.items()
+        assert environment[FRONTEND_CERTIFICATE_HASH_ENV] == "certificate-hash"
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -467,6 +469,59 @@ def test_frontend_certificates_relation_broken_with_stored_certificate(
     assert not FRONTEND_TLS_CONFIGURATION.items() <= environment.items()
     assert not (tmp_path / "temporal-frontend.pem").exists()
     assert not (tmp_path / "temporal-frontend.key").exists()
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_new_frontend_certificate_restarts_server(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+    tmp_path,
+):
+    # The server reads the certificate files only at startup and their paths
+    # never change, so a new certificate on disk must change the Pebble
+    # environment (via its hash) for the replan to restart the server. This
+    # covers renewals and re-issues after the SANs change.
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    container = _with_stored_certificate(temporal_container_initialized, tmp_path, stored=True)
+
+    def certificate_hash(certificate, private_key):
+        """Run with the given certificate assigned and return the hash in the Pebble environment.
+
+        Args:
+            certificate: PEM text of the assigned certificate.
+            private_key: PEM text of the assigned private key.
+
+        Returns:
+            The certificate hash from the temporal-server environment.
+        """
+        provider_certificate = MagicMock(ProviderCertificate)
+        provider_certificate.certificate = MagicMock()
+        provider_certificate.certificate.__str__.return_value = certificate
+        key = MagicMock(PrivateKey)
+        key.__str__.return_value = private_key
+        run_state = dataclasses.replace(new_state, containers=[container])
+        with context(context.on.relation_joined(frontend_certificates_relation), run_state) as manager:
+            manager.charm.certificates.get_assigned_certificate = MagicMock(return_value=(provider_certificate, key))
+            with unittest.mock.patch("charm.TemporalK8SCharm._update_certificates_required", return_value=True):
+                state_out = manager.run()
+        return (
+            state_out.get_container("temporal")
+            .plan.services["temporal-server"]
+            .environment[FRONTEND_CERTIFICATE_HASH_ENV]
+        )
+
+    first = certificate_hash("certificate one", "key")
+    assert (tmp_path / "temporal-frontend.pem").read_text() == "certificate one"
+    assert certificate_hash("certificate one", "key") == first
+    assert certificate_hash("certificate two", "key") != first
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)

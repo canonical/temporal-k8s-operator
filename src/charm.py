@@ -7,6 +7,7 @@
 """Charm definition and helpers."""
 
 import functools
+import hashlib
 import logging
 import os
 import re
@@ -67,6 +68,9 @@ CERTIFICATE_NAME = "temporal-frontend.pem"
 CERTS_DIR_PATH = "/etc/temporal"
 FRONTEND_CERTIFICATES_RELATION_NAME = "frontend-certificates"
 PRIVATE_KEY_NAME = "temporal-frontend.key"
+# Hash of the stored certificate and key in the Pebble environment, so a new
+# certificate restarts the server.
+FRONTEND_CERTIFICATE_HASH_ENV = "TEMPORAL_TLS_FRONTEND_CERT_HASH"
 FRONTEND_TLS_CONFIGURATION = {
     "TEMPORAL_TLS_REQUIRE_CLIENT_AUTH": "false",
     "TEMPORAL_TLS_FRONTEND_CERT": f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}",
@@ -261,6 +265,7 @@ class TemporalK8SCharm(CharmBase):
             if self._stored_certificate_is_usable():
                 logger.info("Certificate renewal pending; serving the previously stored certificate.")
                 self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
+                self._extra_context[FRONTEND_CERTIFICATE_HASH_ENV] = self._stored_certificate_hash()
                 return
             # Set unit to WaitingStatus if no certificate has been issued yet
             logger.info("The certificate is not available yet.")
@@ -273,6 +278,13 @@ class TemporalK8SCharm(CharmBase):
         if self._update_certificates_required(provider_certificate, private_key):
             self._store_certificate(certificate=provider_certificate.certificate)
             self._store_private_key(private_key=private_key)
+
+        # The server reads the certificate files only at startup and their
+        # paths never change, so a new certificate on disk (a renewal, or a
+        # re-issue after the SANs change) wouldn't be picked up on its own.
+        # Putting their hash in the Pebble environment makes a new certificate
+        # change the layer, so the replan restarts the server.
+        self._extra_context[FRONTEND_CERTIFICATE_HASH_ENV] = self._stored_certificate_hash()
 
     def _remove_certificates(self, event: EventBase) -> None:
         """Remove frontend certificates from the workload container.
@@ -800,6 +812,12 @@ class TemporalK8SCharm(CharmBase):
             certificate_request=self._get_certificate_request_attributes()
         )
         return bool(cert and key) or self._stored_certificate_is_usable()
+
+    def _stored_certificate_hash(self) -> str:
+        """Return a hash of the stored frontend certificate and private key."""
+        certificate = self.container.pull(path=f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}").read()
+        private_key = self.container.pull(path=f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}").read()
+        return hashlib.sha256(f"{certificate}{private_key}".encode()).hexdigest()
 
     def _stored_certificate_is_usable(self) -> bool:
         """Return whether a previously stored certificate and key can keep serving TLS.
