@@ -18,6 +18,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 )
 
 from charm import (
+    FRONTEND_CERTIFICATE_HASH_ENV,
     FRONTEND_CERTIFICATES_RELATION_NAME,
     FRONTEND_TLS_CONFIGURATION,
     render,
@@ -309,6 +310,8 @@ def test_frontend_certificates_relation(
         "charm.TemporalK8SCharm._store_certificate"
     ), unittest.mock.patch(
         "charm.TemporalK8SCharm._store_private_key"
+    ), unittest.mock.patch(
+        "charm.TemporalK8SCharm._stored_certificate_hash", return_value="certificate-hash"
     ):
         # Required mocks
         manager.charm.certificates.get_assigned_certificate = MagicMock(
@@ -319,10 +322,206 @@ def test_frontend_certificates_relation(
         manager.charm._update(certificate_available_event)
 
         assert FRONTEND_TLS_CONFIGURATION.items() <= manager.charm._extra_context.items()
-        assert (
-            FRONTEND_TLS_CONFIGURATION.items()
-            <= manager.charm.container.get_plan().services["temporal-server"].environment.items()
+        environment = manager.charm.container.get_plan().services["temporal-server"].environment
+        assert FRONTEND_TLS_CONFIGURATION.items() <= environment.items()
+        assert environment[FRONTEND_CERTIFICATE_HASH_ENV] == "certificate-hash"
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+@pytest.mark.parametrize(
+    "configured_sans, expected_sans, warns",
+    [
+        # Defaults: the unit FQDN and the in-cluster service FQDN, which
+        # in-model clients dial and verify against.
+        (
+            "",
+            {
+                "temporal-k8s-0.temporal-k8s-endpoints.test.svc.cluster.local",
+                "temporal-k8s.{model}.svc.cluster.local",
+            },
+            False,
+        ),
+        # Configured names replace the defaults, so operators whose provider
+        # refuses internal names can request public names only. Missing the
+        # in-cluster service FQDN is warned about when frontend TLS is in use.
+        ("temporal.example.com", {"temporal.example.com"}, True),
+        # Operators whose provider allows internal names can add it themselves.
+        (
+            "temporal.example.com,temporal-k8s.{model}.svc.cluster.local",
+            {"temporal.example.com", "temporal-k8s.{model}.svc.cluster.local"},
+            False,
+        ),
+    ],
+)
+@pytest.mark.parametrize("related", [True, False], ids=["frontend-certificates", "no-frontend-certificates"])
+def test_certificate_sans(
+    context,
+    state,
+    temporal_container,
+    all_required_relations,
+    frontend_certificates_relation,
+    configured_sans,
+    expected_sans,
+    warns,
+    related,
+    caplog,
+):
+    # The requested SANs don't depend on the relation; the warning only fires
+    # when frontend TLS is in use.
+    if related:
+        all_required_relations.append(frontend_certificates_relation)
+    model = state.model.name
+    state = dataclasses.replace(
+        state,
+        relations=all_required_relations,
+        config={"num-history-shards": 1, "frontend-cert-sans-dns": configured_sans.format(model=model)},
+    )
+
+    with context(context.on.pebble_ready(temporal_container), state=state) as manager, unittest.mock.patch(
+        "socket.getfqdn", return_value="temporal-k8s-0.temporal-k8s-endpoints.test.svc.cluster.local"
+    ), unittest.mock.patch("socket.gethostbyname", return_value="10.1.0.1"):
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            sans = manager.charm._get_certificate_request_attributes().sans_dns
+
+    assert sans == {name.format(model=model) for name in expected_sans}
+    assert ("frontend-cert-sans-dns does not include" in caplog.text) == (warns and related)
+
+
+def _with_stored_certificate(container, tmp_path, stored):
+    """Return the container with /etc/temporal mounted, optionally holding a stored cert and key.
+
+    Args:
+        container: The temporal container.
+        tmp_path: Directory backing the mount.
+        stored: Whether to write a previously stored certificate and key.
+
+    Returns:
+        The container with the mount.
+    """
+    if stored:
+        (tmp_path / "temporal-frontend.pem").write_text("previous certificate")
+        (tmp_path / "temporal-frontend.key").write_text("previous key")
+    return dataclasses.replace(
+        container, mounts={"etc-temporal": ops.testing.Mount(location="/etc/temporal", source=tmp_path)}
+    )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+@pytest.mark.parametrize("stored", [True, False], ids=["stored-certificate", "no-stored-certificate"])
+def test_frontend_tls_while_certificate_not_assigned(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+    tmp_path,
+    stored,
+):
+    # No certificate is assigned for the current request: either none was ever
+    # issued, or the request changed (new SANs, e.g. on refresh) and the renewal
+    # is pending. A previously stored certificate keeps the frontend on TLS
+    # rather than dropping it to plaintext; without one, TLS is not configured.
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(
+        new_state, containers=[_with_stored_certificate(temporal_container_initialized, tmp_path, stored)]
+    )
+
+    with context(context.on.relation_joined(frontend_certificates_relation), new_state) as manager:
+        manager.charm.certificates.get_assigned_certificate = MagicMock(return_value=(None, None))
+        state_out = manager.run()
+        assert manager.charm._certificate_is_available() is stored
+
+    environment = state_out.get_container("temporal").plan.services["temporal-server"].environment
+    assert (FRONTEND_TLS_CONFIGURATION.items() <= environment.items()) is stored
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_frontend_certificates_relation_broken_with_stored_certificate(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+    tmp_path,
+):
+    # Breaking the relation removes the stored certificate before TLS is
+    # evaluated, so the renewal fallback can't keep TLS configured with files
+    # that are being deleted.
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    new_state = dataclasses.replace(
+        new_state, containers=[_with_stored_certificate(temporal_container_initialized, tmp_path, stored=True)]
+    )
+
+    new_state = context.run(context.on.relation_broken(frontend_certificates_relation), new_state)
+
+    environment = new_state.get_container("temporal").plan.services["temporal-server"].environment
+    assert not FRONTEND_TLS_CONFIGURATION.items() <= environment.items()
+    assert not (tmp_path / "temporal-frontend.pem").exists()
+    assert not (tmp_path / "temporal-frontend.key").exists()
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_new_frontend_certificate_restarts_server(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+    tmp_path,
+):
+    # The server reads the certificate files only at startup and their paths
+    # never change, so a new certificate on disk must change the Pebble
+    # environment (via its hash) for the replan to restart the server. This
+    # covers renewals and re-issues after the SANs change.
+    all_required_relations.append(frontend_certificates_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    container = _with_stored_certificate(temporal_container_initialized, tmp_path, stored=True)
+
+    def certificate_hash(certificate, private_key):
+        """Run with the given certificate assigned and return the hash in the Pebble environment.
+
+        Args:
+            certificate: PEM text of the assigned certificate.
+            private_key: PEM text of the assigned private key.
+
+        Returns:
+            The certificate hash from the temporal-server environment.
+        """
+        provider_certificate = MagicMock(ProviderCertificate)
+        provider_certificate.certificate = MagicMock()
+        provider_certificate.certificate.__str__.return_value = certificate
+        key = MagicMock(PrivateKey)
+        key.__str__.return_value = private_key
+        run_state = dataclasses.replace(new_state, containers=[container])
+        with context(context.on.relation_joined(frontend_certificates_relation), run_state) as manager:
+            manager.charm.certificates.get_assigned_certificate = MagicMock(return_value=(provider_certificate, key))
+            with unittest.mock.patch("charm.TemporalK8SCharm._update_certificates_required", return_value=True):
+                state_out = manager.run()
+        return (
+            state_out.get_container("temporal")
+            .plan.services["temporal-server"]
+            .environment[FRONTEND_CERTIFICATE_HASH_ENV]
         )
+
+    first = certificate_hash("certificate one", "key")
+    assert (tmp_path / "temporal-frontend.pem").read_text() == "certificate one"
+    assert certificate_hash("certificate one", "key") == first
+    assert certificate_hash("certificate two", "key") != first
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)

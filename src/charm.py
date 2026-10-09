@@ -7,6 +7,7 @@
 """Charm definition and helpers."""
 
 import functools
+import hashlib
 import logging
 import os
 import re
@@ -67,6 +68,9 @@ CERTIFICATE_NAME = "temporal-frontend.pem"
 CERTS_DIR_PATH = "/etc/temporal"
 FRONTEND_CERTIFICATES_RELATION_NAME = "frontend-certificates"
 PRIVATE_KEY_NAME = "temporal-frontend.key"
+# Hash of the stored certificate and key in the Pebble environment, so a new
+# certificate restarts the server.
+FRONTEND_CERTIFICATE_HASH_ENV = "TEMPORAL_TLS_FRONTEND_CERT_HASH"
 FRONTEND_TLS_CONFIGURATION = {
     "TEMPORAL_TLS_REQUIRE_CLIENT_AUTH": "false",
     "TEMPORAL_TLS_FRONTEND_CERT": f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}",
@@ -251,8 +255,19 @@ class TemporalK8SCharm(CharmBase):
             certificate_request=self._get_certificate_request_attributes()
         )
 
-        # Set unit to WaitingStatus if certificate or key is not yet available
         if not provider_certificate or not private_key:
+            # The library only returns a certificate matching the current
+            # request, so after the request changes (new SANs, e.g. on refresh
+            # or a `frontend-cert-sans-dns` change) there is a window before the
+            # provider issues the new one. Keep serving the previously stored
+            # certificate meanwhile rather than dropping the frontend to
+            # plaintext; it is only removed when the relation is broken.
+            if self._stored_certificate_is_usable():
+                logger.info("Certificate renewal pending; serving the previously stored certificate.")
+                self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
+                self._extra_context[FRONTEND_CERTIFICATE_HASH_ENV] = self._stored_certificate_hash()
+                return
+            # Set unit to WaitingStatus if no certificate has been issued yet
             logger.info("The certificate is not available yet.")
             self.unit.status = WaitingStatus("Waiting for certificates to be available")
             return
@@ -263,6 +278,13 @@ class TemporalK8SCharm(CharmBase):
         if self._update_certificates_required(provider_certificate, private_key):
             self._store_certificate(certificate=provider_certificate.certificate)
             self._store_private_key(private_key=private_key)
+
+        # The server reads the certificate files only at startup and their
+        # paths never change, so a new certificate on disk (a renewal, or a
+        # re-issue after the SANs change) wouldn't be picked up on its own.
+        # Putting their hash in the Pebble environment makes a new certificate
+        # change the layer, so the replan restarts the server.
+        self._extra_context[FRONTEND_CERTIFICATE_HASH_ENV] = self._stored_certificate_hash()
 
     def _remove_certificates(self, event: EventBase) -> None:
         """Remove frontend certificates from the workload container.
@@ -699,10 +721,12 @@ class TemporalK8SCharm(CharmBase):
                 }
             )
 
+        # If the relation is broken, remove certificates. This runs first so
+        # that the stored-certificate fallback in `_handle_frontend_tls` can't
+        # keep TLS configured with files that are about to be deleted.
+        self._remove_certificates(event)
         # Handle frontend TLS
         self._handle_frontend_tls()
-        # If the relation is broken, remove certificates
-        self._remove_certificates(event)
         context.update(self._extra_context)
 
         # Ensure log directory exists
@@ -778,10 +802,34 @@ class TemporalK8SCharm(CharmBase):
         return bool(self.model.relations.get(relation_name))
 
     def _certificate_is_available(self) -> bool:
+        """Return whether the frontend has a certificate to serve TLS with.
+
+        Mirrors `_handle_frontend_tls`: either a certificate is assigned for the
+        current request, or a previously stored one keeps serving while a
+        renewal for a changed request is pending.
+        """
         cert, key = self.certificates.get_assigned_certificate(
             certificate_request=self._get_certificate_request_attributes()
         )
-        return bool(cert and key)
+        return bool(cert and key) or self._stored_certificate_is_usable()
+
+    def _stored_certificate_hash(self) -> str:
+        """Return a hash of the stored frontend certificate and private key."""
+        certificate = self.container.pull(path=f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}").read()
+        private_key = self.container.pull(path=f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}").read()
+        return hashlib.sha256(f"{certificate}{private_key}".encode()).hexdigest()
+
+    def _stored_certificate_is_usable(self) -> bool:
+        """Return whether a previously stored certificate and key can keep serving TLS.
+
+        Used while a renewal for a changed certificate request is pending. The
+        files are removed when the frontend-certificates relation is broken.
+        """
+        return (
+            self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME)
+            and self._certificate_is_stored()
+            and self._private_key_is_stored()
+        )
 
     def _valid_dns(self, dns: str) -> bool:
         """Return True if the DNS is RFC compliant, False otherwise.
@@ -817,13 +865,36 @@ class TemporalK8SCharm(CharmBase):
                 break
         common_name = self.config["frontend-cert-common-name"] or generated_common_name
 
-        # Generate SANS_DNS - set to the unit hostname if not set in configuration
-        sans_dns = self._dns_entries or [unit_fqdn]
+        # Generate SANS_DNS. By default, request the unit FQDN and the
+        # in-cluster service FQDN: in-model clients (e.g. the UI) dial the
+        # service FQDN published over temporal-host-info, and a certificate that
+        # does not name it fails their hostname verification.
+        #
+        # Configured names replace the defaults rather than adding to them.
+        # Some providers (public CAs, restrictive Vault roles) refuse internal
+        # names such as `*.svc.cluster.local` and reject the whole request, so
+        # operators using them must be able to request public names only.
+        if self._dns_entries:
+            sans_dns = set(self._dns_entries)
+            if self._in_cluster_fqdn not in sans_dns and self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+                logger.warning(
+                    "frontend-cert-sans-dns does not include %s: in-model clients that verify the "
+                    "frontend certificate over TLS will fail hostname verification. Add it if your "
+                    "certificate provider allows internal names.",
+                    self._in_cluster_fqdn,
+                )
+        else:
+            sans_dns = {unit_fqdn, self._in_cluster_fqdn}
 
         return CertificateRequestAttributes(
             common_name=common_name,
             sans_dns=frozenset(sans_dns),
         )
+
+    @property
+    def _in_cluster_fqdn(self) -> str:
+        """Return the Kubernetes service FQDN in-model clients use to reach this app."""
+        return f"{self.app.name}.{self.model.name}.svc.cluster.local"
 
     def _check_and_update_certificate(self) -> bool:
         """Check if the certificate or private key needs an update and perform the update.

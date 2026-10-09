@@ -140,7 +140,8 @@ options:
     description: |
       A list of comma separated values of the SANS DNS this charm will use in the CSR to a certificate provider. This value will appear in the certificate's SAN DNS field.
       Please note that DNS names must be RFC compliant.
-      If not set, this charm will use the unit hostname.
+      If not set, this charm will use the unit hostname and the in-cluster service name (<app>.<model>.svc.cluster.local).
+      If set, only these names are used. Include <app>.<model>.svc.cluster.local if in-model clients (e.g. the UI) need to verify the certificate and your certificate provider allows internal names.
       If set, the services configuration option must include frontend.
       This configuration option is only used when the charm is integrated with the frontend-certificates relation.
     default: ""
