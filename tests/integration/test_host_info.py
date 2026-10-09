@@ -50,14 +50,11 @@ class TestTemporalHostInfoRelation:
     """Tests for temporal-host-info relation."""
 
     def test_relation(self, juju: jubilant.Juju, host_info_requirer_charm: pathlib.Path):
-        """Test host and port are correctly published when external-hostname is set."""
+        """Test the in-cluster service FQDN and port are published."""
         cfg = juju.config(APP_NAME)
         services = cfg["services"]
-        new_cfg = {"external-hostname": "temporal.local.test"}
         if "frontend" not in services:
-            services += ",frontend"
-            new_cfg["services"] = services
-        juju.config(APP_NAME, new_cfg)
+            juju.config(APP_NAME, {"services": services + ",frontend"})
         # Deploy host info requirer charm
         juju.deploy(host_info_requirer_charm, "host-info-requirer")
         _wait_requirer_agent_idle(juju)
@@ -65,17 +62,16 @@ class TestTemporalHostInfoRelation:
         _wait_stack_active(juju)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
-        expected_status = "Temporal host: temporal.local.test, port: 7236, tls: False"
+        expected_status = f"Temporal host: {APP_NAME}.{juju.model}.svc.cluster.local, port: 7236, tls: False"
         assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status
 
-    def test_relation_no_ext_hostname(self, juju: jubilant.Juju):
-        """Test host falls back to pod IP when external-hostname is unset."""
-        juju.config(APP_NAME, {"external-hostname": ""})
+    def test_relation_ignores_external_hostname(self, juju: jubilant.Juju):
+        """Test external-hostname (nginx-route only) does not change the published host."""
+        juju.config(APP_NAME, {"external-hostname": "temporal.local.test"})
         _wait_stack_active(juju)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
-        server_ip = status.apps[APP_NAME].units[f"{APP_NAME}/0"].address
-        expected_status = f"Temporal host: {server_ip}, port: 7236, tls: False"
+        expected_status = f"Temporal host: {APP_NAME}.{juju.model}.svc.cluster.local, port: 7236, tls: False"
         assert requirer_unit.workload_status.current == "active"
         assert requirer_unit.workload_status.message == expected_status

@@ -19,6 +19,7 @@ RELATION_NAME = "temporal-host-info"
 PROVIDER_PORT = 7233
 BIND_ADDRESS = "10.0.0.1"
 EXTERNAL_HOSTNAME = "temporal.example.com"
+SERVICE_FQDN = "provider-charm.test-model.svc.cluster.local"
 
 
 # Minimal provider charm
@@ -29,6 +30,7 @@ class ProviderCharm(ops.CharmBase):
         META: Charm metadata defining the temporal-host-info relation.
         CONFIG: Charm config options for services and external-hostname.
         TLS: Value passed as the provider's `tls`; the library default when False.
+        HOST: Host passed to the provider; None publishes the binding address.
     """
 
     META = {
@@ -42,6 +44,7 @@ class ProviderCharm(ops.CharmBase):
         }
     }
     TLS: Union[Callable[[], bool], bool] = False
+    HOST: Union[Callable[[], str], str, None] = None
 
     def __init__(self, framework: ops.Framework):
         """Initialize the provider charm and its TemporalHostInfoProvider.
@@ -91,6 +94,27 @@ class CallableTlsProviderCharm(ProviderCharm):
             The `tls` callable.
         """
         return lambda: self.tls_enabled
+        self.host_info = TemporalHostInfoProvider(self, port=PROVIDER_PORT, host=self.HOST)
+
+
+class HostProviderCharm(ProviderCharm):
+    """Provider charm that supplies the host to publish.
+
+    Attributes:
+        HOST: The host passed to the provider.
+    """
+
+    HOST = SERVICE_FQDN
+
+
+class CallableHostProviderCharm(ProviderCharm):
+    """Provider charm that supplies the host to publish as a callable.
+
+    Attributes:
+        HOST: A callable returning the host passed to the provider.
+    """
+
+    HOST = staticmethod(lambda: SERVICE_FQDN)
 
 
 # Minimal requirer charm
@@ -208,21 +232,43 @@ def requirer_relation_no_data():
 class TestTemporalHostInfoProvider:
     """Unit tests for TemporalHostInfoProvider."""
 
-    def test_provider_writes_external_hostname_on_relation_joined(
+    @pytest.mark.parametrize("charm_type", [HostProviderCharm, CallableHostProviderCharm])
+    def test_provider_writes_supplied_host_on_relation_joined(
         self,
-        provider_context,
+        charm_type,
         provider_state_with_ext_hostname,
         provider_relation,
     ):
-        """Provider writes external-hostname and port into relation data on relation_joined."""
-        state_out = provider_context.run(
-            provider_context.on.relation_joined(provider_relation),
+        """Provider writes the supplied host (value or callable) and ignores external-hostname."""
+        context = ops.testing.Context(charm_type=charm_type, meta=ProviderCharm.META, config=ProviderCharm.CONFIG)
+
+        state_out = context.run(
+            context.on.relation_joined(provider_relation),
             provider_state_with_ext_hostname,
         )
 
         relation_out = state_out.get_relations(RELATION_NAME)[0]
-        assert relation_out.local_app_data["host"] == EXTERNAL_HOSTNAME
+        assert relation_out.local_app_data["host"] == SERVICE_FQDN
         assert relation_out.local_app_data["port"] == str(PROVIDER_PORT)
+
+    def test_provider_ignores_external_hostname_without_supplied_host(
+        self,
+        provider_context,
+        provider_relation,
+        provider_network,
+    ):
+        """Provider never publishes external-hostname, which is for nginx-route only."""
+        state = ops.testing.State(
+            leader=True,
+            config={"services": "frontend", "external-hostname": EXTERNAL_HOSTNAME},
+            relations=[provider_relation],
+            networks={provider_network},
+        )
+
+        state_out = provider_context.run(provider_context.on.relation_joined(provider_relation), state)
+
+        relation_out = state_out.get_relations(RELATION_NAME)[0]
+        assert relation_out.local_app_data["host"] == BIND_ADDRESS
 
     def test_provider_writes_bind_address_when_no_external_hostname_on_relation_joined(
         self,
@@ -230,7 +276,7 @@ class TestTemporalHostInfoProvider:
         provider_state_no_ext_hostname,
         provider_relation,
     ):
-        """Provider falls back to binding IP when external-hostname is empty."""
+        """Provider falls back to binding IP when no host is supplied."""
         state_out = provider_context.run(
             provider_context.on.relation_joined(provider_relation),
             provider_state_no_ext_hostname,
@@ -301,7 +347,7 @@ class TestTemporalHostInfoProvider:
         state_out = provider_context.run(event, state)
 
         for rel in state_out.get_relations(RELATION_NAME):
-            assert rel.local_app_data["host"] == EXTERNAL_HOSTNAME
+            assert rel.local_app_data["host"] == BIND_ADDRESS
             assert rel.local_app_data["port"] == str(PROVIDER_PORT)
 
     def test_provider_noop_when_not_leader_on_config_changed(
