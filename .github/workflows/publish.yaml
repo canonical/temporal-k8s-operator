@@ -17,7 +17,7 @@ jobs:
 
   publish:
     name: 'Publish charm to edge | amd64'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs:
       - tests
     timeout-minutes: 60
@@ -38,7 +38,7 @@ jobs:
 
   publish-libs:
     name: Publish charm libs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs:
       - tests
       - publish

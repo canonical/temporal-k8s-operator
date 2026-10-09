@@ -13,7 +13,7 @@ concurrency:
 jobs:
   alertmanager-rules-lint:
     name: Alertmanager rules lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Checkout
@@ -27,7 +27,7 @@ jobs:
 
   lib-check:
     name: Check libraries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: write
@@ -48,7 +48,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Checkout
@@ -64,7 +64,7 @@ jobs:
 
   unit-tests:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -80,7 +80,7 @@ jobs:
 
   integration-tests:
     name: Integration tests (${{ matrix.test }})
-    runs-on: [self-hosted, linux, X64, large, noble]
+    runs-on: [self-hosted-linux-amd64-resolute-large]
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -131,7 +131,7 @@ jobs:
   # providers) rather than the k8s-only `-p k8s` preset used above.
   ingress-integration-test:
     name: Integration test (ingress)
-    runs-on: [self-hosted, linux, X64, large, noble]
+    runs-on: [self-hosted-linux-amd64-resolute-large]
     timeout-minutes: 120
     steps:
       - name: Checkout
