@@ -23,7 +23,7 @@ def server_state(peer_relation, admin_relation, temporal_container, network):
 
 @pytest.mark.parametrize("leader", [True, False])
 @pytest.mark.parametrize(
-    "status,version", [("ready", "1.23.1"), ("ready", ""), ("migrating", "1.24.3"), ("failed", "")]
+    "status,version", [("ready", "1.23.1"), ("ready", ""), ("migrating", "1.30.6"), ("failed", "")]
 )
 def test_pending_schema_waits_and_does_not_start_server(
     server_state, admin_relation, temporal_container, context, leader, status, version
@@ -40,7 +40,7 @@ def test_waiting_unit_resumes_when_admin_publishes(server_state, admin_relation,
     waiting = context.run(context.on.pebble_ready(temporal_container), server_state(leader))
     ready = dataclasses.replace(
         waiting.get_relation(admin_relation.id),
-        remote_app_data={"schema_status": "ready", "migrated_workload_version": "1.24.3"},
+        remote_app_data={"schema_status": "ready", "migrated_workload_version": "1.30.6"},
     )
     relations = [ready if r.endpoint == "admin" else r for r in waiting.relations]
     result = context.run(context.on.relation_changed(ready), dataclasses.replace(waiting, relations=relations))
