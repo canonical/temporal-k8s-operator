@@ -70,6 +70,10 @@ FRONTEND_TLS_CONFIGURATION = {
 logger = logging.getLogger(__name__)
 
 
+class SchemaPendingError(ValueError):
+    """Raised while admin has not yet migrated the schema for this workload version."""
+
+
 def render(template_name, context):
     """Render the template with the given name using the given context dict.
 
@@ -491,8 +495,13 @@ class TemporalK8SCharm(CharmBase):
 
         # Validate admin relation.
         self.database_connections()
-        if "frontend" in self.config["services"] and not self._state.schema_ready:
-            raise ValueError("admin:temporal relation: schema is not ready")
+        admin = self.model.get_relation("admin")
+        admin_data = admin.data[admin.app] if admin and admin.app else {}
+        if (admin_data.get("schema_status"), admin_data.get("migrated_workload_version")) != (
+            "ready",
+            WORKLOAD_VERSION,
+        ):
+            raise SchemaPendingError("admin:temporal relation: schema is pending migration")
 
         # Validate OpenFGA relation.
         if self.config["auth-enabled"]:
@@ -544,7 +553,8 @@ class TemporalK8SCharm(CharmBase):
         try:
             self._validate()
         except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
+            status = WaitingStatus if isinstance(err, SchemaPendingError) else BlockedStatus
+            self.unit.status = status(str(err))
             return
 
         if self.unit.is_leader():
@@ -682,7 +692,7 @@ class TemporalK8SCharm(CharmBase):
             "services": {
                 "temporal-server": {
                     "summary": "temporal server",
-                    "command": "temporal-server --env charm start " + services_args,
+                    "command": f"/bin/temporal-server-{WORKLOAD_VERSION} --env charm start " + services_args,
                     "startup": "enabled",
                     "override": "replace",
                     # Including config values here so that a change in the

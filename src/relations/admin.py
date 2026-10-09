@@ -135,9 +135,6 @@ class Admin(framework.Object):
         Args:
             event: The event triggered when the relation changed.
         """
-        if not self.charm.unit.is_leader():
-            return
-
         schema_ready = event.relation.data[event.app].get("schema_status") == "ready"
         logger.debug(f"admin:temporal: schema {'is ready' if schema_ready else 'is not ready'}")
         self.on.schema_changed.emit(relation=event.relation, app=event.app, unit=event.unit, schema_ready=schema_ready)
@@ -154,7 +151,6 @@ class Admin(framework.Object):
             return
 
         self.charm.unit.status = WaitingStatus("handling schema ready change")
-        self.charm._state.schema_ready = event.schema_ready
         self.charm._update(event)
 
     def _provide_db_info(self):

@@ -7,10 +7,11 @@ import logging
 
 import pytest
 import pytest_asyncio
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import ADMIN_CHANNEL, POSTGRESQL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
+    METADATA,
     PGBOUNCER_APP_NAME,
     PGBOUNCER_CHANNEL,
     POSTGRESQL_APP_NAME,
@@ -24,13 +25,21 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.skip_if_deployed
 @pytest_asyncio.fixture(name="deploy", scope="module")
-async def deploy(ops_test: OpsTest):
+async def deploy(ops_test: OpsTest, charm: str):
     """The app is up and running."""
-    # Deploy temporal server, temporal admin and postgresql charms.
-    await ops_test.model.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1}, num_units=3)
+    resources = {"temporal-server-image": METADATA["resources"]["temporal-server-image"]["upstream-source"]}
+
+    # Deploy the current temporal server, temporal admin and postgresql charms.
+    await ops_test.model.deploy(
+        charm,
+        resources=resources,
+        application_name=APP_NAME,
+        config={"num-history-shards": 1},
+        num_units=3,
+    )
     await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
     await ops_test.model.deploy(PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True)
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    await ops_test.model.deploy(APP_NAME_ADMIN, channel=ADMIN_CHANNEL)
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(

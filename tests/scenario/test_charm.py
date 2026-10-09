@@ -26,6 +26,12 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
+def pending_state(state, admin_relation):
+    pending = dataclasses.replace(admin_relation, remote_app_data={})
+    return dataclasses.replace(state, relations=[pending if r is admin_relation else r for r in state.relations])
+
+
+@pytest.fixture
 def all_required_relations(
     peer_relation,
     admin_relation,
@@ -130,29 +136,34 @@ def test_blocked_by_missing_visibility_relation(
     assert state_out.get_container("temporal").plan == {}
 
 
-def test_admin_relation_not_ready(context, temporal_container, state):
-    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+def test_admin_relation_not_ready(context, temporal_container, pending_state):
+    state_out = context.run(context.on.pebble_ready(temporal_container), pending_state)
 
-    assert state_out.unit_status == ops.BlockedStatus("admin:temporal relation: schema is not ready")
+    assert state_out.unit_status == ops.WaitingStatus("admin:temporal relation: schema is pending migration")
     assert state_out.get_container("temporal").plan == {}
 
 
 @pytest.mark.s3_relation_skipped
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-def test_charm_ready(context, state, temporal_container, admin_relation):
-    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+def test_charm_ready(context, pending_state, temporal_container, admin_relation):
+    state_out = context.run(context.on.pebble_ready(temporal_container), pending_state)
 
-    assert state_out.unit_status == ops.BlockedStatus("admin:temporal relation: schema is not ready")
+    assert state_out.unit_status == ops.WaitingStatus("admin:temporal relation: schema is pending migration")
     assert state_out.get_container("temporal").plan == {}
 
-    state_final = context.run(context.on.relation_changed(admin_relation), state_out)
+    state_final = context.run(
+        context.on.relation_changed(admin_relation),
+        dataclasses.replace(
+            state_out, relations=[admin_relation if r.endpoint == "admin" else r for r in state_out.relations]
+        ),
+    )
     assert state_final.unit_status == ops.MaintenanceStatus("replanning application")
 
     expected_plan = {
         "services": {
             "temporal-server": {
                 "summary": "temporal server",
-                "command": "temporal-server --env charm start "
+                "command": "/bin/temporal-server-1.24.3 --env charm start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                 "startup": "enabled",
                 "override": "replace",
@@ -199,8 +210,9 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-def test_blocked_by_setting_new_num_history_shards(context, state):
+def test_blocked_by_setting_new_num_history_shards(context, state, temporal_container_initialized):
     state_intermediate = context.run(context.on.update_status(), state)
+    state_intermediate = dataclasses.replace(state_intermediate, containers=[temporal_container_initialized])
 
     state_modified_config = dataclasses.replace(state_intermediate, config={"num-history-shards": 4})
 
@@ -227,6 +239,7 @@ def test_frontend_certificates_relation_broken(
 
     # Add initial relations
     new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
 
@@ -256,6 +269,7 @@ def test_frontend_certificates_relation_blocked_on_not_frontend(
 
     # Add initial relations
     new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
 
@@ -291,6 +305,7 @@ def test_frontend_certificates_relation(
 
     # Add initial relations
     new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
 
@@ -326,14 +341,19 @@ def test_frontend_certificates_relation(
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_s3_archival_relation(
-    context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
+    context, pending_state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
 ):
-    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = context.run(context.on.pebble_ready(temporal_container), pending_state)
 
-    assert state_out.unit_status == ops.BlockedStatus("admin:temporal relation: schema is not ready")
+    assert state_out.unit_status == ops.WaitingStatus("admin:temporal relation: schema is pending migration")
     assert state_out.get_container("temporal").plan == {}
 
-    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+    state_out = context.run(
+        context.on.relation_changed(admin_relation),
+        dataclasses.replace(
+            state_out, relations=[admin_relation if r.endpoint == "admin" else r for r in state_out.relations]
+        ),
+    )
     assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
@@ -346,7 +366,7 @@ def test_s3_archival_relation(
             "services": {
                 "temporal-server": {
                     "summary": "temporal server",
-                    "command": "temporal-server --env charm start "
+                    "command": "/bin/temporal-server-1.24.3 --env charm start "
                     "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                     "startup": "enabled",
                     "override": "replace",
@@ -405,6 +425,7 @@ def test_invalid_config_value(
     context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
 ):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
@@ -427,6 +448,7 @@ def test_database_connections(
     context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
 ):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
@@ -463,6 +485,7 @@ def test_database_connections(
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_ingress(context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
@@ -534,6 +557,7 @@ def test_blocked_by_openfga_store(
     state = dataclasses.replace(state, relations=all_required_relations)
 
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(
@@ -550,6 +574,7 @@ def test_blocked_by_authorization_model(
     context, state, temporal_container, temporal_container_initialized, admin_relation, openfga_relation
 ):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(
@@ -570,6 +595,7 @@ def test_authorization_ready(
     context, state, temporal_container, temporal_container_initialized, admin_relation, openfga_store_id, openfga_secret
 ):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(
@@ -581,7 +607,7 @@ def test_authorization_ready(
         "services": {
             "temporal-server": {
                 "summary": "temporal server",
-                "command": "temporal-server --env charm start "
+                "command": "/bin/temporal-server-1.24.3 --env charm start "
                 "--service=frontend --service=history --service=matching --service=worker --service=internal-frontend",
                 "startup": "enabled",
                 "override": "replace",
@@ -647,6 +673,7 @@ def test_authorization_ready(
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_update_status_down(context, state, temporal_container, temporal_container_initialized, admin_relation):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(
@@ -671,6 +698,7 @@ def test_incomplete_pebble_plan(
     context, state, temporal_container, temporal_container_incomplete_layer, incomplete_layer_dict, admin_relation
 ):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_incomplete_layer])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_incomplete_layer])
@@ -684,6 +712,7 @@ def test_incomplete_pebble_plan(
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_missing_pebble_plan(context, state, temporal_container, temporal_container_initialized, admin_relation):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])

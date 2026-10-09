@@ -7,7 +7,7 @@ import logging
 
 import pytest
 import pytest_asyncio
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import ADMIN_CHANNEL, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -56,7 +56,7 @@ async def deploy(ops_test: OpsTest):
             },
         )
 
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    await ops_test.model.deploy(APP_NAME_ADMIN, channel=ADMIN_CHANNEL)
     await ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
     await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
     await ops_test.model.deploy(
@@ -94,6 +94,8 @@ async def deploy(ops_test: OpsTest):
             if service != "temporal-k8s":
                 await ops_test.model.integrate(f"{service}:db", f"{PGBOUNCER_APP_NAME}:database")
                 await ops_test.model.integrate(f"{service}:visibility", f"{PGBOUNCER_APP_NAME}:database")
+                # Every role waits for admin's schema migration, so each needs the admin relation.
+                await ops_test.model.integrate(f"{service}:admin", f"{APP_NAME_ADMIN}:admin")
 
         await ops_test.model.wait_for_idle(apps=ALL_SERVICES, status="active", raise_on_blocked=False, timeout=1800)
 
