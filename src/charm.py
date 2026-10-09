@@ -6,6 +6,9 @@
 
 """Charm definition and helpers."""
 
+# TODO: remove once the charm is split into smaller modules (refactor pending).
+# pylint: disable=too-many-lines
+
 import functools
 import hashlib
 import logging

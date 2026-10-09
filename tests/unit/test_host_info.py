@@ -53,7 +53,7 @@ class ProviderCharm(ops.CharmBase):
             framework: The charm framework.
         """
         super().__init__(framework)
-        self.host_info = TemporalHostInfoProvider(self, port=PROVIDER_PORT, tls=self.provider_tls())
+        self.host_info = TemporalHostInfoProvider(self, port=PROVIDER_PORT, host=self.HOST, tls=self.provider_tls())
 
     def provider_tls(self) -> Union[Callable[[], bool], bool]:
         """Return the value passed as the provider's `tls`.
@@ -94,7 +94,6 @@ class CallableTlsProviderCharm(ProviderCharm):
             The `tls` callable.
         """
         return lambda: self.tls_enabled
-        self.host_info = TemporalHostInfoProvider(self, port=PROVIDER_PORT, host=self.HOST)
 
 
 class HostProviderCharm(ProviderCharm):
@@ -431,7 +430,9 @@ class TestTemporalHostInfoProvider:
             state_out = manager.run()
 
         for rel in state_out.get_relations(RELATION_NAME):
-            assert rel.local_app_data == {"host": EXTERNAL_HOSTNAME, "port": str(PROVIDER_PORT), "tls": "true"}
+            # external-hostname is never published (nginx-route only); without a
+            # supplied host the provider falls back to the binding address.
+            assert rel.local_app_data == {"host": BIND_ADDRESS, "port": str(PROVIDER_PORT), "tls": "true"}
 
     def test_provider_publish_updates_only_the_given_relation(self, provider_context):
         """Calling publish(relation) writes only to that relation."""

@@ -9,7 +9,7 @@ import pathlib
 import jubilant
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
-from helpers import APP_NAME, APP_NAME_ADMIN, APP_NAME_UI
+from helpers import APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, wait_active
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,10 @@ class TestTemporalHostInfoRelation:
     def test_relation_ignores_external_hostname(self, juju: jubilant.Juju):
         """Test external-hostname (nginx-route only) does not change the published host."""
         juju.config(APP_NAME, {"external-hostname": "temporal.local.test"})
-        _wait_stack_active(juju)
+        # Everything is already active here, so also wait for the agents to
+        # settle: otherwise the assertion can run before config-changed is
+        # handled and pass whether or not the host changed.
+        wait_active(juju, *_HOST_INFO_WAIT_APPS, timeout=900)
         status = juju.status()
         requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
         expected_status = f"Temporal host: {APP_NAME}.{juju.model}.svc.cluster.local, port: 7236, tls: False"
