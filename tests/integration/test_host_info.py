@@ -33,6 +33,21 @@ def _wait_requirer_agent_idle(juju: jubilant.Juju, timeout: int = 600) -> None:
     juju.wait(lambda s: jubilant.all_agents_idle(s, "host-info-requirer"), timeout=timeout)
 
 
+def _wait_requirer_status(juju: jubilant.Juju, expected: str, timeout: int = 900) -> None:
+    """Wait until the mock requirer is active with the given status message.
+
+    This waits on what the requirer received rather than on the whole stack:
+    after a relation change the stack can still report active from before the
+    change, and other requirers (e.g. a TLS-aware UI without a CA) may be
+    blocked for reasons unrelated to what is being tested.
+    """
+    juju.wait(
+        lambda s: s.apps["host-info-requirer"].units["host-info-requirer/0"].workload_status.current == "active"
+        and s.apps["host-info-requirer"].units["host-info-requirer/0"].workload_status.message == expected,
+        timeout=timeout,
+    )
+
+
 @pytest.fixture(scope="module")
 def host_info_requirer_charm() -> pathlib.Path:
     """Return full absolute path to given test charm."""
@@ -88,10 +103,7 @@ class TestTemporalHostInfoRelation:
         fails with "error reading server preface: EOF".
         """
         juju.integrate(f"{APP_NAME}:frontend-certificates", "self-signed-certificates:certificates")
-        _wait_stack_active(juju)
-        status = juju.status()
-        requirer_unit = status.apps["host-info-requirer"].units["host-info-requirer/0"]
         expected_host = f"{APP_NAME}.{juju.model}.svc.cluster.local"
-        expected_status = f"Temporal host: {expected_host}, port: 7233, tls: True"
-        assert requirer_unit.workload_status.current == "active"
-        assert requirer_unit.workload_status.message == expected_status
+        # Waits for the requirer to receive tls=True, which only happens once
+        # the certificate has been issued; times out with the last status if not.
+        _wait_requirer_status(juju, f"Temporal host: {expected_host}, port: 7233, tls: True")
