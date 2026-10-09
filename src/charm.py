@@ -858,7 +858,7 @@ class TemporalK8SCharm(CharmBase):
         # operators using them must be able to request public names only.
         if self._dns_entries:
             sans_dns = set(self._dns_entries)
-            if self._in_cluster_fqdn not in sans_dns and self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME)
+            if self._in_cluster_fqdn not in sans_dns and self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
                 logger.warning(
                     "frontend-cert-sans-dns does not include %s: in-model clients that verify the "
                     "frontend certificate over TLS will fail hostname verification. Add it if your "
