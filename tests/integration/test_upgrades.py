@@ -28,7 +28,7 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 
-ADMIN_TARGET_CHANNEL = "1.24/edge"
+ADMIN_TARGET_CHANNEL = "1.30/edge"
 
 
 def _read_workload_version() -> str:
