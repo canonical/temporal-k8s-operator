@@ -1,1 +1,1 @@
-channel = "1.23/edge"
+channel = "1.31/edge"
