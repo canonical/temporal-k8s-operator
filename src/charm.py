@@ -328,6 +328,20 @@ class TemporalK8SCharm(CharmBase):
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("This app's ingress URL: %s", event.url)
+        # Without frontend TLS the charm advertises h2c. Traefik serves that
+        # fine; ingress-configurator/HAProxy cannot, and will not reach the
+        # backend. The provider is not identifiable from this side, so this is
+        # a warning rather than a blocking condition -- blocking would make the
+        # working Traefik topology impossible. Logged here, when ingress is
+        # granted, rather than on every hook.
+        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+            logger.warning(
+                "ingress is related without %s: advertising the h2c scheme. Providers that require "
+                "HTTP/2 over TLS to the backend (ingress-configurator with HAProxy) will not be able "
+                "to reach the frontend; integrate %s if you are using one of those.",
+                FRONTEND_CERTIFICATES_RELATION_NAME,
+                FRONTEND_CERTIFICATES_RELATION_NAME,
+            )
 
     def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent):
         logger.info("This app no longer has ingress")
@@ -622,19 +636,8 @@ class TemporalK8SCharm(CharmBase):
         # Only the frontend service can be exposed through ingress.
         if "frontend" not in self.config["services"]:
             raise ValueError("Not a frontend service, please remove ingress integration.")
-        # Without frontend TLS the charm advertises h2c. Traefik serves that
-        # fine; ingress-configurator/HAProxy cannot, and will not reach the
-        # backend. The provider is not identifiable from this side, so this is
-        # a warning rather than a blocking condition -- blocking would make the
-        # working Traefik topology impossible.
-        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
-            logger.warning(
-                "ingress is related without %s: advertising the h2c scheme. Providers that require "
-                "HTTP/2 over TLS to the backend (ingress-configurator with HAProxy) will not be able "
-                "to reach the frontend; integrate %s if you are using one of those.",
-                FRONTEND_CERTIFICATES_RELATION_NAME,
-                FRONTEND_CERTIFICATES_RELATION_NAME,
-            )
+        # Ingress without frontend-certificates is valid (h2c, e.g. Traefik);
+        # `_on_ingress_ready` warns about it once ingress is granted.
 
     def _open_service_ports(self):
         """Open the respective ports based on Temporal service."""
