@@ -147,8 +147,20 @@ any charm that implements it.
 
 * [traefik-k8s](https://charmhub.io/traefik-k8s) serves gRPC over cleartext HTTP/2, so it
   works **without** `frontend-certificates`: the charm advertises the `h2c` scheme and the
-  frontend stays plaintext, leaving in-model clients untouched. It is approaching
-  end-of-life and is not part of our test suite, so it is left to the user to configure.
+  frontend stays plaintext, leaving in-model clients untouched. Traefik must use
+  subdomain routing:
+
+  ```
+  juju config traefik-k8s routing_mode=subdomain
+  ```
+
+  With the default path routing, Traefik exposes the application under a
+  `/<model>-<application>` path prefix. A gRPC request's path is its service and method
+  name, so the prefix reaches the frontend and calls fail with
+  `grpc-status: 12 unknown service`; gRPC clients have no way to add the prefix. With
+  subdomain routing each application gets its own hostname and the path is left intact.
+  Traefik is approaching end-of-life and is not part of our test suite, so it is left to
+  the user to configure.
 * The [Gateway API Integrator](https://charmhub.io/gateway-api-integrator) implements the
   same interface, but gRPC over TLS additionally needs the gateway to negotiate the `h2`
   ALPN protocol. On Canonical Kubernetes the bundled Cilium gateway does not currently
