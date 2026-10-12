@@ -21,5 +21,6 @@ output "requires" {
     logging               = "logging"
     openfga               = "openfga"
     s3_paramaters         = "s3-parameters"
+    ingress               = "ingress"
   }
 }
