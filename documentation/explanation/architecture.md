@@ -49,8 +49,10 @@ The Temporal server charm acts as the provider, and any charm that needs to
 connect to the Temporal frontend service (such as the Temporal Admin, UI or
 Worker charms) can act as a requirer.
 
-The Temporal server publishes either the configured `external-hostname` or its
-pod IP address, along with the frontend gRPC port. Requirers receive these
+The Temporal server publishes its in-cluster service FQDN
+(`<app>.<model>.svc.cluster.local`), along with the frontend gRPC port. This is
+the address in-model clients use, and the name the frontend certificate carries
+by default. Requirers receive these
 details via the `temporal_host_info_changed` event emitted by the
 `TemporalHostInfoRequirer` charm library.
 

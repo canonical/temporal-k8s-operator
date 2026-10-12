@@ -43,7 +43,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 RELATION_NAME = "temporal-host-info"
 
@@ -58,6 +58,7 @@ class TemporalHostInfoProvider(Object):
         charm: CharmBase,
         port: int,
         tls: Union[Callable[[], bool], bool] = False,
+        host: Union[Callable[[], str], str, None] = None,
     ):
         """Create a new instance of the TemporalHostInfoProvider class.
 
@@ -71,11 +72,17 @@ class TemporalHostInfoProvider(Object):
             initialisation, which is the usual case since it depends on a
             certificates relation.
         :type tls: Union[Callable[[], bool], bool]
+        :param: host: The host requirers should dial, or a callable returning
+            it. Typically the frontend's in-cluster service FQDN, which the
+            frontend certificate can name. When omitted, the relation binding
+            address is published.
+        :type host: Union[Callable[[], str], str, None]
         """
         super().__init__(charm, "temporal_host_info_provider")
         self.charm = charm
         self.port = port
         self._get_tls = tls if callable(tls) else lambda: tls
+        self._get_host = host if callable(host) else lambda: host
         charm.framework.observe(charm.on[RELATION_NAME].relation_joined, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on[RELATION_NAME].relation_changed, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on.leader_elected, self._on_config_changed)
@@ -120,20 +127,20 @@ class TemporalHostInfoProvider(Object):
         self.publish()
 
     def _resolve_host(self, relation: Relation) -> str:
-        """Resolve host to external-hostname or relation binding address.
+        """Resolve host to the charm-supplied host or the relation binding address.
 
         :param: relation: The relation to resolve the host for.
         :type relation: Relation
         :returns: The resolved host string.
         :rtype: str
         """
-        host = str(self.charm.config["external-hostname"])
+        host = self._get_host() or ""
         if not host:
             binding = self.charm.model.get_binding(relation)
             if binding:
                 host = str(binding.network.bind_address)
         if not host:
-            logger.warning("Could not resolve host: external-hostname is not set and no binding address is available")
+            logger.warning("Could not resolve host: no host was supplied and no binding address is available")
         return host
 
 
