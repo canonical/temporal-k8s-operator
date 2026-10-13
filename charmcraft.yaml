@@ -15,11 +15,7 @@ parts:
     plugin: uv
     source: .
     uv-extras: [charm]
-    build-packages:
-      - libffi-dev
-      - libssl-dev
-      - pkg-config
-      - python3-venv
+    build-packages: []
     build-snaps:
       - astral-uv
   extras:
