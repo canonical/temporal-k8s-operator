@@ -871,9 +871,15 @@ class TemporalK8SCharm(CharmBase):
 
         Used while a renewal for a changed certificate request is pending. The
         files are removed when the frontend-certificates relation is broken.
+
+        This is also reached from the host-info and ingress libraries' own
+        handlers (via the `tls` and `scheme` callables), which can run before
+        Pebble is up; the files can't be checked then, so report not usable.
+        `_update` republishes both once the container is ready.
         """
         return (
             self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME)
+            and self.container.can_connect()
             and self._certificate_is_stored()
             and self._private_key_is_stored()
         )

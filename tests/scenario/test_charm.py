@@ -951,6 +951,30 @@ def test_ingress_scheme_follows_frontend_certificates_relation(
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_ingress_scheme_before_container_is_up(
+    context,
+    state,
+    nginx_route_relation,
+    traefik_ingress_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # The ingress library asks for the scheme from its own relation handlers,
+    # which can run before Pebble is up. With frontend-certificates related but
+    # no certificate issued yet, that must not try to read the stored files.
+    all_required_relations.remove(nginx_route_relation)
+    all_required_relations.append(traefik_ingress_relation)
+    all_required_relations.append(frontend_certificates_relation)
+    container = ops.testing.Container("temporal", can_connect=False)
+    state = dataclasses.replace(state, relations=all_required_relations, containers=[container])
+
+    new_state = context.run(context.on.relation_changed(traefik_ingress_relation), state)
+
+    app_data = new_state.get_relation(traefik_ingress_relation.id).local_app_data
+    assert json.loads(app_data["scheme"]) == "h2c"
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_ingress_with_nginx(
     context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation
 ):
