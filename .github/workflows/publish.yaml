@@ -30,9 +30,6 @@ jobs:
       - name: Update apt package index
         run: sudo apt-get update
 
-      - name: Install Rust build dependencies
-        run: sudo apt-get install -y cargo rustc
-
       - name: Upload charm package
         uses: canonical/charming-actions/upload-charm@2.7.0
         with:

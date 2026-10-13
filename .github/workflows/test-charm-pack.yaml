@@ -1,0 +1,21 @@
+name: Test charm packaging
+
+on:
+  pull_request:
+    branches:
+      - track/1.31
+
+jobs:
+  pack:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Charmcraft
+        run: sudo snap install charmcraft --classic --channel 4.x/stable
+
+      - name: Update apt package index
+        run: sudo apt-get update
+
+      - name: Pack charm
+        run: sudo charmcraft pack --verbose --destructive-mode
