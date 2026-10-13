@@ -22,6 +22,12 @@ jobs:
       - name: Update apt package index
         run: sudo apt-get update
 
-      - name: Test packaging after apt update
-        if: steps.before.outcome == 'failure'
+      - name: Check Rust packages
+        run: |
+          apt-cache policy cargo rustc
+
+      - name: Install Rust packages
+        run: sudo apt-get install -y cargo rustc
+
+      - name: Pack charm
         run: sudo charmcraft pack --verbose --destructive-mode
