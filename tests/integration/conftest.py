@@ -27,6 +27,7 @@ TEMPORAL_CHANNEL = "1.29/edge"
 ADMIN_CHANNEL = "1.30/edge"
 POSTGRESQL_CHANNEL = "14/stable"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/stable"
+UI_CHANNEL = "1.23/edge"
 
 
 @pytest_asyncio.fixture(scope="module", name="charm")
@@ -58,7 +59,7 @@ async def deploy(ops_test: OpsTest, charm: str):
             },
         ),
         ops_test.model.deploy(APP_NAME_ADMIN, channel=ADMIN_CHANNEL),
-        ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL),
+        ops_test.model.deploy(APP_NAME_UI, channel=UI_CHANNEL),
         ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True),
         ops_test.model.deploy("self-signed-certificates", channel=SELF_SIGNED_CERTIFICATES_CHANNEL),
     )
