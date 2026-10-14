@@ -21,7 +21,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-TEMPORAL_CHANNEL = "1.23/edge"
+TEMPORAL_CHANNEL = "1.24/edge"
 # The local 1.25 server only leaves Blocked once admin publishes a matching
 # migrated_workload_version, so tests running the local charm need a 1.25 admin.
 ADMIN_CHANNEL = "1.25/edge"
