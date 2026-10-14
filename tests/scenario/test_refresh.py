@@ -23,7 +23,7 @@ def server_state(peer_relation, admin_relation, temporal_container, network):
 
 @pytest.mark.parametrize("leader", [True, False])
 @pytest.mark.parametrize(
-    "status,version", [("ready", "1.23.1"), ("ready", ""), ("migrating", "1.26.3"), ("failed", "")]
+    "status,version", [("ready", "1.25.2"), ("ready", ""), ("migrating", "1.26.3"), ("failed", "")]
 )
 def test_pending_schema_waits_and_does_not_start_server(
     server_state, admin_relation, temporal_container, context, leader, status, version
