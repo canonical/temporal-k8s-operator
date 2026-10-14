@@ -15,7 +15,6 @@ parts:
     plugin: uv
     source: .
     uv-extras: [charm]
-    build-packages: []
     build-snaps:
       - astral-uv
   extras:
