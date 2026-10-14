@@ -201,6 +201,17 @@ def test_charm_ready(context, state, temporal_container, admin_relation):
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_replan_failure_does_not_fail_hook(context, state, temporal_container, admin_relation):
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+
+    error = ops.pebble.ChangeError("cannot start service", MagicMock(tasks=[]))
+    with unittest.mock.patch.object(ops.model.Container, "replan", side_effect=error):
+        state_final = context.run(context.on.relation_changed(admin_relation), state_out)
+
+    assert state_final.unit_status == ops.BlockedStatus("failed to start temporal server; check logs")
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_blocked_by_setting_new_num_history_shards(context, state):
     state_intermediate = context.run(context.on.update_status(), state)
 
