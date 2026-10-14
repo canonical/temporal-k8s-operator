@@ -840,7 +840,12 @@ class TemporalK8SCharm(CharmBase):
             },
         }
         container.add_layer(self.name, pebble_layer, combine=True)
-        container.replan()
+        try:
+            container.replan()
+        except pebble.ChangeError as err:
+            logger.error("failed to start temporal server: %s", err)
+            self.unit.status = BlockedStatus("failed to start temporal server; check logs")
+            return
 
         self.unit.status = MaintenanceStatus("replanning application")
 
