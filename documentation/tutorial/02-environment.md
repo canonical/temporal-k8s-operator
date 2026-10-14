@@ -8,7 +8,7 @@ Please refer to this page for more information and the overview of the content.
 
 Before we start, make sure your machine meets the following requirements:
 
-- A machine running Ubuntu 22.04 (Jammy) or later. Machines running other
+- A machine running Ubuntu 24.04 (Noble), Ubuntu 26.04 (Resolute), or later. Machines running other
   operating systems may opt for the use of
   [Multipass](https://multipass.run/docs). A simple set of instructions to set
   up Multipass can be found
@@ -18,19 +18,58 @@ Before we start, make sure your machine meets the following requirements:
 - At least 20GB of available storage.
 - Access to the internet for downloading the required snaps and charms.
 
-## Install Kubernetes and bootstrap Juju
+## Install Canonical Kubernetes
 
-Charmed Temporal is deployed to Kubernetes using Juju. Before deployment, you need:
+On your machine, install and configure Canonical Kubernetes (K8s):
 
-1.  **A running Kubernetes cluster**:  Canonical K8s is our preference. See [Canonical Kubernetes documentation](https://documentation.ubuntu.com/canonical-kubernetes/release-1.32/snap/howto/install/snap/) for installation instructions.
+```bash
+sudo snap install k8s --classic
 
-2. **Juju bootstrapped to your cluster**. See [Get started with Juju](https://documentation.ubuntu.com/juju/3.6/tutorial/) for more details.
+sudo k8s bootstrap
+```
 
-[note]
+Wait until the `k8s` cluster is in `Ready` state. You can check it as follows:
 
-Our recommendation is bootstrapping Juju on a Canonical K8s cluster. See [Canonical K8s cloud and Juju](https://documentation.ubuntu.com/juju/3.6/reference/cloud/list-of-supported-clouds/the-canonical-ks-cloud-and-juju/) and the [bootstrap command reference](https://documentation.ubuntu.com/juju/3.6/reference/juju-cli/list-of-juju-cli-commands/bootstrap/) for more details.
+```
+sudo k8s status --wait-ready
+```
+Install kubectl and write `kubeconfig` for the current user:
 
-[/note]
+```
+sudo snap install kubectl --classic
+mkdir -p ~/.kube
+sudo k8s config > ~/.kube/config
+```
+
+## Set up Juju
+
+Install Juju as follows:
+
+```
+sudo snap install juju --channel=3.6/stable
+```
+
+Register your Canonical K8s cluster with Juju as a cloud named `ck8s`:
+
+```
+juju add-k8s ck8s
+```
+
+Confirm the new cloud entry is present:
+
+```
+juju clouds
+# >>> Cloud      Regions  Default    Type  Credentials  Source    Description
+# >>> ck8s       0                   k8s   1            local     A Kubernetes Cluster
+# >>> k8s        0                   k8s   0            built-in  A local Kubernetes context
+# >>> localhost  1        localhost  lxd   0            built-in  LXD Container Hypervisor
+```
+
+Install a Juju controller into your `ck8s` cloud. You can name it `temporal-controller`:
+
+```
+juju bootstrap ck8s temporal-controller
+```
 
 ## Create the Temporal Model
 

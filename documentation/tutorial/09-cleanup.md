@@ -21,23 +21,26 @@ juju destroy-controller -y --destroy-all-models --destroy-storage temporal-contr
 _Warning: when you remove the models as shown, you will lose all the data in
 PostgreSQL and any other applications inside the model!_
 
+[note]
+If you followed the [cross-model deployment](https://charmhub.io/temporal-k8s/docs/t-deploy-worker) path and created a separate `temporal-workers-model`, the `--destroy-all-models` flag above tears down both models on the controller in one go. No additional cleanup is needed.
+[/note]
+
 ## Next Steps
 
 If you’re looking for what to do next you can:
 
+- [Configure the Temporal worker](https://charmhub.io/temporal-k8s/docs/h-configure-temporal-worker) for production: `auth-secret-id`, environment variables, Vault, TLS, Sentry, and the PostgreSQL relation.
+- [Upgrade an existing deployment from `latest/stable` to `1.23/stable`](https://charmhub.io/temporal-k8s/docs/h-upgrade-1.23/stable).
 - Explore Temporal
-  [scalability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-scaling/10840)
+  [scalability](https://charmhub.io/temporal-k8s/docs/h-scaling)
   and
-  [observability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787).
-- Explore
-  Temporal client authentication and encryption:
-    - [Python](https://github.com/canonical/temporal-lib-py)
-    - [Go](https://github.com/canonical/temporal-lib-go)
-- Explore [workflow samples](https://github.com/temporalio/samples-python)
+  [observability](https://charmhub.io/temporal-k8s/docs/h-observability).
+- Explore [Temporal client authentication and encryption](https://pypi.org/project/temporal-lib-py/).
+- Explore [workflow samples](https://github.com/temporalio/samples-python).
 - Report any problems you encountered for any of the following charms:
   - [Temporal Server](https://github.com/canonical/temporal-k8s-operator/issues)
   - [Temporal Admin](https://github.com/canonical/temporal-admin-k8s-operator/issues)
   - [Temporal Web UI](https://github.com/canonical/temporal-ui-k8s-operator/issues)
   - [Temporal Worker](https://github.com/canonical/temporal-worker-k8s-operator/issues)
-- [Give us your feedback.](https://discourse.charmhub.io/t/temporal-server-documentation-overview/8948)
+- [Give us your feedback.](https://charmhub.io/temporal-k8s/docs)
 - [Contribute to the code base.](https://github.com/canonical/temporal-k8s-operator/issues)

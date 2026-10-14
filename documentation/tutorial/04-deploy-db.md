@@ -34,9 +34,9 @@ Wait until the application is ready - when it is ready, `juju status` will show:
 Model           Controller           Cloud/Region  Version  SLA          Timestamp
 temporal-model  temporal-controller  ck8s          3.6.9    unsupported  22:32:26Z
 
-App             Version  Status   Scale  Charm           Channel        Rev  Address         Exposed  Message
-postgresql-k8s  14.15    active       1  postgresql-k8s  14/stable      495  10.152.183.200  no
-temporal-k8s             blocked      1  temporal-k8s    latest/stable   43  10.152.183.120  no       database relation not ready
+App             Version  Status   Scale  Charm           Channel       Rev  Address         Exposed  Message
+postgresql-k8s  14.15    active       1  postgresql-k8s  14/stable     495  10.152.183.200  no
+temporal-k8s             blocked      1  temporal-k8s    1.31/stable    68  10.152.183.120  no       database relation not ready
 
 Unit               Workload  Agent  Address     Ports  Message
 postgresql-k8s/0*  active    idle   10.1.0.36          Primary
@@ -45,12 +45,12 @@ temporal-k8s/0*    blocked   idle   10.1.0.152         database relation not rea
 ## Create relations
 
 Temporal requires two PostgreSQL relations: `db` and `visibility`.
-```
-juju relate temporal-k8s:db postgresql-k8s:database
-juju relate temporal-k8s:visibility postgresql-k8s:database
+```bash
+juju integrate temporal-k8s:db          postgresql-k8s:database
+juju integrate temporal-k8s:visibility  postgresql-k8s:database
 ```
 Check relations:
-```
+```bash
 juju status --relations
 ```
 Wait until the application is ready. Once it is ready, it shows the following:
@@ -59,9 +59,9 @@ Wait until the application is ready. Once it is ready, it shows the following:
 Model           Controller           Cloud/Region  Version  SLA          Timestamp
 temporal-model  temporal-controller  ck8s          3.6.9    unsupported  22:35:07Z
 
-App             Version  Status   Scale  Charm           Channel        Rev  Address         Exposed  Message
-postgresql-k8s  14.15    active       1  postgresql-k8s  14/stable      495  10.152.183.200  no
-temporal-k8s             blocked      1  temporal-k8s    latest/stable   43  10.152.183.120  no       admin:temporal relation: schema is not ready
+App             Version  Status   Scale  Charm           Channel       Rev  Address         Exposed  Message
+postgresql-k8s  14.15    active       1  postgresql-k8s  14/stable     495  10.152.183.200  no
+temporal-k8s             blocked      1  temporal-k8s    1.31/stable    68  10.152.183.120  no       admin:temporal relation: schema is not ready
 
 Unit               Workload  Agent  Address     Ports  Message
 postgresql-k8s/0*  active    idle   10.1.0.36          Primary
@@ -80,6 +80,12 @@ temporal-k8s:peer              temporal-k8s:peer              temporal          
 At this point, the server may still show that the schema is not ready. This is expected.
 The schema will be created after deploying and relating Temporal Admin in the next step.
 [/note]
+
+## Production note: PgBouncer
+
+For production deployments, consider placing [`pgbouncer-k8s`](https://charmhub.io/pgbouncer-k8s) between Temporal and PostgreSQL for connection pooling. PgBouncer mediates connections from Temporal to the database, which reduces connection churn under load.
+
+PgBouncer is not required for this tutorial, but operators planning a production deployment should review the [Server Upgrades](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-server-upgrades/13105) how-to guide for the recommended cut-over procedure.
 
 > **See next:
 > [Deploy Temporal Admin](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)**
