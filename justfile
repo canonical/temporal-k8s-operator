@@ -30,4 +30,8 @@ get-system-state:
     echo "---"
     juju status --relations --storage --color || true
     echo "---"
+    kubectl get pods -A || true
+    echo "---"
+    kubectl get events -A --sort-by=.lastTimestamp | tail -n 100 || true
+    echo "---"
     sudo k8s status || true

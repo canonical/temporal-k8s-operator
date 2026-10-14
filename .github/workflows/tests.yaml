@@ -110,8 +110,18 @@ jobs:
 
           sudo k8s kubectl config view --raw > ~/.kube/config
 
+      # The ~830MB workload image is pulled from ghcr.io; time out the pull here, not inside a test.
+      - name: Pre-pull workload image
+        run: |
+          image=$(awk '/upstream-source:/ {print $2; exit}' metadata.yaml)
+          for attempt in 1 2 3 4 5; do
+            sudo /snap/k8s/current/bin/ctr -n k8s.io images pull "$image" && exit 0
+            sleep 15
+          done
+          exit 1
+
       - name: Run integration tests
-        run: just integration tests/integration/${{ matrix.test }}.py
+        run: just integration tests/integration/${{ matrix.test }}.py --keep-models
 
       - name: Get system state (if failure)
         if: failure()
