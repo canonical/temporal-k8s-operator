@@ -1,0 +1,118 @@
+name: Tests
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  alertmanager-rules-lint:
+    name: Alertmanager rules lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Prometheus
+        run: sudo snap install prometheus
+
+      - name: Run promtool checks on Prometheus alert definitions
+        run: promtool check rules $(find "$PWD" -name "*_rules.yaml")
+
+  lib-check:
+    name: Check libraries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - name: Check libraries
+        id: checklibs
+        uses: canonical/charming-actions/check-libraries@2.7.0
+        with:
+          credentials: "${{ secrets.CHARMHUB_TOKEN }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          charm-path: "."
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo snap install astral-uv --classic
+          sudo snap install just --classic
+
+      - name: Run lint
+        run: just lint
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo snap install astral-uv --classic
+          sudo snap install just --classic
+
+      - name: Run unit tests
+        run: just unit
+
+  integration-tests:
+    name: Integration tests (${{ matrix.test }})
+    # The charm and its tests are built for Ubuntu 24.04 and Python 3.12.
+    runs-on: [self-hosted-linux-amd64-noble-large]
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - test_auth
+          - test_charm
+          - test_host_info
+          - test_pgbouncer
+          - test_scaling
+          - test_server_upgrade
+          - test_upgrades
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo snap install concierge --classic
+
+          sudo concierge prepare \
+            -p k8s \
+            --juju-channel 3.6/stable \
+            --charmcraft-channel 4.x/stable \
+            --extra-snaps="astral-uv,just,kubectl"
+
+          sudo k8s kubectl config view --raw > ~/.kube/config
+
+      - name: Run integration tests
+        run: just integration tests/integration/${{ matrix.test }}.py
+
+      - name: Get system state (if failure)
+        if: failure()
+        run: just get-system-state
