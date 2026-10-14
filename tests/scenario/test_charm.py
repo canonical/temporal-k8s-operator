@@ -819,7 +819,7 @@ def test_blocked_on_two_ingresses(
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-def test_ingress_without_frontend_certificates_blocks(
+def test_ingress_without_frontend_certificates_advertises_h2c(
     context,
     state,
     temporal_container,
@@ -829,8 +829,8 @@ def test_ingress_without_frontend_certificates_blocks(
     traefik_ingress_relation,
     all_required_relations,
 ):
-    # Swap the nginx-route relation for a traefik / gateway-api-integrator
-    # ingress relation so the single-ingress-solution constraint is satisfied.
+    # Swap the nginx-route relation for a traefik ingress relation so the
+    # single-ingress-solution constraint is satisfied.
     all_required_relations.remove(nginx_route_relation)
     all_required_relations.append(traefik_ingress_relation)
     state = dataclasses.replace(state, relations=all_required_relations)
@@ -840,12 +840,21 @@ def test_ingress_without_frontend_certificates_blocks(
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
 
-    # The supported ingress providers can't use h2c to the backend, so ingress
-    # without frontend-certificates must block rather than advertise h2c.
-    new_state = context.run(context.on.relation_changed(traefik_ingress_relation), new_state)
-    assert new_state.unit_status == ops.BlockedStatus(
-        f"ingress relation requires {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
-    )
+    # Without frontend TLS the frontend speaks plaintext HTTP/2, so h2c is what
+    # the charm must advertise. Providers that can serve it (Traefik) then work
+    # with no certificates at all; the charm must not block the combination.
+    #
+    # Fetch the current relation object from the state before emitting so the
+    # scenario consistency check sees the in-state instance: the charm has
+    # already written the ingress app databag by this point, so the fixture
+    # instance no longer matches what is in the state.
+    ingress = new_state.get_relations("ingress")[0]
+    new_state = context.run(context.on.relation_changed(ingress), new_state)
+
+    assert not isinstance(new_state.unit_status, ops.BlockedStatus)
+    ingress_app_data = "".join(new_state.get_relations("ingress")[0].local_app_data.values())
+    assert "h2c" in ingress_app_data
+    assert "https" not in ingress_app_data
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -875,12 +884,94 @@ def test_ingress_with_frontend_certificates_advertises_https(
     # Fetch the current relation object from the state before emitting so the
     # scenario consistency check sees the in-state instance.
     ingress = new_state.get_relations("ingress")[0]
-    new_state = context.run(context.on.relation_changed(ingress), new_state)
+    # The scheme follows the certificate actually being issued, not merely the
+    # relation existing, so the frontend is never advertised as https while it
+    # is still serving plaintext.
+    with unittest.mock.patch("charm.TemporalK8SCharm._certificate_is_available", return_value=True):
+        new_state = context.run(context.on.relation_changed(ingress), new_state)
 
     assert new_state.unit_status != ops.BlockedStatus("Not a frontend service, please remove ingress integration.")
     # With frontend TLS configured, the advertised scheme is https.
     ingress_app_data = "".join(new_state.get_relations("ingress")[0].local_app_data.values())
     assert "https" in ingress_app_data
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_ingress_scheme_follows_frontend_certificates_relation(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    nginx_route_relation,
+    traefik_ingress_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # The ingress library doesn't observe the certificates relation, so
+    # `_update` re-sends the ingress requirements on its events. The advertised
+    # scheme must flip to https when frontend-certificates joins with an issued
+    # certificate, and back to h2c when the relation is broken -- without any
+    # ingress relation event.
+    all_required_relations.remove(nginx_route_relation)
+    all_required_relations.append(traefik_ingress_relation)
+    state = dataclasses.replace(state, relations=all_required_relations)
+
+    def scheme(state_out):
+        """Return the scheme the charm advertised on the ingress relation.
+
+        Args:
+            state_out: The state after the charm ran.
+
+        Returns:
+            The advertised scheme.
+        """
+        app_data = state_out.get_relation(traefik_ingress_relation.id).local_app_data
+        return json.loads(app_data["scheme"])
+
+    new_state = context.run(context.on.pebble_ready(temporal_container), state)
+    new_state = context.run(context.on.relation_changed(admin_relation), new_state)
+    assert scheme(new_state) == "h2c"
+
+    # Each step starts from the initialized container: after a replan the
+    # container's plan and check infos no longer match.
+    new_state = dataclasses.replace(
+        new_state,
+        containers=[temporal_container_initialized],
+        relations=new_state.relations | {frontend_certificates_relation},
+    )
+    with unittest.mock.patch("charm.TemporalK8SCharm._certificate_is_available", return_value=True):
+        new_state = context.run(context.on.relation_joined(frontend_certificates_relation), new_state)
+    assert scheme(new_state) == "https"
+
+    new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
+    frontend_certificates = new_state.get_relation(frontend_certificates_relation.id)
+    new_state = context.run(context.on.relation_broken(frontend_certificates), new_state)
+    assert scheme(new_state) == "h2c"
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_ingress_scheme_before_container_is_up(
+    context,
+    state,
+    nginx_route_relation,
+    traefik_ingress_relation,
+    frontend_certificates_relation,
+    all_required_relations,
+):
+    # The ingress library asks for the scheme from its own relation handlers,
+    # which can run before Pebble is up. With frontend-certificates related but
+    # no certificate issued yet, that must not try to read the stored files.
+    all_required_relations.remove(nginx_route_relation)
+    all_required_relations.append(traefik_ingress_relation)
+    all_required_relations.append(frontend_certificates_relation)
+    container = ops.testing.Container("temporal", can_connect=False)
+    state = dataclasses.replace(state, relations=all_required_relations, containers=[container])
+
+    new_state = context.run(context.on.relation_changed(traefik_ingress_relation), state)
+
+    app_data = new_state.get_relation(traefik_ingress_relation.id).local_app_data
+    assert json.loads(app_data["scheme"]) == "h2c"
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
