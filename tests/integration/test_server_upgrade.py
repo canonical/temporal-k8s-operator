@@ -9,7 +9,7 @@ import time
 
 import pytest
 import pytest_asyncio
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL, UI_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -44,7 +44,7 @@ async def deploy(ops_test: OpsTest):
             channel=TEMPORAL_CHANNEL,
             resources={"temporal-admin-image": "temporalio/admin-tools:1.20.0"},
         ),
-        ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL),
+        ops_test.model.deploy(APP_NAME_UI, channel=UI_CHANNEL),
         ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True),
     )
 
