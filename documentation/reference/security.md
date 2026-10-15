@@ -10,8 +10,8 @@ Charmed Temporal can terminate the Transport Layer Security (TLS) at the ingress
 by leveraging the
 [Nginx Ingress Integrator Charm](https://charmhub.io/nginx-ingress-integrator)
 as outlined in
-[this page](https://charmhub.io/temporal-k8s/docs/t-deploy-ingress) of the
-tutorial.
+[this page](https://charmhub.io/temporal-k8s/docs/h-deploy-ingress) of the
+how-to guides.
 
 ## Authentication
 
