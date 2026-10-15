@@ -31,6 +31,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Effective configuration for the run. The inputs context is only populated
+# for workflow_call / workflow_dispatch runs; on pull_request it is empty, so
+# each input is resolved here with a fallback matching its declared default.
+env:
+  JUJU_CHANNEL: ${{ inputs.juju-channel || '3.6/stable' }}
+  CONCIERGE_CONFIG: ${{ inputs.concierge-config || '.github/workflows/concierge.yaml' }}
+  POSTGRESQL_CHANNEL: ${{ inputs.postgres-channel || '14/stable' }}
+  POSTGRESQL_FORCE: ${{ inputs.postgres-force || false }}
+
 jobs:
   # The lint/unit/lib-check jobs are skipped when this workflow is invoked on a
   # schedule (e.g. nightly-juju4.yaml): the nightly run is integration-test
@@ -131,16 +140,13 @@ jobs:
 
           sudo concierge prepare \
             -p k8s \
-            --juju-channel ${{ inputs.juju-channel }} \
+            --juju-channel $JUJU_CHANNEL \
             --charmcraft-channel 4.x/stable \
             --extra-snaps="astral-uv,just,kubectl"
 
           sudo k8s kubectl config view --raw > ~/.kube/config
 
       - name: Run integration tests
-        env:
-          POSTGRESQL_CHANNEL: ${{ inputs.postgres-channel }}
-          POSTGRESQL_FORCE: ${{ inputs.postgres-force }}
         run: just integration tests/integration/${{ matrix.test }}.py
 
       - name: Upload Juju debug logs
@@ -177,14 +183,11 @@ jobs:
           # in concierge.yaml instead and installed by `concierge prepare`.
           sudo snap install concierge --classic
 
-          sudo concierge prepare -c ${{ inputs.concierge-config }}
+          sudo concierge prepare -c $CONCIERGE_CONFIG
 
           sudo k8s kubectl config view --raw > ~/.kube/config
 
       - name: Run ingress integration test
-        env:
-          POSTGRESQL_CHANNEL: ${{ inputs.postgres-channel }}
-          POSTGRESQL_FORCE: ${{ inputs.postgres-force }}
         run: just integration tests/integration/test_ingress.py
 
       - name: Upload Juju debug logs
