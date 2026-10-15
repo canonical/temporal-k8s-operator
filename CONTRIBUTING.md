@@ -21,20 +21,19 @@ tox                  # runs 'lint' and 'unit' environments
 
 ### Committing
 
-This repo uses CI/CD workflows as outlined by
-[operator-workflows](https://github.com/canonical/operator-workflows). The four
-workflows are as follows:
+This repo uses team-owned CI/CD workflows (see `.github/workflows`). Each job
+runs the same `just` recipes you can run locally (`just lint`, `just unit`,
+`just integration tests/integration/<module>.py`). The workflows are as follows:
 
-- `test.yaml`: This is a series of tests including linting, unit tests and
-  library checks which run on every pull request.
-- `integration_test.yaml`: This runs the suite of integration tests included
-  with the charm and runs on every pull request.
-- `publish_charm.yaml`: This runs on every push to the main branch. Once a PR is
-  merged with one of these branches, this workflow runs to ensure the tests have
-  passed before building the charm and publishing the new version to the edge
-  channel on Charmhub.
-- `promote_charm.yaml`: This is a manually triggered workflow which publishes
-  the charm currently on the edge channel to the stable channel on Charmhub.
+- `tests.yaml`: This runs alert rules linting, library checks, linting, unit
+  tests and the integration tests (one job per test module) on every pull
+  request.
+- `publish.yaml`: This runs on every push to a `track/**` branch. Once a PR is
+  merged with one of these branches, this workflow runs `tests.yaml` to ensure
+  the tests have passed before building the charm and publishing the new
+  version to the edge channel on Charmhub.
+- `promote.yaml`: This is a manually triggered workflow which publishes the
+  charm currently on the edge channel to the stable channel on Charmhub.
 
 These tests validate extensive linting and formatting rules. Before creating a
 PR, please run `tox` to ensure proper formatting and linting is performed.
