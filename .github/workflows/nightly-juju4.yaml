@@ -13,7 +13,8 @@
 #   - postgresql-k8s channel: 16/stable (14/stable does not support juju 4)
 #   - postgresql-k8s deployed with --force to bypass base checks until the
 #     charm formally declares Juju 4 support
-#   - ingress test provisions k8s+lxd from concierge-juju4.yaml
+#   - ingress test provisions k8s+lxd from concierge.yaml, overriding the
+#     Juju channel via concierge's --juju-channel flag
 #
 # The regular CI (pull_request trigger of tests.yaml / Juju 3.x) is unaffected.
 
@@ -21,8 +22,8 @@ name: Juju 4.x Tests
 
 on:
   schedule:
-    # Run at 02:00 UTC every day
-    - cron: '0 2 * * *'
+    # Run at 02:17 UTC every day
+    - cron: '17 2 * * *'
   workflow_dispatch:
     inputs:
       create-issues:
@@ -30,10 +31,6 @@ on:
         required: false
         type: boolean
         default: false
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   tests:
@@ -46,7 +43,6 @@ jobs:
     secrets: inherit
     with:
       juju-channel: "4/edge"
-      concierge-config: ".github/workflows/concierge-juju4.yaml"
       postgres-channel: "16/stable"
       postgres-force: true
 
@@ -56,7 +52,7 @@ jobs:
 
   report:
     name: Report results
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [tests]
     if: >-
       always() && needs.tests.result != 'cancelled' &&
