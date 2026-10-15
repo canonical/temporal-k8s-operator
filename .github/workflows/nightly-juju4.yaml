@@ -1,0 +1,95 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Nightly integration tests against Juju 4.x.
+#
+# This is a parallel CI pipeline that reuses the jobs in tests.yaml via
+# workflow_call (so the test matrix and steps stay in one place) but targets
+# the latest edge Juju 4.x release. It runs nightly so the team can spot Juju 4
+# compatibility issues early and report them to the Juju team.
+#
+# Key differences vs a pull_request run of tests.yaml:
+#   - Juju channel: 4/edge (instead of 3.6/stable)
+#   - postgresql-k8s channel: 16/stable (14/stable does not support juju 4)
+#   - postgresql-k8s deployed with --force to bypass base checks until the
+#     charm formally declares Juju 4 support
+#   - ingress test provisions k8s+lxd from concierge-juju4.yaml
+#
+# The regular CI (pull_request trigger of tests.yaml / Juju 3.x) is unaffected.
+
+name: Juju 4.x Tests
+
+on:
+  schedule:
+    # Run at 02:00 UTC every day
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      create-issues:
+        description: Create/update GitHub issues for failures (always on for scheduled runs)
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Test suite [juju 4.x]
+    uses: ./.github/workflows/tests.yaml
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    secrets: inherit
+    with:
+      juju-channel: "4/edge"
+      concierge-config: ".github/workflows/concierge-juju4.yaml"
+      postgres-channel: "16/stable"
+      postgres-force: true
+
+  # Report the scheduled nightly run as a single GitHub issue so the team has
+  # a visible, assignable record to triage: the issue is created on the first
+  # failure and commented on repeat failures.
+
+  report:
+    name: Report results
+    runs-on: ubuntu-latest
+    needs: [tests]
+    if: >-
+      always() && needs.tests.result != 'cancelled' &&
+      (github.event_name == 'schedule' || inputs.create-issues)
+    permissions:
+      issues: write
+    steps:
+      - name: Create or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TEST_RESULT: ${{ needs.tests.result }}
+        run: |
+          set -euo pipefail
+
+          if [ "$TEST_RESULT" != "failure" ]; then
+            echo "Tests did not fail; nothing to report."
+            exit 0
+          fi
+
+          existing=$(gh issue list -R "$GITHUB_REPOSITORY" \
+            --label juju-4 --state open --limit 1 \
+            --json number --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" -R "$GITHUB_REPOSITORY" \
+              --body "Juju 4 run failed: $RUN_URL"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" \
+              --label juju-4 --label bug \
+              --title "Juju 4 integration tests failing" \
+              --body "The Juju 4 tests failed. Please investigate.
+
+          Workflow run: $RUN_URL"
+          fi
+

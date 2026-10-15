@@ -10,7 +10,7 @@ import time
 import jubilant
 import pytest
 import requests
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import POSTGRESQL_CHANNEL, POSTGRESQL_FORCE, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -35,7 +35,9 @@ def deploy(juju: jubilant.Juju):
     juju.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1})
     juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
     juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, revision=381)
+    # revision=381 pins a 14/stable revision; it is only valid while
+    # POSTGRESQL_CHANNEL is on the 14 track. Revisit when unskipping TestUpgrade.
+    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, revision=381, force=POSTGRESQL_FORCE)
 
     with fast_forward(juju):
         wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=600)
