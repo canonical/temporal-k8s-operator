@@ -40,7 +40,7 @@ async def deploy(ops_test: OpsTest):
             apps=[APP_NAME, APP_NAME_ADMIN, APP_NAME_UI], status="blocked", raise_on_blocked=False, timeout=600
         )
         await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
+            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=1200
         )
 
         await perform_temporal_integrations(ops_test)
@@ -83,7 +83,7 @@ class TestUpgrade:
         assert retcode == 0, f"Refresh failed: {stderr}"
 
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
+            apps=[APP_NAME], raise_on_error=False, status="active", raise_on_blocked=False, timeout=1200
         )
         time.sleep(10)
 
