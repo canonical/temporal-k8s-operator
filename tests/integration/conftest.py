@@ -4,6 +4,7 @@
 """Temporal charm integration test config."""
 
 import logging
+import os
 import pathlib
 
 import jubilant
@@ -26,7 +27,15 @@ logger = logging.getLogger(__name__)
 TEMPORAL_CHANNEL = "1.31/edge"
 # 1.31/edge also has an old 24.04 admin that never publishes migrated_workload_version.
 ADMIN_BASE = "ubuntu@26.04"
-POSTGRESQL_CHANNEL = "14/stable"
+# Allow overriding via environment variable for Juju 4.x nightly tests, which require
+# postgresql-k8s 16/stable (14/stable does not support juju 4.x).
+POSTGRESQL_CHANNEL = os.getenv("POSTGRESQL_CHANNEL") or "14/stable"
+# When set, deploy postgresql-k8s with force=True to bypass base checks.
+# Required when postgresql-k8s has not yet declared explicit support for juju 4.x.
+POSTGRESQL_FORCE = (os.getenv("POSTGRESQL_FORCE") or "").lower() in ("1", "true", "yes")
+# postgresql-k8s 14/stable (ubuntu@22.04) exposes the TLS relation as "certificates";
+# 16/stable (ubuntu@24.04) renamed it to "client-certificates".
+POSTGRESQL_TLS_ENDPOINT = "client-certificates" if POSTGRESQL_CHANNEL.startswith("16") else "certificates"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "1/stable"
 
 
@@ -73,13 +82,13 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
     )
     juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL, base=ADMIN_BASE)
     juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True)
+    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, force=POSTGRESQL_FORCE)
     juju.deploy("self-signed-certificates", channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
 
     with fast_forward(juju):
         wait_active(juju, "postgresql-k8s", "self-signed-certificates", timeout=1200)
 
-        juju.integrate("postgresql-k8s:certificates", "self-signed-certificates:certificates")
+        juju.integrate(f"postgresql-k8s:{POSTGRESQL_TLS_ENDPOINT}", "self-signed-certificates:certificates")
         wait_active(juju, "postgresql-k8s", "self-signed-certificates", timeout=1200)
 
         wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=600)

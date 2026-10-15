@@ -35,12 +35,18 @@ def log_event_handler(logger):
 
             Returns:
                 Decorated method.
+
+            Raises:
+                Exception: Re-raised from the wrapped method after it is logged.
             """
-            logger.info(f"* running {self.__class__.__name__}.{method.__name__}")
+            logger.info("* running %s.%s", self.__class__.__name__, method.__name__)
             try:
                 return method(self, event)
+            except Exception:
+                logger.exception("unhandled exception in %s.%s", self.__class__.__name__, method.__name__)
+                raise
             finally:
-                logger.info(f"* completed {self.__class__.__name__}.{method.__name__}")
+                logger.info("* completed %s.%s", self.__class__.__name__, method.__name__)
 
         return decorated
 

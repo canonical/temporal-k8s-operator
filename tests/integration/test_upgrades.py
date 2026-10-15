@@ -12,7 +12,7 @@ from pathlib import Path
 import jubilant
 import pytest
 import requests
-from conftest import ADMIN_BASE, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import ADMIN_BASE, POSTGRESQL_CHANNEL, POSTGRESQL_FORCE, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -77,7 +77,7 @@ def deploy(juju: jubilant.Juju):
     )
 
     juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, base="ubuntu@22.04")
+    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, base="ubuntu@22.04", force=POSTGRESQL_FORCE)
 
     with fast_forward(juju):
         wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=1800)
