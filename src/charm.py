@@ -840,14 +840,27 @@ class TemporalK8SCharm(CharmBase):
             },
         }
         container.add_layer(self.name, pebble_layer, combine=True)
+        if not self._replan(container):
+            return
+
+        self.unit.status = MaintenanceStatus("replanning application")
+
+    def _replan(self, container) -> bool:
+        """Replan the workload, blocking the unit instead of failing the hook if it cannot start.
+
+        Args:
+            container: The Temporal workload container.
+
+        Returns:
+            True if the replan succeeded, False otherwise.
+        """
         try:
             container.replan()
         except pebble.ChangeError as err:
             logger.error("failed to start temporal server: %s", err)
             self.unit.status = BlockedStatus("failed to start temporal server; check logs")
-            return
-
-        self.unit.status = MaintenanceStatus("replanning application")
+            return False
+        return True
 
     # Helpers for frontend TLS
     def _relation_created(self, relation_name: str) -> bool:
