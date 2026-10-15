@@ -58,4 +58,5 @@ avoid any breaking changes.
 | Temporal Server Charm Revision | Temporal Admin Charm Revision | Temporal Server Version |
 | :----------------------------: | :---------------------------: | :---------------------: |
 |             20-24              |              8-9              |         v1.21.5         |
-|              25-               |              10-              |         v1.23.1         |
+|             25-68              |             10-27             |         v1.23.1         |
+|              69-               |              28-              |         v1.31.2         |

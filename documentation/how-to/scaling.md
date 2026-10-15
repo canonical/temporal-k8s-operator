@@ -24,9 +24,11 @@ juju deploy temporal-k8s --config services="frontend"
 juju deploy temporal-k8s --config services="matching" temporal-k8s-matching
 juju deploy temporal-k8s --config services="history" temporal-k8s-history
 juju deploy temporal-k8s --config services="worker" temporal-k8s-worker
+```
 
-2. Deploy the Temporal admin charm and relate to the `frontend` service
+2. Deploy the Temporal admin charm and relate to the `frontend` service:
 
+```bash
 juju deploy temporal-admin-k8s
 juju relate temporal-k8s:admin temporal-admin-k8s:admin
 ```
