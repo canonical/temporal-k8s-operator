@@ -82,6 +82,8 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
             if service != "temporal-k8s":
                 juju.integrate(f"{service}:db", f"{PGBOUNCER_APP_NAME}:database")
                 juju.integrate(f"{service}:visibility", f"{PGBOUNCER_APP_NAME}:database")
+                # Every role waits for admin's schema migration, so each needs the admin relation.
+                juju.integrate(f"{service}:admin", f"{APP_NAME_ADMIN}:admin")
 
         wait_active(juju, *ALL_SERVICES, timeout=1800)
 
