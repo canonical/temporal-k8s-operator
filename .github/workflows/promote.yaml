@@ -11,6 +11,10 @@ on:
         description: Destination channel
         required: true
         default: 1.31/beta
+      base-channel:
+        description: Base channel of the revision to promote
+        required: true
+        default: "26.04"
 
 jobs:
   promote:
@@ -27,4 +31,5 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           origin-channel: ${{ github.event.inputs.origin-channel }}
           destination-channel: ${{ github.event.inputs.destination-channel }}
+          base-channel: ${{ github.event.inputs.base-channel }}
           charmcraft-channel: 4.x/stable
