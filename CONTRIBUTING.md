@@ -78,22 +78,22 @@ deployment, follow the following steps:
     charmcraft pack [--destructive-mode]
 
     # Deploy the charm:
-    juju deploy ./temporal-k8s_ubuntu-22.04-amd64.charm --resource temporal-server-image=ghcr.io/canonical/temporal-server:latest
+    juju deploy ./temporal-k8s_ubuntu-22.04-amd64.charm --resource temporal-server-image=ubuntu/temporal-server:1.31-26.04_edge
 
     # Deploy admin charm (Only if modifying admin charm, otherwise deploy as shown below):
-    juju deploy ./temporal-admin-k8s_ubuntu-22.04-amd64.charm --resource temporal-admin-image=temporalio/admin-tools:1.23.1
+    juju deploy ./temporal-admin-k8s_ubuntu-22.04-amd64.charm --resource temporal-admin-image=ubuntu/temporal-server:1.31-26.04_edge
 
     # Deploy ui charm (Only if modifying UI charm, otherwise deploy as shown below):
-    juju deploy ./temporal-ui-k8s_ubuntu-22.04-amd64.charm --resource temporal-ui-image=temporalio/ui:2.27.1
+    juju deploy ./temporal-ui-k8s_ubuntu-22.04-amd64.charm --resource temporal-ui-image=ubuntu/temporal-ui:2.52-26.04_edge
 
     # Refresh charm
-    juju refresh --path="./temporal-k8s_ubuntu-22.04-amd64.charm" temporal-k8s --force-units --resource temporal-server-image=ghcr.io/canonical/temporal-server:latest
+    juju refresh --path="./temporal-k8s_ubuntu-22.04-amd64.charm" temporal-k8s --force-units --resource temporal-server-image=ubuntu/temporal-server:1.31-26.04_edge
 
     # Refresh the admin charm
-    juju refresh --path="./temporal-admin-k8s_ubuntu-22.04-amd64.charm" temporal-admin-k8s --force-units --resource temporal-admin-image=temporalio/admin-tools:1.23.1
+    juju refresh --path="./temporal-admin-k8s_ubuntu-22.04-amd64.charm" temporal-admin-k8s --force-units --resource temporal-admin-image=ubuntu/temporal-server:1.31-26.04_edge
 
     # Refresh the ui charm
-    juju refresh --path="./temporal-ui-k8s_ubuntu-22.04-amd64.charm" temporal-ui-k8s --force-units --resource temporal-ui-image=temporalio/ui:2.27.1
+    juju refresh --path="./temporal-ui-k8s_ubuntu-22.04-amd64.charm" temporal-ui-k8s --force-units --resource temporal-ui-image=ubuntu/temporal-ui:2.52-26.04_edge
 
     # Relate operator to postgres:
     juju deploy postgresql-k8s --channel 14/stable --trust

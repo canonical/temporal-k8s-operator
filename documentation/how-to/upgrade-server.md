@@ -48,6 +48,11 @@ time. Charmed Temporal K8s can only guarantee backward compatibility between two
 consecutive revisions in line with the upgrade system adopted by the Temporal
 Server._
 
+_Warning: The Temporal Admin charm cannot verify that a database backup exists
+or is restorable before migrating schemas on upgrade. Create and verify a full
+PostgreSQL backup via the postgresql-k8s charm's backup actions before running
+any of the steps below._
+
 ## Appendix
 
 The table below shows a mapping between the Temporal K8s charms and the Temporal

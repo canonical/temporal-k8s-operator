@@ -24,6 +24,8 @@ from helpers import (
 logger = logging.getLogger(__name__)
 
 TEMPORAL_CHANNEL = "1.31/edge"
+# 1.31/edge also has an old 24.04 admin that never publishes migrated_workload_version.
+ADMIN_BASE = "ubuntu@26.04"
 POSTGRESQL_CHANNEL = "14/stable"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "1/stable"
 
@@ -69,7 +71,7 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
             "namespace-rps-limit": "default:50|test:40",
         },
     )
-    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL, base=ADMIN_BASE)
     juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
     juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True)
     juju.deploy("self-signed-certificates", channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
