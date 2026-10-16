@@ -35,7 +35,7 @@ The single source of truth for workflow history and namespace metadata is the Po
 
 Follow the official postgresql-k8s backup procedure: [Create a backup](https://charmhub.io/postgresql-k8s/docs/h-create-backup). The how-to covers configuring an S3 backup target, taking a backup, and verifying it.
 
-If the upgrade fails at any point, restoring this dump and redeploying on `latest/stable` returns the cluster to its pre-upgrade state. See [Recovery](#recovery-if-the-upgrade-fails) for the full procedure.
+If the upgrade fails at any point, restoring this dump and redeploying on `latest/stable` returns the cluster to its pre-upgrade state. See [Recovery](#recovery) for the full procedure.
 
 ---
 
@@ -115,31 +115,24 @@ juju integrate       temporal-k8s:visibility  pgbouncer:database
 
 ---
 
-## Recovery (if the upgrade fails)
+## Recovery
 
-There is **no in-place rollback**. Temporal's schema migration is forward-only. If the upgrade fails at any step, restore from the PostgreSQL backup taken in [Step 1](#step-1-back-up-postgresql), then choose one of two redeployment paths.
+If an upgrade or schema migration fails, stop further refreshes. Capture the deployment status and Juju debug logs for investigation:
 
-To avoid impacting other applications running in the same model, perform an application-scoped recovery instead of destroying the model:
+```bash
+juju status
+juju debug-log --include temporal-admin-k8s/0
+juju debug-log --include temporal-k8s/0
+```
 
-1. Stop applying further refreshes.
-2. Capture diagnostics:
-   ```bash
-   juju status > failure-status.txt
-   juju show-unit <stuck-unit> > failure-unit.yaml
-   juju debug-log --replay --level WARNING > failure-log.txt
-   ```
-3. Sever database relations and remove the Temporal applications:
-   ```bash
-   # Remove database relations
-   juju remove-relation temporal-k8s:db postgresql-k8s:database
-   juju remove-relation temporal-k8s:visibility postgresql-k8s:database
+For a failed `upgrade-charm` hook, inspect the traceback and resolve the underlying issue before retrying.
 
-   # Remove only the Temporal applications
-   juju remove-application temporal-admin-k8s temporal-ui-k8s temporal-k8s
-   ```
-4. Restore PostgreSQL from your backup (see the [postgresql-k8s restore how-to](https://charmhub.io/postgresql-k8s/docs/h-restore-backup)).
-5. Choose one of:
-   * **Option A: Re-attempt the upgrade on `1.23/stable` (recommended).** If the failure was caused by something outside the schema (e.g. a transient network issue, a misconfiguration), redeploy directly on `1.23/stable` against the restored database. This is the preferred path for production deployments because it avoids leaving operators on the unsupported `latest/stable` track.
-   * **Option B: Roll back to `latest/stable`.** Redeploy on `latest/stable` and reconnect to the restored database. Use this only if the failure was caused by a `1.23/stable` regression that needs upstream investigation.
+Juju can be configured to automatically retry failed hooks:
 
-Report any reproducible failure to the [`temporal-k8s-operator` issues](https://github.com/canonical/temporal-k8s-operator/issues) with the diagnostics from step 2.
+```bash
+juju model-config automatically-retry-hooks=true
+```
+
+Enable this only after correcting the underlying failure; it does not repair incompatible charm packages or failed database operations.
+
+Do not downgrade charms against a database that has already undergone a forward schema migration. Follow the PostgreSQL restore procedure using a validated backup taken before the failed upgrade.
