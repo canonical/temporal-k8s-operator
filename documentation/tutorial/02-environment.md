@@ -79,6 +79,18 @@ Once you have Juju bootstrapped to your Kubernetes cluster, create a `model`, fo
 juju add-model temporal-model
 ```
 
+You can optionally configure the default base for the model:
+
+```bash
+juju model-config default-base=ubuntu@26.04
+```
+
+[note]
+**Base selection:** Default bases can be set at the model level via `juju model-config default-base=<base>` (e.g. `default-base=ubuntu@24.04` for 1.23, or `default-base=ubuntu@26.04` for 1.31), or specified when deploying or downloading by using the `--base` flag (e.g. `juju deploy ... --base ubuntu@26.04` or `juju download --channel 1.23/stable --base ubuntu@24.04`).
+
+If neither of these is set, Charmhub will default to the latest LTS version that is available for the charm on the channel being downloaded.
+[/note]
+
 You can check its status as follows:
 
 ```bash
