@@ -20,64 +20,39 @@ will fetch the charm from [Charmhub](https://charmhub.io/temporal-admin-k8s) and
 deploy it to your model:
 
 ```bash
-juju deploy temporal-admin-k8s
+juju deploy temporal-admin-k8s --channel 1.31/stable --base ubuntu@26.04
 ```
 
 Check status:
-```
+```bash
 juju status
 ```
-Wait until the application is ready - when it is ready, `juju status` will show:
-```
-Model           Controller           Cloud/Region  Version  SLA          Timestamp
-temporal-model  temporal-controller  ck8s          3.6.9    unsupported  22:36:50Z
+Wait until the application is ready, when it is ready, `juju status` will show `admin:temporal relation: database connections info not available` at the admin app and `admin:temporal relation: schema is not ready` on the server app.
 
-App                 Version  Status   Scale  Charm               Channel        Rev  Address         Exposed  Message
-postgresql-k8s      14.15    active       1  postgresql-k8s      14/stable      495  10.152.183.200  no
-temporal-admin-k8s           blocked      1  temporal-admin-k8s  latest/stable   13  10.152.183.97   no       admin:temporal relation: database connections info not available
-temporal-k8s                 blocked      1  temporal-k8s        latest/stable   43  10.152.183.120  no       admin:temporal relation: schema is not ready
-
-Unit                   Workload  Agent  Address     Ports  Message
-postgresql-k8s/0*      active    idle   10.1.0.36          Primary
-temporal-admin-k8s/0*  blocked   idle   10.1.0.168         admin:temporal relation: database connections info not available
-temporal-k8s/0*        blocked   idle   10.1.0.152         admin:temporal relation: schema is not ready
-```
 ## Relate Admin to Server
 
-Relate the admin interface:
+The admin charm in `1.31/stable` requires **two** relations to reach `active`:
+
+- `admin` - schema management bridge between admin and server.
+- `temporal-host-info` - supplies the Temporal frontend's gRPC host and port to the admin charm so that its `cli` action can reach the server.
+
+Add both:
+
+```bash
+juju integrate temporal-k8s:admin              temporal-admin-k8s:admin
+juju integrate temporal-k8s:temporal-host-info  temporal-admin-k8s:temporal-host-info
 ```
-juju relate temporal-k8s:admin temporal-admin-k8s:admin
-```
+
+> **Deprecation notice: `server-name` is removed.** 
+The `temporal-host-info` relation must be used.
+
 Monitor relations until they settle:
-```
+```bash
 juju status --relations
 ```
-After a short while, all applications should be active:
-```
-Model           Controller           Cloud/Region  Version  SLA          Timestamp
-temporal-model  temporal-controller  ck8s          3.6.9    unsupported  22:37:09Z
+After a short while, all applications should be active.
 
-App                 Version  Status       Scale  Charm               Channel        Rev  Address         Exposed  Message
-postgresql-k8s      14.15    active           1  postgresql-k8s      14/stable      495  10.152.183.200  no
-temporal-admin-k8s  1.23.1   active           1  temporal-admin-k8s  latest/stable   13  10.152.183.97   no       
-temporal-k8s                 active           1  temporal-k8s        latest/stable   43  10.152.183.120  no       
-
-Unit                   Workload     Agent  Address     Ports  Message
-postgresql-k8s/0*      active       idle   10.1.0.36          Primary
-temporal-admin-k8s/0*  active       idle   10.1.0.168
-temporal-k8s/0*        active       idle   10.1.0.152         
-
-Integration provider           Requirer                       Interface          Type     Message
-postgresql-k8s:database        temporal-k8s:db                postgresql_client  regular
-postgresql-k8s:database        temporal-k8s:visibility        postgresql_client  regular
-postgresql-k8s:database-peers  postgresql-k8s:database-peers  postgresql_peers   peer
-postgresql-k8s:restart         postgresql-k8s:restart         rolling_op         peer
-postgresql-k8s:upgrade         postgresql-k8s:upgrade         upgrade            peer
-temporal-admin-k8s:admin       temporal-k8s:admin             temporal           regular
-temporal-admin-k8s:peer        temporal-admin-k8s:peer        temporal-admin     peer
-temporal-k8s:peer              temporal-k8s:peer              temporal           peer
-```
-
+## Create the initial namespace
 
 You can run the following command to create the initial Temporal namespace:
 
@@ -96,9 +71,9 @@ result: command succeeded
 ```
 
 [note]
+The command above uses the `cli` action with the modern [`temporal` CLI](https://docs.temporal.io/cli) grammar. **In `1.23/stable`, the legacy `tctl` action was renamed to `cli`** and the underlying binary changed from the older `tctl` to the newer `temporal` CLI. Operator scripts that previously called `juju run temporal-admin-k8s/0 tctl args="..."` (with the old grammar like `--namespace X namespace register --retention 72h`) must be updated.
 
-The command above only works for Charmed Temporal version 1.23/stable or later.
-
+If you are upgrading an existing deployment, see the [`latest/stable` → `1.23/stable` upgrade guide](https://charmhub.io/temporal-k8s/docs/h-upgrade-1.23/stable).
 [/note]
 
 > **See next:

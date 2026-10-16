@@ -172,4 +172,4 @@ juju config temporal-ui-ingress backend-protocol HTTPS
 juju integrate temporal-ui-ingress <tls-certificate-provider>
 ```
 
-3. Use `https` when browsing, and and configure certificate trust settings as needed.
+3. Use `https` when browsing, and configure certificate trust settings as needed.

@@ -43,11 +43,14 @@ manner for production purposes.
 | 2     | h-authentication    | [Authentication](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authentication/12586)                                        |
 | 2     | h-authorization     | [Authorization](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authorization/12587)                                          |
 | 2     | h-deploy-ingress    | [Configure Ingress with Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783) |
+| 2     | h-configure-frontend-tls | [Configure Frontend TLS](https://discourse.charmhub.io/t/configure-frontend-tls/18319)                                           |
 | 2     | h-observability     | [Observability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787)                                          |
 | 2     | h-scaling           | [Scaling](https://discourse.charmhub.io/t/10840)                                                                                          |
-| 2     | h-cli              | [CLI](https://discourse.charmhub.io/t/11788)                                                            |
+| 2     | h-cli              | [CLI](https://discourse.charmhub.io/t/11788)                                                                                              |
 | 2     | h-server-upgrades   | [Server Upgrades](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-server-upgrades/13105)                                      |
 | 2     | h-archival          | [Enable Archival](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-enable-archival/13106)                                      |
+| 2     | h-configure-temporal-worker | [Configure Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-configure-the-temporal-worker/20314)           |
+| 2     | h-upgrade-1.23/stable | [Upgrade from latest/stable to 1.23/stable](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-upgrade-from-latest-stable-to-1-23-stable/20313) |
 | 1     | reference           | [Reference](https://discourse.charmhub.io/t/charmed-temporal-k8s-reference-index/13741)                                                   |
 | 2     | r-actions           | [Actions](https://charmhub.io/temporal-k8s/actions)                                                                                       |
 | 2     | r-configurations    | [Configurations](https://charmhub.io/temporal-k8s/configure)                                                                              |

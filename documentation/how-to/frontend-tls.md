@@ -12,13 +12,10 @@ There are two ways to handle TLS in your deployment:
 
 * Ingress TLS Termination – TLS is terminated at the ingress level (e.g., with NGINX).
 
-If you need TLS termination at the ingress, see [Configure Ingress with Nginx Ingress Integrator](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-nginx-ingress-integrator/11783).
+If you need TLS termination at the ingress, see [Configure Ingress with Nginx Ingress Integrator](https://charmhub.io/temporal-k8s/docs/h-deploy-ingress).
 
-[note]
 
 Important: While it's technically possible to enable end-to-end encryption by letting Temporal handle TLS termination and having the ingress forward unencrypted traffic, this setup is not supported yet. You’ll need to choose one approach: either handle TLS at the frontend or at the ingress, but not both.
-
-[/note]
 
 ## Requirements
 

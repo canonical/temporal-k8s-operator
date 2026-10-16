@@ -103,7 +103,7 @@ juju relate temporal-k8s openfga-k8s
 Once the units settle, the `temporal-k8s` application should still be in a
 `blocked` state, but with an updated message
 `missing openfga authorization model`. We can now create an
-[authorization model](../../temporal_auth_model.json) in the OpenFGA store by
+`authorization model` in the OpenFGA store by
 running the following command:
 
 ```bash
@@ -262,4 +262,4 @@ result: command succeeded
 
 Once configured, the user with `<your_email>` will be able to see all namespaces
 through the Web UI as well as create new namespaces using
-[tctl](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-tctl/11788).
+[the CLI](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-cli/11788).

@@ -8,8 +8,19 @@ Now that you have a Temporal Server up and running with a Temporal Worker
 connected to it, you will trigger a workflow execution and observe its result in
 the Web UI.
 
-1. Create a client to trigger the workflow as defined in the worker.
-For instance, if you are using the Python SDK, this would look like:
+This tutorial uses the `GreetingWorkflow` workflow type registered by the
+[`resource_sample_py`](https://github.com/canonical/temporal-worker-k8s-operator/tree/main/resource_sample_py)
+sample worker image. If you used a different worker image, substitute the matching
+workflow type. Other workflow types registered by the sample image include
+`VaultWorkflow` and `DatabaseWorkflow`.
+
+You can trigger a workflow either via the Temporal Python SDK (option A) or via the
+admin charm's `cli` action (option B).
+
+## Option A: trigger via the Python SDK
+
+1. Create a client to trigger the workflow as defined in the worker. For instance, using the Canonical
+[`temporal-lib-py`](https://pypi.org/project/temporal-lib-py/) wrapper:
 
 ```python
 from temporallib.client import Client, Options
@@ -17,27 +28,36 @@ import asyncio
 
 async def main():
     client_opt = Options(
-        host="<temporal-host-name>:7233",
-        queue="<your-queue>",
-        namespace="<your-namespace>",
+        host="temporal-k8s.<model>.svc.cluster.local:7233",
+        queue="your-queue",
+        namespace="your-namespace",
     )
 
     client = await Client.connect(client_opt=client_opt)
-    workflow_name = "<workflow-name>"
-    workflow_id = "<workflow-id>"
 
     greeting = await client.execute_workflow(
-        workflow_name,
-        id=workflow_id,
-        task_queue="<your-queue>",
+        "GreetingWorkflow",
+        "world",                     # workflow input (the name to greet)
+        id="hello-1",
+        task_queue="your-queue",
     )
+
+    print(greeting)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-2. Install the necessary packages and run the script above as fas follows:
+Replace:
+
+* `<model>` with the Juju model name where `temporal-k8s` is deployed.
+* `your-queue` and `your-namespace` with the values you set in the
+  [Deploy Temporal Admin](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781) and
+  [Deploy Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784)
+  steps.
+
+2. Install the necessary packages and run the script as follows:
 
 ```bash
 pip install temporal-lib-py
@@ -45,7 +65,33 @@ pip install temporal-lib-py
 python workflow.py
 ```
 
-3. Further details on the workflow execution can be viewed on the web UI.
+## Option B: trigger via the admin charm's `cli` action
+
+If you do not want to write Python, the admin charm exposes a `cli` action that wraps the modern [`temporal` CLI](https://docs.temporal.io/cli):
+
+```bash
+juju run temporal-admin-k8s/0 cli args="workflow start \
+  --type GreetingWorkflow \
+  --task-queue your-queue \
+  --workflow-id hello-1 \
+  --input '\"world\"' \
+  --namespace your-namespace" --wait 1m
+```
+
+Verify the result:
+
+```bash
+juju run temporal-admin-k8s/0 cli args="workflow show \
+  --workflow-id hello-1 \
+  --namespace your-namespace" --wait 1m
+```
+
+You should see the workflow's full event history ending in `WorkflowExecutionCompleted` with status `COMPLETED`.
+
+## View the workflow in the Web UI
+
+Further details on the workflow execution can be viewed on the
+[Temporal Web UI](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-web-ui/11782) you deployed earlier. Look up the workflow by ID (`hello-1` in the examples above) to see its event history, input, output, and timing.
 
 [note]
 
