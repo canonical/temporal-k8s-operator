@@ -17,6 +17,7 @@ from pytest_operator.plugin import OpsTest
 from temporal_client.activities import say_hello
 from temporal_client.workflows import SayHello
 from temporalio.client import Client, WorkflowFailureError
+from temporalio.service import RPCError
 from temporalio.worker import Worker
 
 try:
@@ -70,11 +71,26 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
     # Juju active may precede Temporal matching/worker scheduling readiness in CI.
     await asyncio.sleep(45)
 
-    client = await Client.connect(url)
+    def _retryable_connect_error(exc: BaseException) -> bool:
+        """Return True when the frontend is up but not healthy yet."""
+        message = str(exc).lower()
+        return isinstance(exc, RuntimeError) and "frontend is not healthy yet" in message
 
-    workflow_error_types: tuple = (WorkflowFailureError,)
+    async for attempt in tenacity.AsyncRetrying(
+        stop=tenacity.stop_after_attempt(8),
+        wait=tenacity.wait_fixed(10),
+        retry=tenacity.retry_if_exception(_retryable_connect_error),
+        reraise=True,
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+    ):
+        with attempt:
+            client = await Client.connect(url)
+
+    # execute_workflow raises temporalio.service.RPCError. The bridge type is only
+    # the inner error and is not what tenacity sees.
+    workflow_error_types: tuple = (WorkflowFailureError, RPCError)
     if temporal_sdk_bridge is not None:
-        workflow_error_types = (WorkflowFailureError, temporal_sdk_bridge.RPCError)
+        workflow_error_types = (WorkflowFailureError, RPCError, temporal_sdk_bridge.RPCError)
 
     def _retryable_workflow_error(exc: BaseException) -> bool:
         """Return True if the exception is retryable transient workflow/client errors."""
@@ -87,6 +103,9 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
             or "timeout expired" in message
             or "not enough hosts" in message
             or "unavailable" in message
+            or "workflow is busy" in message
+            or "resource exhausted" in message
+            or "resourceexhausted" in message
         )
 
     # Run a worker for the workflow
