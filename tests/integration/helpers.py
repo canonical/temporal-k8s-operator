@@ -70,7 +70,20 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
     # Juju active may precede Temporal matching/worker scheduling readiness in CI.
     await asyncio.sleep(45)
 
-    client = await Client.connect(url)
+    def _retryable_connect_error(exc: BaseException) -> bool:
+        """Return True when the frontend is up but not healthy yet."""
+        message = str(exc).lower()
+        return isinstance(exc, RuntimeError) and "frontend is not healthy yet" in message
+
+    async for attempt in tenacity.AsyncRetrying(
+        stop=tenacity.stop_after_attempt(8),
+        wait=tenacity.wait_fixed(10),
+        retry=tenacity.retry_if_exception(_retryable_connect_error),
+        reraise=True,
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+    ):
+        with attempt:
+            client = await Client.connect(url)
 
     workflow_error_types: tuple = (WorkflowFailureError,)
     if temporal_sdk_bridge is not None:
