@@ -65,7 +65,7 @@ async def deploy(ops_test: OpsTest, charm: str):
             raise_on_blocked=False,
             timeout=90 * 10,
         )
-        
+
         # Run action to create default namespace
         await create_default_namespace(ops_test)
 
