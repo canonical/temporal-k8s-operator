@@ -225,6 +225,136 @@ def test_replan_failure_does_not_fail_hook(
     assert state_final.unit_status == ops.BlockedStatus("failed to start temporal server; check logs")
 
 
+def _change_error():
+    """Build a pebble ChangeError.
+
+    Returns:
+        A ChangeError as raised by a failed replan.
+    """
+    return ops.pebble.ChangeError("cannot start service", MagicMock(tasks=[]))
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_replan_failure_does_not_publish_host_info(
+    context, state, temporal_container, temporal_container_initialized, admin_relation, host_info_relation
+):
+    state = dataclasses.replace(state, relations=[*state.relations, host_info_relation])
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+
+    with unittest.mock.patch.object(ops.model.Container, "replan", side_effect=_change_error()):
+        with unittest.mock.patch("charm.TemporalHostInfoProvider.publish") as publish:
+            context.run(context.on.relation_changed(admin_relation), state_out)
+
+    publish.assert_not_called()
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_replan_success_publishes_host_info(
+    context, state, temporal_container, temporal_container_initialized, admin_relation, host_info_relation
+):
+    state = dataclasses.replace(state, relations=[*state.relations, host_info_relation])
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+
+    with unittest.mock.patch("charm.TemporalHostInfoProvider.publish") as publish:
+        context.run(context.on.relation_changed(admin_relation), state_out)
+
+    publish.assert_called()
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_update_skipped_during_teardown(
+    context, state, temporal_container, temporal_container_initialized, admin_relation
+):
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized], planned_units=0)
+
+    with unittest.mock.patch.object(ops.model.Container, "replan") as replan:
+        context.run(context.on.relation_changed(admin_relation), state_out)
+
+    replan.assert_not_called()
+
+
+def _container_with_server(temporal_container_initialized, status):
+    """Add a temporal-server service in the given status to the container.
+
+    Args:
+        temporal_container_initialized: The initialized container.
+        status: The service status.
+
+    Returns:
+        The container with the service.
+    """
+    layer = ops.pebble.Layer(
+        {
+            "services": {
+                "temporal-server": {
+                    "override": "replace",
+                    "command": "temporal-server",
+                    "startup": "enabled",
+                    "on-check-failure": {"temporal-server-running": "ignore"},
+                }
+            }
+        }
+    )
+    return dataclasses.replace(
+        temporal_container_initialized,
+        layers={**temporal_container_initialized.layers, "server-layer": layer},
+        service_statuses={"temporal-server": status},
+    )
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_update_status_retries_replan_when_server_not_running(
+    context, state, temporal_container, temporal_container_initialized, admin_relation
+):
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+    stopped = _container_with_server(temporal_container_initialized, ops.pebble.ServiceStatus.INACTIVE)
+    state_out = dataclasses.replace(state_out, containers=[stopped])
+
+    state_final = context.run(context.on.update_status(), state_out)
+
+    assert state_final.unit_status == ops.MaintenanceStatus("replanning application")
+    assert state_final.get_container("temporal").service_statuses["temporal-server"] == ops.pebble.ServiceStatus.ACTIVE
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_update_status_keeps_blocked_when_replan_retry_fails(
+    context, state, temporal_container, temporal_container_initialized, admin_relation
+):
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+    stopped = _container_with_server(temporal_container_initialized, ops.pebble.ServiceStatus.INACTIVE)
+    state_out = dataclasses.replace(state_out, containers=[stopped])
+
+    with unittest.mock.patch.object(ops.model.Container, "replan", side_effect=_change_error()):
+        state_final = context.run(context.on.update_status(), state_out)
+
+    assert state_final.unit_status == ops.BlockedStatus("failed to start temporal server; check logs")
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_update_status_does_not_replan_when_server_running(
+    context, state, temporal_container, temporal_container_initialized, admin_relation
+):
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+    running = _container_with_server(temporal_container_initialized, ops.pebble.ServiceStatus.ACTIVE)
+    state_out = dataclasses.replace(state_out, containers=[running])
+
+    with unittest.mock.patch.object(ops.model.Container, "replan") as replan:
+        context.run(context.on.update_status(), state_out)
+
+    replan.assert_not_called()
+
+
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_blocked_by_setting_new_num_history_shards(context, state, temporal_container_initialized):
     state_intermediate = context.run(context.on.update_status(), state)
@@ -1205,7 +1335,10 @@ def test_authorization_ready(
     assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
-    with unittest.mock.patch("charm.TemporalK8SCharm._validate_pebble_plan", return_value=True):
+    with (
+        unittest.mock.patch("charm.TemporalK8SCharm._validate_pebble_plan", return_value=True),
+        unittest.mock.patch("charm.TemporalK8SCharm._server_running", return_value=True),
+    ):
         state_out = context.run(context.on.update_status(), state_out)
 
         assert state_out.unit_status == ops.ActiveStatus("auth enabled")
@@ -1228,7 +1361,10 @@ def test_update_status_down(context, state, temporal_container, temporal_contain
     )
     state_out = dataclasses.replace(state_out, containers=[temporal_container_unsuccessful_check])
 
-    with unittest.mock.patch("charm.TemporalK8SCharm._validate_pebble_plan", return_value=True):
+    with (
+        unittest.mock.patch("charm.TemporalK8SCharm._validate_pebble_plan", return_value=True),
+        unittest.mock.patch("charm.TemporalK8SCharm._server_running", return_value=True),
+    ):
         state_out = context.run(context.on.update_status(), state_out)
 
         assert state_out.unit_status == ops.MaintenanceStatus("Status check: DOWN")
