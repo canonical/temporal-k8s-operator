@@ -16,7 +16,7 @@ juju integrate temporal-k8s:temporal-host-info temporal-worker-k8s:temporal-host
 
 For cross-model deployments, use a [cross-model relation](https://juju.is/docs/juju/manage-cross-model-integrations) (`juju offer` + `juju consume` + `juju integrate`). See the [tutorial](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-worker/11784) for the full sequence.
 
-> **Deprecation notice: `host` config.** The `host` config is deprecated in `1.23/stable` and will be removed in a future release. It is only consulted as a fallback when the `temporal-host-info` relation is absent. Do not introduce new dependencies on `host`.
+> **Deprecation notice: `host` config.** The `host` config is deprecated and will be removed in a future release. It is only consulted as a fallback when the `temporal-host-info` relation is absent. Do not introduce new dependencies on `host`.
 
 ## Set the namespace and task queue
 

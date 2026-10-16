@@ -49,7 +49,7 @@ juju refresh temporal-admin --channel 1.23/stable --base ubuntu@24.04
 
 After settling, `temporal-admin` reports `active` status.
 
-The default `server-name` config (`temporal-k8s`) places the charm on the deprecated fallback path, this is expected at this stage and is corrected at [Step 5](#step-5-integrate-the-temporal-host-info-relation).
+Note: The `temporal-host-info` relation cannot be integrated yet because `temporal-k8s` has not been refreshed and does not yet provide the endpoint. The relation will be integrated in [Step 5](#step-5-integrate-the-temporal-host-info-relation) after `temporal-k8s` is refreshed.
 
 ---
 
@@ -119,6 +119,8 @@ juju integrate       temporal-k8s:visibility  pgbouncer:database
 
 There is **no in-place rollback**. Temporal's schema migration is forward-only. If the upgrade fails at any step, restore from the PostgreSQL backup taken in [Step 1](#step-1-back-up-postgresql), then choose one of two redeployment paths.
 
+To avoid impacting other applications running in the same model, perform an application-scoped recovery instead of destroying the model:
+
 1. Stop applying further refreshes.
 2. Capture diagnostics:
    ```bash
@@ -126,9 +128,14 @@ There is **no in-place rollback**. Temporal's schema migration is forward-only. 
    juju show-unit <stuck-unit> > failure-unit.yaml
    juju debug-log --replay --level WARNING > failure-log.txt
    ```
-3. Destroy the model:
+3. Sever database relations and remove the Temporal applications:
    ```bash
-   juju destroy-model <model> --no-prompt --destroy-storage
+   # Remove database relations
+   juju remove-relation temporal-k8s:db postgresql-k8s:database
+   juju remove-relation temporal-k8s:visibility postgresql-k8s:database
+
+   # Remove only the Temporal applications
+   juju remove-application temporal-admin-k8s temporal-ui-k8s temporal-k8s
    ```
 4. Restore PostgreSQL from your backup (see the [postgresql-k8s restore how-to](https://charmhub.io/postgresql-k8s/docs/h-restore-backup)).
 5. Choose one of:

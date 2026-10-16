@@ -7,7 +7,7 @@ The *How-to* guides in this section give directions on how to achieve your goals
 - [Authorization](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-authorization/12587): for enabling client authorization using OpenFGA.
 - [Observability](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-observability/11787): for enabling observability metrics through the [Canonical Observabiliy Stack](https://charmhub.io/topics/canonical-observability-stack).
 - [Scaling](https://discourse.charmhub.io/t/10840): for horizontally scaling your Charmed Temporal deployment.
-- [TCTL](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-tctl/11788): for using the tctl command line tool.
+- [CLI](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-tctl/11788): for using the temporal cli command line tool.
 - [Server Upgrades](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-server-upgrades/13105): for safely upgrading Charmed Temporal server.
 - [Enabling Archival](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-enable-archival/13106): for enabling workflow event history archival to an S3 bucket.
 - [Configure Temporal Worker](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-configure-the-temporal-worker/20314): for configuring the Temporal worker (server connection, environment variables, authentication, Vault, TLS, Sentry, and database integration).

@@ -35,16 +35,7 @@ Monitor the model while the application starts up:
 ```bash
 juju status --watch 1s
 ```
-Wait until the application stabilizes. At this point, it should be blocked, waiting for a database:
-```
-App           Version  Status   Scale  Charm         Channel       Rev  Address         Exposed  Message
-temporal-k8s           blocked      1  temporal-k8s  1.31/stable    43  10.152.183.120  no       database relation not ready
-
-Unit             Workload  Agent  Address     Ports  Message
-temporal-k8s/0*  blocked   idle   10.1.0.152         database relation not ready
-```
-Press Ctrl+C to exit the watch.
-
+Wait until the application stabilizes. At this point, it should be blocked, waiting for a database with the message `database relation not ready`
 
 > **See next:
 > [Deploy PostgreSQL Database](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-postgresql-database/11780)**

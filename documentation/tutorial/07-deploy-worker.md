@@ -64,7 +64,7 @@ Deploy the worker into the same Juju model as the Temporal server.
 1. Deploy the worker charm using the recently created image:
 
 ```bash
-juju deploy temporal-worker-k8s --channel 1.0/stable --base ubuntu@24.04 \
+juju deploy temporal-worker-k8s --channel 2.0/stable --base ubuntu@24.04 \
   --resource temporal-worker-image=<your-registry>/<your-rock-name>:<tag>
 ```
 
@@ -75,7 +75,7 @@ juju config temporal-worker-k8s queue=your-queue namespace=your-namespace
 ```
 
 [note]
-The `temporal-worker-k8s` charm follows its own version track (`1.0`), independent of the Temporal server (`1.31`). User workflows are SDK-pinned rather than server-pinned, so the worker charm does not bump its track when the server bumps. `1.0/stable` is the supported track for use with `temporal-k8s` `1.31/stable`.
+The `temporal-worker-k8s` charm follows its own version track (`2.0`), independent of the Temporal server (`1.31`). User workflows are SDK-pinned rather than server-pinned, so the worker charm does not bump its track when the server bumps. `2.0/stable` is the supported track for use with `temporal-k8s` `1.31/stable`.
 [/note]
 
 ### Cross-model deployment
@@ -92,7 +92,7 @@ A dedicated model gives logical isolation between the Temporal server components
 juju add-model temporal-workers-model
 
 juju deploy temporal-worker-k8s -m temporal-workers-model \
-  --channel 1.0/stable --base ubuntu@24.04 \
+  --channel 2.0/stable --base ubuntu@24.04 \
   --resource temporal-worker-image=<your-registry>/<your-rock-name>:<tag>
 ```
 
@@ -166,7 +166,7 @@ The worker now polls the task queue and namespace you configured, against the fr
 
 > ### Deprecation notice: `host` config
 >
-> Earlier versions of the `temporal-worker-k8s` charm accepted a `host` config option to point at the Temporal server. **`host` is deprecated in `1.23/stable`** and will be removed in a future release. It is only consulted as a fallback when the `temporal-host-info` relation is absent.
+> Earlier versions of the `temporal-worker-k8s` charm accepted a `host` config option to point at the Temporal server. **`host` is deprecated** and will be removed in a future release. It is only consulted as a fallback when the `temporal-host-info` relation is absent.
 >
 > Do not introduce new dependencies on `host`. If you are migrating an existing worker that uses `host`, integrate the relation as shown above and clear the config: `juju config temporal-worker-k8s --reset host`. See the [`latest/stable` → `1.23/stable` upgrade guide](https://charmhub.io/temporal-k8s/docs/h-upgrade-1.23/stable) for the full migration procedure.
 

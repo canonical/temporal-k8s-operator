@@ -85,7 +85,7 @@ The schema will be created after deploying and relating Temporal Admin in the ne
 
 For production deployments, consider placing [`pgbouncer-k8s`](https://charmhub.io/pgbouncer-k8s) between Temporal and PostgreSQL for connection pooling. PgBouncer mediates connections from Temporal to the database, which reduces connection churn under load.
 
-PgBouncer is not required for this tutorial, but operators planning a production deployment should review the [Server Upgrades](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-server-upgrades/13105) how-to guide for the recommended cut-over procedure.
+PgBouncer is not required for this tutorial, but operators planning a production deployment cab review the [Upgrade from latest to 1.23 Step](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-upgrade-from-latest-stable-to-1-23-stable/20313) for the procedure.
 
 > **See next:
 > [Deploy Temporal Admin](https://discourse.charmhub.io/t/charmed-temporal-k8s-tutorial-deploy-temporal-admin/11781)**

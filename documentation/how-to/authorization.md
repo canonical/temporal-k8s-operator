@@ -262,4 +262,4 @@ result: command succeeded
 
 Once configured, the user with `<your_email>` will be able to see all namespaces
 through the Web UI as well as create new namespaces using
-[tctl](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-cli/11788).
+[the CLI](https://discourse.charmhub.io/t/charmed-temporal-k8s-how-to-cli/11788).
