@@ -27,8 +27,6 @@ The commands below assume the following application names:
 
 Replace these with your actual application names if different.
 
-If the charms were originally deployed using locally built `.charm` files, transitioning to Charmhub requires `--switch <charm-name>` during the first refresh. This is not necessary for applications already deployed from Charmhub.
-
 ## Step 2: Back up PostgreSQL
 
 Before upgrading, follow the [PostgreSQL K8s backup documentation](https://charmhub.io/postgresql-k8s/docs/h-create-a-backup) to create and verify a restorable backup.
@@ -43,7 +41,7 @@ Upgrade through the following versions in order:
 
 `1.24 → 1.25 → 1.26 → 1.27 → 1.28 → 1.29 → 1.30`
 
-Before starting, verify that the corresponding channels are published for both Temporal Server and Admin on Charmhub. The examples below use the `edge` risk level; use the appropriate published risk level for your deployment.
+Before starting, verify that the corresponding channels are published for both Temporal Server and Admin on Charmhub. The examples below use the `stable` risk level; use the appropriate published risk level for your deployment.
 
 For each target version:
 
@@ -53,7 +51,7 @@ For example, to upgrade to 1.24:
 
 ```bash
 juju refresh temporal-admin-k8s \
-  --channel 1.24/edge
+  --channel 1.24/stable
 ```
 
 Wait for Admin to complete its schema migration and return to active status.
@@ -73,7 +71,7 @@ After Admin becomes active:
 
 ```bash
 juju refresh temporal-k8s \
-  --channel 1.24/edge
+  --channel 1.24/stable
 ```
 
 Wait for Temporal Server to become active:
@@ -84,25 +82,7 @@ juju status
 
 Allow approximately 10 minutes for the History Service to load shards and update shard metadata before proceeding to the next version.
 
-### 3.3 Verify workflow execution
-
-Start a test workflow using an existing Temporal worker and confirm that it completes.
-
-For example, with a deployed `GreetingWorkflow` worker:
-
-```bash
-juju run temporal-admin-k8s/0 cli \
-  args='workflow start --type GreetingWorkflow --task-queue default --workflow-id <workflow_id> --input "world" --namespace temporal-system'
-```
-
-```bash
-juju run temporal-admin-k8s/0 cli \
-  args='workflow show --workflow-id <workflow_id> --namespace temporal-system'
-```
-
-Adapt the workflow type, task queue, namespace, and workflow ID to your deployment.
-
-Repeat Steps 2 and 3 for each subsequent minor version, replacing `1.24/edge` with the corresponding channel until both charms reach 1.30.
+Repeat this process for each subsequent minor version (`1.25` → `1.26` → `1.27` → `1.28` → `1.29` → `1.30`), taking a PostgreSQL backup before each refresh and replacing `1.24/stable` with the corresponding channel until both charms reach version 1.30.
 
 ## Step 4: Upgrade from 1.30 to 1.31
 
@@ -249,36 +229,17 @@ juju scale-application temporal-worker-k8s 0
 
 Wait until the old worker unit has stopped.
 
-Start a new test workflow:
+Confirm that a workflow can be started and executed successfully through Worker 2.0, either through the Temporal Web UI or using the `cli` action on `temporal-admin-k8s`.
 
-```bash
-juju run temporal-admin-k8s/0 cli \
-  args='workflow start --type GreetingWorkflow --task-queue default --workflow-id upgrade-test-worker-v2 --input "world" --namespace temporal-system'
-```
-
-Verify its execution:
-
-```bash
-juju run temporal-admin-k8s/0 cli \
-  args='workflow show --workflow-id upgrade-test-worker-v2 --namespace temporal-system'
-```
-
-Expected result:
-
-```text
-WorkflowExecutionCompleted
-Status COMPLETED
-```
-
-Since Worker 1.0 has been scaled to zero, successful workflow execution confirms that Worker 2.0 can process tasks against the upgraded Temporal Server, assuming no other worker is consuming the same task queue.
-
-Verify the expected workflow result as well as the completed status.
+Since Worker 1.0 has been scaled to zero, successful workflow execution confirms that Worker 2.0 can process tasks against the upgraded Temporal Server.
 
 Once the new Worker has been validated, the old Worker application can be removed as part of the migration cutover. Keep it available for recovery until validation is complete.
 
 ## Step 7: Verify the complete upgrade
 
-Check the final deployment:
+### 7.1 Check deployment status and charm bases
+
+Check the final deployment status:
 
 ```bash
 juju status
@@ -287,12 +248,11 @@ juju status
 Confirm that:
 
 - Temporal Admin and Server are running the expected 1.31 workload versions.
-- Admin and Server are `active/idle`.
+- Admin, Server, and UI are `active/idle`.
 - Both database schemas have been migrated successfully.
-- Temporal Server is healthy.
+- Temporal Server workload is healthy.
 - Temporal UI is active and can connect to the Server.
 - Temporal Worker 2.0 is active and connected to the correct namespace and task queue.
-- Existing workflows can be queried and new workflows execute successfully.
 
 Verify the deployed Admin and Server charm bases:
 
@@ -305,6 +265,12 @@ kubectl get pod temporal-k8s-0 \
 ```
 
 Run the commands against the Kubernetes namespace corresponding to the Juju model.
+
+### 7.2 Verify workflow execution
+
+Confirm that your existing workflows can be started and run to completion through the Temporal Web UI or using the `cli` action on `temporal-admin-k8s`.
+
+Optionally, run the automated [Charmed Temporal UATs](https://github.com/canonical/charmed-temporal-uats) to validate the deployment end-to-end.
 
 ## Recovery
 
@@ -336,5 +302,6 @@ For a failed Worker 2.0 cutover, retain Worker 1.0 at zero units until the new W
 - [Upgrade from latest/stable to 1.23/stable](https://charmhub.io/temporal-k8s/docs/h-upgrade-1.23/stable)
 - [Temporal UI on Charmhub](https://charmhub.io/temporal-ui-k8s)
 - [Temporal Worker on Charmhub](https://charmhub.io/temporal-worker-k8s)
+- [Charmed Temporal UATs](https://github.com/canonical/charmed-temporal-uats)
 - [PostgreSQL K8s documentation](https://charmhub.io/postgresql-k8s/docs)
 - [Juju refresh documentation](https://documentation.ubuntu.com/juju/3.6/reference/juju-cli/list-of-juju-cli-commands/refresh/)
