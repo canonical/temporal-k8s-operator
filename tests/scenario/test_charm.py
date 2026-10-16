@@ -212,8 +212,11 @@ def test_charm_ready(context, pending_state, temporal_container, admin_relation)
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-def test_replan_failure_does_not_fail_hook(context, state, temporal_container, admin_relation):
+def test_replan_failure_does_not_fail_hook(
+    context, state, temporal_container, temporal_container_initialized, admin_relation
+):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
 
     error = ops.pebble.ChangeError("cannot start service", MagicMock(tasks=[]))
     with unittest.mock.patch.object(ops.model.Container, "replan", side_effect=error):
