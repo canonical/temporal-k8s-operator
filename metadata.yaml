@@ -90,7 +90,4 @@ resources:
   temporal-server-image:
     type: oci-image
     description: OCI image for Temporal
-    # FIXME: this image comes from the temporal-rock ghcr registry
-    # and its purpose is solely to speed up the release of 1.31/edge
-    # Must be changed to the one from the canonical Docker for 1.31/stable
-    upstream-source: ghcr.io/canonical/temporal-rocks/temporal-server:1.31
+    upstream-source: ubuntu/temporal-server:1.31-26.04_edge
