@@ -8,7 +8,7 @@ import pathlib
 
 import jubilant
 import pytest
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import ADMIN_BASE, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -54,7 +54,7 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
             },
         )
 
-    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL, base=ADMIN_BASE)
     juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
     juju.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
     juju.deploy(PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True, config={"max_db_connections": 20})
@@ -82,6 +82,8 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
             if service != "temporal-k8s":
                 juju.integrate(f"{service}:db", f"{PGBOUNCER_APP_NAME}:database")
                 juju.integrate(f"{service}:visibility", f"{PGBOUNCER_APP_NAME}:database")
+                # Every role waits for admin's schema migration, so each needs the admin relation.
+                juju.integrate(f"{service}:admin", f"{APP_NAME_ADMIN}:admin")
 
         wait_active(juju, *ALL_SERVICES, timeout=1800)
 

@@ -82,6 +82,10 @@ FRONTEND_TLS_CONFIGURATION = {
 logger = logging.getLogger(__name__)
 
 
+class SchemaPendingError(ValueError):
+    """Raised while admin has not yet migrated the schema for this workload version."""
+
+
 def render(template_name, context):
     """Render the template with the given name using the given context dict.
 
@@ -600,8 +604,7 @@ class TemporalK8SCharm(CharmBase):
 
         # Validate admin relation.
         self.database_connections()
-        if "frontend" in self.config["services"] and not self._state.schema_ready:
-            raise ValueError("admin:temporal relation: schema is not ready")
+        self._validate_admin_schema()
 
         # Validate OpenFGA relation.
         if self.config["auth-enabled"]:
@@ -621,6 +624,20 @@ class TemporalK8SCharm(CharmBase):
 
             if not self._state.s3.get("bucket_created"):
                 raise ValueError("s3:archival failed to create s3 bucket.")
+
+    def _validate_admin_schema(self):
+        """Validate that admin has migrated the schema for this workload version.
+
+        Raises:
+            SchemaPendingError: while the schema is not ready for this workload version.
+        """
+        admin = self.model.get_relation("admin")
+        admin_data = admin.data[admin.app] if admin and admin.app else {}
+        if (admin_data.get("schema_status"), admin_data.get("migrated_workload_version")) != (
+            "ready",
+            WORKLOAD_VERSION,
+        ):
+            raise SchemaPendingError("admin:temporal relation: schema is pending migration")
 
     def _validate_ingress(self):
         """Validate the ingress relation.
@@ -670,7 +687,7 @@ class TemporalK8SCharm(CharmBase):
         try:
             self._validate()
         except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
+            self.unit.status = (WaitingStatus if isinstance(err, SchemaPendingError) else BlockedStatus)(str(err))
             return
 
         if self.unit.is_leader():
