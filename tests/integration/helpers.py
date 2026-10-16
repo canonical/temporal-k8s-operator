@@ -17,6 +17,7 @@ from pytest_operator.plugin import OpsTest
 from temporal_client.activities import say_hello
 from temporal_client.workflows import SayHello
 from temporalio.client import Client, WorkflowFailureError
+from temporalio.service import RPCError
 from temporalio.worker import Worker
 
 try:
@@ -85,9 +86,11 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
         with attempt:
             client = await Client.connect(url)
 
-    workflow_error_types: tuple = (WorkflowFailureError,)
+    # execute_workflow raises temporalio.service.RPCError. The bridge type is only
+    # the inner error and is not what tenacity sees.
+    workflow_error_types: tuple = (WorkflowFailureError, RPCError)
     if temporal_sdk_bridge is not None:
-        workflow_error_types = (WorkflowFailureError, temporal_sdk_bridge.RPCError)
+        workflow_error_types = (WorkflowFailureError, RPCError, temporal_sdk_bridge.RPCError)
 
     def _retryable_workflow_error(exc: BaseException) -> bool:
         """Return True if the exception is retryable transient workflow/client errors."""
@@ -100,6 +103,9 @@ async def run_sample_workflow(ops_test: OpsTest, count=1):
             or "timeout expired" in message
             or "not enough hosts" in message
             or "unavailable" in message
+            or "workflow is busy" in message
+            or "resource exhausted" in message
+            or "resourceexhausted" in message
         )
 
     # Run a worker for the workflow
