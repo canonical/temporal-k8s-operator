@@ -273,7 +273,7 @@ def peer_relation(request, s3_config, openfga_store_id, openfga_secret):
 @pytest.fixture(scope="function")
 def admin_relation():
     return ops.testing.Relation(
-        "admin", remote_app_data={"schema_status": "ready", "migrated_workload_version": "1.24.3"}
+        "admin", remote_app_data={"schema_status": "ready", "migrated_workload_version": "1.27.4"}
     )
 
 

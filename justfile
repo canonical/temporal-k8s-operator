@@ -1,0 +1,37 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+set export
+
+[private]
+default:
+    just --list
+
+# Format the code
+format:
+    uv tool run --with tox-uv tox -e fmt
+
+# Run linters
+lint:
+    uv tool run --with tox-uv tox -e lint
+
+# Run unit tests
+unit:
+    uv tool run --with tox-uv tox -e unit
+
+# Run integration tests (the tox environment packs the host-info requirer test charm)
+integration *args:
+    uv tool run --with tox-uv tox -e integration -- {{args}}
+
+# Print system state to help debug a failed run
+get-system-state:
+    #!/usr/bin/bash
+    df -h
+    echo "---"
+    juju status --relations --storage --color || true
+    echo "---"
+    kubectl get pods -A || true
+    echo "---"
+    kubectl get events -A --sort-by=.lastTimestamp | tail -n 100 || true
+    echo "---"
+    sudo k8s status || true

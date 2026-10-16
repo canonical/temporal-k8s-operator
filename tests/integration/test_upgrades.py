@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 import requests
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL, UI_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -28,7 +28,7 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 
-ADMIN_TARGET_CHANNEL = "1.24/edge"
+ADMIN_TARGET_CHANNEL = "1.27/edge"
 
 
 def _read_workload_version() -> str:
@@ -65,7 +65,7 @@ async def deploy(ops_test: OpsTest):
     # Deploy temporal server, temporal admin and postgresql charms.
     await ops_test.model.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1})
     await ops_test.model.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
-    await ops_test.model.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
+    await ops_test.model.deploy(APP_NAME_UI, channel=UI_CHANNEL)
     await ops_test.model.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, revision=381)
 
     async with ops_test.fast_forward():
@@ -73,7 +73,7 @@ async def deploy(ops_test: OpsTest):
             apps=[APP_NAME, APP_NAME_ADMIN, APP_NAME_UI], status="blocked", raise_on_blocked=False, timeout=600
         )
         await ops_test.model.wait_for_idle(
-            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=600
+            apps=["postgresql-k8s"], status="active", raise_on_blocked=False, timeout=1200
         )
 
         await perform_temporal_integrations(ops_test)
@@ -113,7 +113,7 @@ class TestUpgrade:
         assert retcode == 0, f"Admin refresh failed: {stderr}"
 
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME_ADMIN], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
+            apps=[APP_NAME_ADMIN], raise_on_error=False, status="active", raise_on_blocked=False, timeout=1200
         )
 
         # This is to accommodate for a self-resolving error which sometimes appears when Temporal
@@ -134,7 +134,7 @@ class TestUpgrade:
         assert retcode == 0, f"Refresh failed: {stderr}"
 
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME], raise_on_error=False, status="active", raise_on_blocked=False, timeout=600
+            apps=[APP_NAME], raise_on_error=False, status="active", raise_on_blocked=False, timeout=1200
         )
         time.sleep(10)
 
