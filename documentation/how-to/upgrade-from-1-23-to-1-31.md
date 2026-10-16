@@ -1,117 +1,169 @@
-# Upgrade Charmed Temporal `1.23/stable` to `1.31/stable`
+# Upgrade Charmed Temporal from 1.23 to 1.31
 
-This guide describes how to upgrade an existing Charmed Temporal deployment from the `1.23/stable` channel to the `1.31/stable` channel on `ubuntu@26.04`. It is intended for operators who already have a Charmed Temporal deployment running on `1.23/stable`.
+This guide describes how to upgrade an existing Charmed Temporal deployment from `1.23` to `1.31` using charms published on Charmhub.
 
-The guide has been validated end-to-end on Juju `3.6`.
+Temporal must be upgraded sequentially through each minor version. For each upgrade, the Temporal Admin charm must be refreshed before Temporal Server so that the database schema is migrated first.
 
----
+> **Important:** Database schema migrations are forward-only. There is no supported in-place downgrade. Always create and verify a PostgreSQL backup before upgrading.
 
-## Important
+## Step 1: Check the current deployment
 
-Read these notes before starting the upgrade.
-
-- **The schema migration is forward-only.** There is no in-place downgrade. If the upgrade fails, the recovery path is restore-from-PostgreSQL-backup back to `1.23/stable` or directly onto `1.31/stable` once the underlying issue is resolved.
-- **The Temporal charms change their base from `ubuntu@24.04` to `ubuntu@26.04`** between `1.23/stable` and `1.31/stable`.
-- **`temporal-host-info` is mandatory.** All charms (`temporal-admin-k8s`, `temporal-ui-k8s`, and `temporal-worker-k8s`) must be integrated via the `temporal-host-info` relation. The deprecated `server-name` config on `temporal-admin-k8s` and `host` config on `temporal-worker-k8s` should be reset/cleared.
-- **Sequential upgrade:** Upgrades must be executed consecutively. Do not upgrade directly from `latest/stable` to `1.31/stable`; upgrade to `1.23/stable` first.
-
----
-
-## Step 1: Back up PostgreSQL
-
-The single source of truth for workflow history and namespace metadata is the PostgreSQL backend. **Back it up before the refresh.**
-
-> **Recommendation: stop active work before the backup.**
->
-> Temporal can recover from a database backup without needing a clean shutdown first, so this step is optional. That said, backing up while the system is quiet lowers the risk of capturing incomplete workflow state:
->
-> - **Stop new workflow starts** — pause or disable anything that triggers new executions (cron jobs, API clients, schedules).
-> - **Wait for running workflows to finish** — or at least reach a point where they are waiting on a timer, activity, or signal.
-> - **Shut down workers gracefully** — send a shutdown signal so the SDK can finish cleanly. In the Python SDK, `worker.run()` handles `SIGINT`/`SIGTERM` this way by default.
-
-Follow the official postgresql-k8s backup procedure: [Create a backup](https://charmhub.io/postgresql-k8s/docs/h-create-backup).
-
-If the upgrade fails at any point, restoring this dump returns the cluster to its pre-upgrade state. See [Recovery](#recovery-if-the-upgrade-fails) for the full procedure.
-
----
-
-## Step 2: Refresh `temporal-admin-k8s`
-
-The admin charm owns schema management and must be refreshed first.
-
-```bash
-juju refresh temporal-admin --channel 1.31/stable --base ubuntu@26.04
-```
-
-After settling, run the schema setup action to apply database schema updates for Temporal 1.31:
-
-```bash
-juju run temporal-admin/leader setup-schema
-```
-
-Ensure `temporal-admin` reports `active` status.
-
----
-
-## Step 3: Refresh `temporal-ui-k8s`
-
-Refresh the Web UI charm to 1.31 on `ubuntu@26.04`:
-
-```bash
-juju refresh temporal-ui --channel 1.31/stable --base ubuntu@26.04
-```
-
-Wait until the application finishes updating and returns to `active` status.
-
----
-
-## Step 4: Refresh `temporal-k8s`
-
-Refresh the core Temporal server charm:
-
-```bash
-juju refresh temporal-k8s --channel 1.31/stable --base ubuntu@26.04
-```
-
-Wait until the application reaches `active` status.
-
----
-
-## Step 5: Verify Relations and Status
-
-Verify that all units have updated and the integrations remain active:
+Verify that the Temporal Server and Admin charms are running version 1.23:
 
 ```bash
 juju status
-juju status --relations
+juju status temporal-k8s
+juju status temporal-admin-k8s
 ```
 
-Confirm the admin `cli` action reaches the upgraded server and can query the cluster:
+Identify the deployed application names, channels, revisions, and Ubuntu bases.
+
+The commands below assume the application names are `temporal-admin-k8s` and `temporal-k8s`. Replace these with the actual names if different.
+
+## Step 2: Back up PostgreSQL
+
+Before upgrading, follow the [PostgreSQL K8s backup documentation](https://charmhub.io/postgresql-k8s/docs/h-create-a-backup) to create and verify a restorable backup.
+
+Where possible, stop new workflow executions, allow running workflows to finish, and shut down workers gracefully before taking the backup.
+
+Repeat this backup step before each minor-version upgrade.
+
+## Step 3: Upgrade sequentially from 1.23 to 1.30
+
+Upgrade through the following versions, in order:
+
+`1.24 → 1.25 → 1.26 → 1.27 → 1.28 → 1.29 → 1.30`
+
+For each target version:
+
+### 3.1 Refresh Temporal Admin
+
+For example, to upgrade to 1.24:
 
 ```bash
-juju run temporal-admin/0 cli args="operator namespace list" --wait 1m
+juju refresh temporal-admin-k8s \
+  --channel 1.24/edge
 ```
 
----
+Wait for Admin to complete its schema migration and return to active status:
 
-## Recovery (if the upgrade fails)
+```bash
+juju status
+juju debug-log --include temporal-admin-k8s/0
+```
 
-There is **no in-place rollback**. Temporal's schema migration is forward-only. If the upgrade fails at any step, restore from the PostgreSQL backup taken in [Step 1](#step-1-back-up-postgresql), then choose one of two redeployment paths:
+Verify that the logs show successful migration of both the main and visibility schemas. Some releases may have no pending SQL schema changes.
 
-1. Stop applying further refreshes.
-2. Capture diagnostics:
-   ```bash
-   juju status > failure-status.txt
-   juju show-unit <stuck-unit> > failure-unit.yaml
-   juju debug-log --replay --level WARNING > failure-log.txt
-   ```
-3. Destroy the model:
-   ```bash
-   juju destroy-model <model> --no-prompt --destroy-storage
-   ```
-4. Restore PostgreSQL from your backup (see the [postgresql-k8s restore how-to](https://charmhub.io/postgresql-k8s/docs/h-restore-backup)).
-5. Choose one of:
-   * **Option A: Re-attempt the upgrade on `1.31/stable` (recommended).** If the failure was caused by a transient network issue or configuration mismatch, redeploy directly on `1.31/stable` against the restored database.
-   * **Option B: Roll back to `1.23/stable`.** Redeploy on `1.23/stable` and reconnect to the restored database.
+Do not proceed to the Server refresh if the Admin upgrade or schema migration fails.
 
-Report any reproducible failure to the [`temporal-k8s-operator` issues](https://github.com/canonical/temporal-k8s-operator/issues) with the diagnostics from step 2.
+### 3.2 Refresh Temporal Server
+
+After Admin becomes active:
+
+```bash
+juju refresh temporal-k8s \
+  --channel 1.24/edge
+```
+
+Wait for Temporal Server to become active:
+
+```bash
+juju status
+```
+
+Allow approximately 10 minutes for the History Service to load shards and update shard metadata before proceeding to the next version.
+
+### 3.3 Verify workflow execution
+
+Start a test workflow using an existing worker and confirm that it completes successfully.
+
+For an existing workflow named `GreetingWorkflow`:
+
+```bash
+juju run temporal-admin-k8s/0 cli \
+  args='workflow start --type GreetingWorkflow --task-queue default --workflow-id upgrade-test-124 --input "world" --namespace temporal-system'
+```
+
+```bash
+juju run temporal-admin-k8s/0 cli \
+  args='workflow show --workflow-id upgrade-test-124 --namespace temporal-system'
+```
+
+Adapt the workflow type, task queue, namespace, and workflow ID to your deployment.
+
+Repeat Steps 2 and 3 for every subsequent minor version, replacing `1.24/edge` with the matching version channel until both charms reach 1.30.
+
+## Step 4: Upgrade from 1.30 to 1.31
+
+Version 1.31 introduces a charm base transition to Ubuntu 26.04.
+
+### 4.1 Refresh Temporal Admin
+
+Create and verify another PostgreSQL backup.
+
+```bash
+juju refresh temporal-admin-k8s \
+  --channel 1.31/stable \
+  --base ubuntu@26.04
+```
+
+Wait for the charm to complete its upgrade hook and database schema migration:
+
+```bash
+juju status
+juju debug-log --include temporal-admin-k8s/0
+```
+
+Verify that both database schemas have been migrated successfully before proceeding.
+
+### 4.2 Refresh Temporal Server
+
+Once Admin is active and the database schemas are verified:
+
+```bash
+juju refresh temporal-k8s \
+  --channel 1.31/stable \
+  --base ubuntu@26.04
+```
+
+Allow time for the server to become active and finish processing shard metadata.
+
+## Step 5: Verify the upgrade
+
+Check the final charm status:
+
+```bash
+juju status
+```
+
+Confirm that:
+
+- Temporal Admin and Server report the expected 1.31 workload versions.
+- Both applications are `active/idle`.
+- The main and visibility database migrations completed successfully.
+- The Temporal Server workload is healthy.
+- Existing workflows can be queried and new workflows can execute successfully.
+
+Also verify the deployed charm bases:
+
+```bash
+kubectl get pod temporal-admin-k8s-0 \
+  -o jsonpath='{.spec.containers[?(@.name=="charm")].image}{"\n"}'
+
+kubectl get pod temporal-k8s-0 \
+  -o jsonpath='{.spec.containers[?(@.name=="charm")].image}{"\n"}'
+```
+
+Run these Kubernetes commands against the namespace corresponding to the Juju model, adding `-n <namespace>` as needed.
+
+## Recovery
+
+If an upgrade or schema migration fails, stop further refreshes. Capture the deployment status and Juju debug logs for investigation.
+
+Do not downgrade the charms against a database that has already undergone a forward schema migration. Follow the PostgreSQL restore procedure using the backup taken before the failed upgrade.
+
+## References
+
+- [Temporal Server Upgrades](https://charmhub.io/temporal-k8s/docs/h-server-upgrades)
+- [Upgrade from latest/stable to 1.23/stable](https://charmhub.io/temporal-k8s/docs/h-upgrade-1.23/stable)
+- [PostgreSQL K8s documentation](https://charmhub.io/postgresql-k8s/docs)
