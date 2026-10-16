@@ -46,7 +46,7 @@ def log_event_handler(logger):
                 logger.exception("unhandled exception in %s.%s", self.__class__.__name__, method.__name__)
                 raise
             finally:
-                logger.info("* completed %s.%s", self.__class__.__name__, method.__name__)
+                logger.info("* finished %s.%s", self.__class__.__name__, method.__name__)
 
         return decorated
 

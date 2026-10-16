@@ -48,7 +48,7 @@ jobs:
 
   # Report the scheduled nightly run as a single GitHub issue so the team has
   # a visible, assignable record to triage: the issue is created on the first
-  # failure and commented on repeat failures.
+  # non-success result and commented on repeat occurrences.
 
   report:
     name: Report results
@@ -60,7 +60,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - name: Create or update the failure issue
+      - name: Create or update the report issue
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -68,9 +68,26 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "$TEST_RESULT" != "failure" ]; then
-            echo "Tests did not fail; nothing to report."
+          if [ "$TEST_RESULT" = "success" ]; then
+            echo "Tests succeeded; nothing to report."
             exit 0
+          fi
+
+          if [ "$TEST_RESULT" = "failure" ]; then
+            comment="Juju 4 run failed: $RUN_URL"
+            title="Juju 4 integration tests failing"
+            body="The Juju 4 tests failed. Please investigate.
+
+          Workflow run: $RUN_URL"
+          else
+            # Inconclusive results (e.g. skipped) mean the suite did not fully
+            # run; report them rather than treating the nightly as uneventful.
+            # 'cancelled' never reaches here (job-level condition).
+            comment="Juju 4 run ended inconclusively (result: $TEST_RESULT): $RUN_URL"
+            title="Juju 4 integration tests did not complete"
+            body="The Juju 4 test run ended with result '$TEST_RESULT' instead of success. Please investigate.
+
+          Workflow run: $RUN_URL"
           fi
 
           existing=$(gh issue list -R "$GITHUB_REPOSITORY" \
@@ -79,13 +96,11 @@ jobs:
 
           if [ -n "$existing" ]; then
             gh issue comment "$existing" -R "$GITHUB_REPOSITORY" \
-              --body "Juju 4 run failed: $RUN_URL"
+              --body "$comment"
           else
             gh issue create -R "$GITHUB_REPOSITORY" \
               --label juju-4 --label bug \
-              --title "Juju 4 integration tests failing" \
-              --body "The Juju 4 tests failed. Please investigate.
-
-          Workflow run: $RUN_URL"
+              --title "$title" \
+              --body "$body"
           fi
 
