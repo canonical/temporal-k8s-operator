@@ -93,6 +93,12 @@ def deploy(juju: jubilant.Juju):
     yield
 
 
+# TODO: pin a validated revision per track when the upgrade scenario supports
+# postgresql-k8s 16.
+@pytest.mark.skipif(
+    not POSTGRESQL_CHANNEL.startswith("14"),
+    reason="deploy fixture pins postgresql-k8s revision=381 (14 track only)",
+)
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("deploy")
 class TestUpgrade:
