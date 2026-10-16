@@ -9,7 +9,7 @@
 # compatibility issues early and report them to the Juju team.
 #
 # Key differences vs a pull_request run of tests.yaml:
-#   - Juju channel: 4/edge (instead of 3.6/stable)
+#   - Juju channel: 4.1/edge (instead of 3.6/stable)
 #   - postgresql-k8s channel: 16/stable (14/stable does not support juju 4)
 #   - postgresql-k8s deployed with --force to bypass base checks until the
 #     charm formally declares Juju 4 support
@@ -42,7 +42,7 @@ jobs:
       pull-requests: write
     secrets: inherit
     with:
-      juju-channel: "4/edge"
+      juju-channel: "4.1/edge"
       postgres-channel: "16/stable"
       postgres-force: true
 
