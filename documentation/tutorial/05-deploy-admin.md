@@ -43,8 +43,7 @@ juju integrate temporal-k8s:admin              temporal-admin-k8s:admin
 juju integrate temporal-k8s:temporal-host-info  temporal-admin-k8s:temporal-host-info
 ```
 
-> **Deprecation notice: `server-name` config.** 
-`server-name` is deprecated in `1.31/stable`**
+> **Deprecation notice: `server-name` is removed.** 
 The `temporal-host-info` relation must be used.
 
 Monitor relations until they settle:

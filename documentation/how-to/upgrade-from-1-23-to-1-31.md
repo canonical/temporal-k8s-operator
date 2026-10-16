@@ -278,7 +278,7 @@ If an upgrade or schema migration fails, stop further refreshes. Capture the dep
 
 ```bash
 juju status
-juju debug-log --include temporal-admin-k8s/0
+juju debug-log --include temporal-admin/0
 juju debug-log --include temporal-k8s/0
 ```
 

@@ -121,7 +121,7 @@ If an upgrade or schema migration fails, stop further refreshes. Capture the dep
 
 ```bash
 juju status
-juju debug-log --include temporal-admin-k8s/0
+juju debug-log --include temporal-admin/0
 juju debug-log --include temporal-k8s/0
 ```
 
@@ -135,4 +135,4 @@ juju model-config automatically-retry-hooks=true
 
 Enable this only after correcting the underlying failure; it does not repair incompatible charm packages or failed database operations.
 
-Do not downgrade charms against a database that has already undergone a forward schema migration. Follow the PostgreSQL restore procedure using a validated backup taken before the failed upgrade.
+Do not downgrade charms against a database that has already undergone a forward schema migration. Follow the [PostgreSQL restore procedure](https://charmhub.io/postgresql-k8s/docs/h-restore-backup) using a validated backup taken before the failed upgrade.
