@@ -35,7 +35,7 @@ async def deploy(ops_test: OpsTest, charm: str):
         resources=resources,
         application_name=APP_NAME,
         config={"num-history-shards": 1},
-        num_units=3,
+        num_units=1,
     )
     await ops_test.model.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
     await ops_test.model.deploy(PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True)
@@ -57,6 +57,15 @@ async def deploy(ops_test: OpsTest, charm: str):
         await ops_test.model.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
         await ops_test.model.wait_for_idle(status="active", raise_on_blocked=False, timeout=90 * 10)
 
+        # Let the first unit initialize cluster metadata before peers start.
+        await ops_test.model.applications[APP_NAME].scale(scale=3)
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME],
+            status="active",
+            raise_on_blocked=False,
+            timeout=90 * 10,
+        )
+        
         # Run action to create default namespace
         await create_default_namespace(ops_test)
 
