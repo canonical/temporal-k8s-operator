@@ -5,14 +5,42 @@ on:
     paths-ignore:
       - '**.md'
   workflow_call:
+    inputs:
+      juju-channel:
+        description: Juju snap channel the test controllers are bootstrapped from.
+        required: false
+        type: string
+        default: "3.6/stable"
+      postgres-channel:
+        description: postgresql-k8s channel deployed by the integration tests.
+        required: false
+        type: string
+        default: "14/stable"
+      postgres-force:
+        description: Deploy postgresql-k8s with --force to skip the base support check.
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Effective configuration for the run. The inputs context is only populated
+# for workflow_call / workflow_dispatch runs; on pull_request it is empty, so
+# each input is resolved here with a fallback matching its declared default.
+env:
+  JUJU_CHANNEL: ${{ inputs.juju-channel || '3.6/stable' }}
+  POSTGRESQL_CHANNEL: ${{ inputs.postgres-channel || '14/stable' }}
+  POSTGRESQL_FORCE: ${{ inputs.postgres-force || false }}
+
 jobs:
+  # The lint/unit/lib-check jobs are skipped when this workflow is invoked on a
+  # schedule (e.g. nightly-juju4.yaml): the nightly run is integration-test
+  # focused, and scheduled lib-check runs could produce unwanted write actions.
   alertmanager-rules-lint:
     name: Alertmanager rules lint
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
@@ -27,6 +55,7 @@ jobs:
 
   lib-check:
     name: Check libraries
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
@@ -48,6 +77,7 @@ jobs:
 
   lint:
     name: Lint
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
@@ -64,6 +94,7 @@ jobs:
 
   unit-tests:
     name: Unit tests
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
@@ -103,7 +134,7 @@ jobs:
 
           sudo concierge prepare \
             -p k8s \
-            --juju-channel 3.6/stable \
+            --juju-channel $JUJU_CHANNEL \
             --charmcraft-channel 4.x/stable \
             --extra-snaps="astral-uv,just,kubectl"
 
@@ -128,7 +159,8 @@ jobs:
   # The ingress test exposes the gRPC frontend through ingress-configurator +
   # HAProxy. HAProxy is a machine charm, so this needs both a Kubernetes and an
   # LXD controller - provisioned from concierge.yaml (which enables both
-  # providers) rather than the k8s-only `-p k8s` preset used above.
+  # providers) rather than the k8s-only `-p k8s` preset used above. The
+  # --juju-channel flag overrides the juju.channel set in the config file.
   ingress-integration-test:
     name: Integration test (ingress)
     runs-on: [self-hosted-linux-amd64-resolute-large]
@@ -139,13 +171,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # concierge's config-file mode (-c) does not honour the
-          # --charmcraft-channel / --extra-snaps preset flags, so the tooling
-          # (charmcraft, astral-uv, just, kubectl) is declared under `host.snaps`
-          # in concierge.yaml instead and installed by `concierge prepare`.
+          # The tooling snaps (charmcraft, astral-uv, just, kubectl) are
+          # declared under `host.snaps` in concierge.yaml and installed by
+          # `concierge prepare`.
           sudo snap install concierge --classic
 
-          sudo concierge prepare -c .github/workflows/concierge.yaml
+          sudo concierge prepare -c .github/workflows/concierge.yaml --juju-channel $JUJU_CHANNEL
 
           sudo k8s kubectl config view --raw > ~/.kube/config
 

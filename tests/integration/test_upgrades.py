@@ -10,7 +10,7 @@ import time
 import jubilant
 import pytest
 import requests
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import POSTGRESQL_CHANNEL, POSTGRESQL_FORCE, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -35,7 +35,9 @@ def deploy(juju: jubilant.Juju):
     juju.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1})
     juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
     juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, revision=381)
+    # revision=381 pins a 14/stable revision, so TestUpgrade is skipped below
+    # when POSTGRESQL_CHANNEL is not on the 14 track.
+    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, revision=381, force=POSTGRESQL_FORCE)
 
     with fast_forward(juju):
         wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=600)
@@ -52,6 +54,12 @@ def deploy(juju: jubilant.Juju):
 
 
 @pytest.mark.skip("Skipping because of canonical/temporal-k8s-operator/issues/150")
+# TODO: pin a validated revision per track when the upgrade scenario supports
+# postgresql-k8s 16.
+@pytest.mark.skipif(
+    not POSTGRESQL_CHANNEL.startswith("14"),
+    reason="deploy fixture pins postgresql-k8s revision=381 (14 track only)",
+)
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("deploy")
 class TestUpgrade:
