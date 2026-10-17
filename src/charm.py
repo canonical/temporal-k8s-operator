@@ -41,7 +41,13 @@ from charms.traefik_k8s.v2.ingress import (
 from jinja2 import Environment, FileSystemLoader
 from ops import EventBase, main, pebble
 from ops.charm import CharmBase, RelationBrokenEvent
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import (
+    ActiveStatus,
+    BlockedStatus,
+    MaintenanceStatus,
+    ModelError,
+    WaitingStatus,
+)
 from ops.pebble import CheckStatus
 
 from literals import (
@@ -497,6 +503,11 @@ class TemporalK8SCharm(CharmBase):
             self._update(event)
             return
 
+        if not self._server_running(container):
+            # A previous replan may have failed to start the server: retry it.
+            self._update(event)
+            return
+
         check = container.get_check("temporal-server-running")
         if check.status != CheckStatus.UP:
             self.unit.status = MaintenanceStatus("Status check: DOWN")
@@ -509,6 +520,20 @@ class TemporalK8SCharm(CharmBase):
         self.set_active_unit_status()
         if self.unit.is_leader():
             self.ui._provide_server_status()
+
+    def _server_running(self, container) -> bool:
+        """Check whether the Temporal server Pebble service is running.
+
+        Args:
+            container: application container
+
+        Returns:
+            True if the service is running, False otherwise.
+        """
+        try:
+            return container.get_service("temporal-server").is_running()
+        except (ModelError, pebble.ConnectionError):
+            return False
 
     def _validate_pebble_plan(self, container):
         """Validate Temporal server pebble plan.
@@ -684,6 +709,10 @@ class TemporalK8SCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
+        if self.app.planned_units() == 0:
+            logger.info("application is being removed, skipping temporal configuration")
+            return
+
         try:
             self._validate()
         except ValueError as err:
@@ -785,33 +814,7 @@ class TemporalK8SCharm(CharmBase):
         self._handle_frontend_tls()
         context.update(self._extra_context)
 
-        # The certificates relation is not observed by the host-info or ingress
-        # libraries, so republish both here: this runs on certificate_available
-        # and on the frontend-certificates relation joining and breaking, which
-        # are exactly the transitions that flip the published `tls` value and the
-        # advertised ingress scheme.
-        self._host_info.publish()
-        self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
-
-        # Ensure log directory exists
-        log_dir = os.path.dirname(LOG_OUTPUT_FILE)
-        container.make_dir(log_dir, make_parents=True, user="ubuntu", group="ubuntu")
-
-        # Configure log rotation
-        logrotate_config = f"""{LOG_OUTPUT_FILE} {{
-    daily
-    rotate 7
-    size 100M
-    missingok
-    notifempty
-    nomail
-    compress
-    delaycompress
-    copytruncate
-    create 0640 ubuntu ubuntu
-}}
-"""
-        container.push("/etc/logrotate.d/temporal-server", logrotate_config, make_dirs=True)
+        self._configure_log_rotation(container)
 
         config = render("config.jinja", context)
         container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
@@ -857,9 +860,61 @@ class TemporalK8SCharm(CharmBase):
             },
         }
         container.add_layer(self.name, pebble_layer, combine=True)
-        container.replan()
+        if not self._replan(container):
+            return
+
+        # The certificates relation is not observed by the host-info or ingress
+        # libraries, so republish both here: this runs on certificate_available
+        # and on the frontend-certificates relation joining and breaking, which
+        # are exactly the transitions that flip the published `tls` value and the
+        # advertised ingress scheme. Only advertise what the workload is running.
+        self._host_info.publish()
+        self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
 
         self.unit.status = MaintenanceStatus("replanning application")
+
+    def _configure_log_rotation(self, container):
+        """Create the log directory and push the logrotate configuration.
+
+        Args:
+            container: The Temporal workload container.
+        """
+        # Ensure log directory exists
+        log_dir = os.path.dirname(LOG_OUTPUT_FILE)
+        container.make_dir(log_dir, make_parents=True, user="ubuntu", group="ubuntu")
+
+        # Configure log rotation
+        logrotate_config = f"""{LOG_OUTPUT_FILE} {{
+    daily
+    rotate 7
+    size 100M
+    missingok
+    notifempty
+    nomail
+    compress
+    delaycompress
+    copytruncate
+    create 0640 ubuntu ubuntu
+}}
+"""
+        container.push("/etc/logrotate.d/temporal-server", logrotate_config, make_dirs=True)
+
+    def _replan(self, container) -> bool:
+        """Replan the workload, blocking the unit instead of failing the hook if it cannot start.
+
+        Args:
+            container: The Temporal workload container.
+
+        Returns:
+            True if the replan succeeded, False otherwise.
+        """
+        try:
+            container.replan()
+        except pebble.ChangeError as err:
+            logger.error("failed to start temporal server: %s", err)
+            self.unit.status = BlockedStatus("failed to start temporal server; check logs")
+            return False
+        return True
 
     # Helpers for frontend TLS
     def _relation_created(self, relation_name: str) -> bool:
