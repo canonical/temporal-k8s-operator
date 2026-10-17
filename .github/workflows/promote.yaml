@@ -32,4 +32,5 @@ jobs:
           origin-channel: ${{ github.event.inputs.origin-channel }}
           destination-channel: ${{ github.event.inputs.destination-channel }}
           base-channel: ${{ github.event.inputs.base-channel }}
+          tag-prefix: temporal-k8s
           charmcraft-channel: 4.x/stable
