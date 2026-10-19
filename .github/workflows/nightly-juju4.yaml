@@ -38,8 +38,9 @@ jobs:
         "just integration tests/integration/test_host_info.py",
         "just integration tests/integration/test_pgbouncer.py",
         "just integration tests/integration/test_scaling.py",
-        "just integration tests/integration/test_server_upgrade.py",
-        "just integration tests/integration/test_upgrades.py"]
+        "just integration tests/integration/test_server_upgrade.py"]
+      # test_upgrades.py is excluded until the upgrade scenario supports
+      # postgresql-k8s 16 (TODO in tests/integration/test_upgrades.py).
       issue-label: juju-4
 
   # Ingress needs both k8s and lxd controllers (HAProxy is a machine charm),
