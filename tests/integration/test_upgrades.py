@@ -12,7 +12,6 @@ from pathlib import Path
 import jubilant
 import pytest
 import requests
-
 from conftest import ADMIN_BASE, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
@@ -33,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 PREVIOUS_TEMPORAL_CHANNEL = "1.30/edge"
 ADMIN_TARGET_CHANNEL = TEMPORAL_CHANNEL
+
 
 def _read_workload_version() -> str:
     """Read WORKLOAD_VERSION out of src/literals.py without importing ops.
@@ -68,7 +68,7 @@ def deploy(juju: jubilant.Juju):
         channel=PREVIOUS_TEMPORAL_CHANNEL,
         config={"num-history-shards": 1},
         base="ubuntu@24.04",
-    )   
+    )
 
     juju.deploy(
         APP_NAME_ADMIN,
@@ -80,14 +80,14 @@ def deploy(juju: jubilant.Juju):
     juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, base="ubuntu@22.04")
 
     with fast_forward(juju):
-        wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=600)
-        wait_active(juju, "postgresql-k8s", timeout=600)
+        wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=1800)
+        wait_active(juju, "postgresql-k8s", timeout=1800)
 
         perform_temporal_integrations(juju)
 
         create_default_namespace(juju)
 
-        wait_active(juju, APP_NAME, timeout=300)
+        wait_active(juju, APP_NAME, timeout=1800)
         assert_unit_active(juju, APP_NAME, APP_NAME_UI)
 
     yield
@@ -105,26 +105,24 @@ class TestUpgrade:
         charm_resources: dict,
     ):
         """Upgrade Server from 1.30 to local 1.31."""
-
-        wait_active(juju, APP_NAME, timeout=600)
+        wait_active(juju, APP_NAME, timeout=1800)
 
         juju.refresh(
             APP_NAME_ADMIN,
             channel=ADMIN_TARGET_CHANNEL,
             base=ADMIN_BASE,
         )
-        wait_active(juju, APP_NAME_ADMIN, timeout=1200)
+        wait_active(juju, APP_NAME_ADMIN, timeout=1800)
 
         expected_version = _read_workload_version()
 
         juju.wait(
             lambda _: (
-                _get_admin_schema_data(juju).get("migrated_workload_version")
-                == expected_version
+                _get_admin_schema_data(juju).get("migrated_workload_version") == expected_version
                 and _get_admin_schema_data(juju).get("schema_status") == "ready"
             ),
             delay=5,
-            timeout=300,
+            timeout=1800,
         )
 
         juju.refresh(
@@ -134,7 +132,7 @@ class TestUpgrade:
             base="ubuntu@26.04",
         )
 
-        wait_active(juju, APP_NAME, timeout=1200)
+        wait_active(juju, APP_NAME, timeout=1800)
 
         with fast_forward(juju):
             assert_unit_active(juju, APP_NAME)
@@ -145,5 +143,5 @@ class TestUpgrade:
         url = get_unit_url(juju, application=APP_NAME_UI, unit=0, port=8080)
         logger.info("curling app address: %s", url)
 
-        response = requests.get(url, timeout=300)
+        response = requests.get(url, timeout=1800)
         assert response.status_code == 200

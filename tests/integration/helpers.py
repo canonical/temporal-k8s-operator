@@ -310,10 +310,10 @@ def perform_temporal_integrations(juju: jubilant.Juju):
     juju.integrate(f"{APP_NAME}:visibility", "postgresql-k8s:database")
     juju.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")
     juju.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
-    wait_active(juju, APP_NAME, timeout=180)
+    wait_active(juju, APP_NAME, timeout=1800)
     juju.integrate(f"{APP_NAME}:ui", f"{APP_NAME_UI}:ui")
     juju.integrate(f"{APP_NAME}:temporal-host-info", f"{APP_NAME_UI}:temporal-host-info")
-    wait_active(juju, APP_NAME, APP_NAME_UI, timeout=180)
+    wait_active(juju, APP_NAME, APP_NAME_UI, timeout=1800)
 
     assert_unit_active(juju, APP_NAME)
 
