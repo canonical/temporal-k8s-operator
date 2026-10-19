@@ -1,22 +1,9 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-# Nightly integration tests against Juju 4.x.
-#
-# This is a parallel CI pipeline that reuses the jobs in tests.yaml via
-# workflow_call (so the test matrix and steps stay in one place) but targets
-# the latest edge Juju 4.x release. It runs nightly so the team can spot Juju 4
-# compatibility issues early and report them to the Juju team.
-#
-# Key differences vs a pull_request run of tests.yaml:
-#   - Juju channel: 4.1/edge (instead of 3.6/stable)
-#   - postgresql-k8s channel: 16/stable (14/stable does not support juju 4)
-#   - postgresql-k8s deployed with --force to bypass base checks until the
-#     charm formally declares Juju 4 support
-#   - ingress test provisions k8s+lxd from concierge.yaml, overriding the
-#     Juju channel via concierge's --juju-channel flag
-#
-# The regular CI (pull_request trigger of tests.yaml / Juju 3.x) is unaffected.
+# Nightly integration tests against Juju 4.x via the team's shared reusable
+# workflow. Each test command gets its own runner provisioned by concierge.
+# Scheduled failures open/update one issue labelled `juju-4`.
 
 name: Juju 4.x Tests
 
@@ -25,82 +12,50 @@ on:
     # Run at 02:17 UTC every day
     - cron: '17 2 * * *'
   workflow_dispatch:
-    inputs:
-      create-issues:
-        description: Create/update GitHub issues for failures (always on for scheduled runs)
-        required: false
-        type: boolean
-        default: false
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
-  tests:
-    name: Test suite [juju 4.x]
-    uses: ./.github/workflows/tests.yaml
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-    secrets: inherit
+  integration:
+    name: Integration tests [juju 4.x]
+    uses: canonical/workflows-team/.github/workflows/juju-nightly.yaml@main
     with:
       juju-channel: "4.1/edge"
-      postgres-channel: "16/stable"
-      postgres-force: true
+      # Matches the runner label used by tests.yaml.
+      runner: self-hosted-linux-amd64-resolute-large
+      timeout-minutes: 120
+      # charmcraft pinned via name/channel: the k8s preset installs it at the
+      # default channel first, then the extra snap refreshes it to 4.x/stable.
+      extra-snaps: "charmcraft/4.x/stable,astral-uv,just,kubectl"
+      # 16/stable supports Juju 4; --force bypasses the base check until
+      # postgresql-k8s declares Juju 4 support.
+      extra-env: '{"POSTGRESQL_CHANNEL": "16/stable", "POSTGRESQL_FORCE": "true"}'
+      test-commands: >-
+        ["just integration tests/integration/test_auth.py",
+        "just integration tests/integration/test_charm.py",
+        "just integration tests/integration/test_host_info.py",
+        "just integration tests/integration/test_pgbouncer.py",
+        "just integration tests/integration/test_scaling.py",
+        "just integration tests/integration/test_server_upgrade.py",
+        "just integration tests/integration/test_upgrades.py"]
+      issue-label: juju-4
 
-  # Report the scheduled nightly run as a single GitHub issue so the team has
-  # a visible, assignable record to triage: the issue is created on the first
-  # non-success result and commented on repeat occurrences.
-
-  report:
-    name: Report results
-    runs-on: ubuntu-26.04
-    needs: [tests]
-    if: >-
-      always() && needs.tests.result != 'cancelled' &&
-      (github.event_name == 'schedule' || inputs.create-issues)
-    permissions:
-      issues: write
-    steps:
-      - name: Create or update the report issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          TEST_RESULT: ${{ needs.tests.result }}
-        run: |
-          set -euo pipefail
-
-          if [ "$TEST_RESULT" = "success" ]; then
-            echo "Tests succeeded; nothing to report."
-            exit 0
-          fi
-
-          if [ "$TEST_RESULT" = "failure" ]; then
-            comment="Juju 4 run failed: $RUN_URL"
-            title="Juju 4 integration tests failing"
-            body="The Juju 4 tests failed. Please investigate.
-
-          Workflow run: $RUN_URL"
-          else
-            # Inconclusive results (e.g. skipped) mean the suite did not fully
-            # run; report them rather than treating the nightly as uneventful.
-            # 'cancelled' never reaches here (job-level condition).
-            comment="Juju 4 run ended inconclusively (result: $TEST_RESULT): $RUN_URL"
-            title="Juju 4 integration tests did not complete"
-            body="The Juju 4 test run ended with result '$TEST_RESULT' instead of success. Please investigate.
-
-          Workflow run: $RUN_URL"
-          fi
-
-          existing=$(gh issue list -R "$GITHUB_REPOSITORY" \
-            --label juju-4 --state open --limit 1 \
-            --json number --jq '.[0].number // empty')
-
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" -R "$GITHUB_REPOSITORY" \
-              --body "$comment"
-          else
-            gh issue create -R "$GITHUB_REPOSITORY" \
-              --label juju-4 --label bug \
-              --title "$title" \
-              --body "$body"
-          fi
-
+  # Ingress needs both k8s and lxd controllers (HAProxy is a machine charm),
+  # so it uses concierge.yaml instead of the k8s preset. provider stays k8s
+  # so kubeconfig is written and pod diagnostics are collected.
+  ingress:
+    name: Ingress integration test [juju 4.x]
+    uses: canonical/workflows-team/.github/workflows/juju-nightly.yaml@main
+    with:
+      juju-channel: "4.1/edge"
+      concierge-config: .github/workflows/concierge.yaml
+      provider: k8s
+      runner: self-hosted-linux-amd64-resolute-large
+      timeout-minutes: 120
+      # Tooling snaps are declared under host.snaps in concierge.yaml.
+      extra-snaps: ""
+      test-commands: '["just integration tests/integration/test_ingress.py"]'
+      extra-env: '{"POSTGRESQL_CHANNEL": "16/stable", "POSTGRESQL_FORCE": "true"}'
+      issue-label: juju-4
