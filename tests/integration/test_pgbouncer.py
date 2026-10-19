@@ -4,10 +4,11 @@
 """Temporal charm pgbouncer integration tests."""
 
 import logging
+import pathlib
 
 import jubilant
 import pytest
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import POSTGRESQL_CHANNEL, POSTGRESQL_FORCE, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -26,11 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(name="deploy", scope="module")
-def deploy(juju: jubilant.Juju):
+def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
     """The app is up and running."""
     # Deploy temporal server, temporal admin and postgresql charms.
-    juju.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1}, num_units=3)
-    juju.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
+    juju.deploy(charm, APP_NAME, resources=charm_resources, config={"num-history-shards": 1}, num_units=3)
+    juju.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True, force=POSTGRESQL_FORCE)
     juju.deploy(PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True)
     juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
 
