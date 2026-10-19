@@ -3,14 +3,16 @@
 
 """Temporal charm upgrades integration tests."""
 
+import json
 import logging
 import pathlib
-import time
+import re
+from pathlib import Path
 
 import jubilant
 import pytest
 import requests
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import ADMIN_BASE, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -28,53 +30,112 @@ from helpers import (
 logger = logging.getLogger(__name__)
 
 
+PREVIOUS_TEMPORAL_CHANNEL = "1.30/edge"
+ADMIN_TARGET_CHANNEL = TEMPORAL_CHANNEL
+
+
+def _read_workload_version() -> str:
+    """Read WORKLOAD_VERSION out of src/literals.py without importing ops.
+
+    The integration test environment does not install this charm's own
+    package, so we parse the constant directly out of the source file instead
+    of importing it.
+    """
+    text = Path("src/literals.py").read_text()
+    match = re.search(r'^WORKLOAD_VERSION\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    assert match, "WORKLOAD_VERSION constant not found in src/literals.py"
+    return match.group(1)
+
+
+def _get_admin_schema_data(juju: jubilant.Juju) -> dict:
+    """Get schema status published by Admin."""
+    unit = f"{APP_NAME}/0"
+    data = json.loads(juju.cli("show-unit", unit, "--format", "json"))
+
+    for relation in data[unit].get("relation-info", []):
+        if relation.get("endpoint") == "admin":
+            return relation.get("application-data", {})
+    return {}
+
+
 @pytest.fixture(name="deploy", scope="module")
 def deploy(juju: jubilant.Juju):
     """The app is up and running."""
     # Deploy temporal server, temporal admin and postgresql charms.
-    juju.deploy(APP_NAME, channel=TEMPORAL_CHANNEL, config={"num-history-shards": 1})
-    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+
+    juju.deploy(
+        APP_NAME,
+        channel=PREVIOUS_TEMPORAL_CHANNEL,
+        config={"num-history-shards": 1},
+        base="ubuntu@24.04",
+    )
+
+    juju.deploy(
+        APP_NAME_ADMIN,
+        channel=PREVIOUS_TEMPORAL_CHANNEL,
+        base="ubuntu@24.04",
+    )
+
     juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, revision=381)
+    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, base="ubuntu@22.04")
 
     with fast_forward(juju):
-        wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=600)
-        wait_active(juju, "postgresql-k8s", timeout=600)
+        wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=1800)
+        wait_active(juju, "postgresql-k8s", timeout=1800)
 
         perform_temporal_integrations(juju)
 
         create_default_namespace(juju)
 
-        wait_active(juju, APP_NAME, timeout=300)
+        wait_active(juju, APP_NAME, timeout=1800)
         assert_unit_active(juju, APP_NAME, APP_NAME_UI)
 
     yield
 
 
-@pytest.mark.skip("Skipping because of canonical/temporal-k8s-operator/issues/150")
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("deploy")
 class TestUpgrade:
     """Integration test for Temporal charm upgrade from previous release."""
 
-    def test_upgrade(self, juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
-        """Builds the current charm and refreshes the current deployment."""
-        wait_active(juju, APP_NAME, timeout=600)
+    def test_upgrade(
+        self,
+        juju: jubilant.Juju,
+        charm: pathlib.Path,
+        charm_resources: dict,
+    ):
+        """Upgrade Server from 1.30 to local 1.31."""
+        wait_active(juju, APP_NAME, timeout=1800)
 
-        # This is to accmmodate for a self-resolving error which sometimes appears when Temporal
-        # services attempt to connect to the cluster before the application is ready.
-        # --base carries the 22.04->24.04 platform upgrade; refresh raises on failure.
-        juju.refresh(APP_NAME, path=charm, resources=charm_resources, base="ubuntu@24.04")
+        juju.refresh(
+            APP_NAME_ADMIN,
+            channel=ADMIN_TARGET_CHANNEL,
+            base=ADMIN_BASE,
+        )
+        wait_active(juju, APP_NAME_ADMIN, timeout=1800)
 
-        wait_active(juju, APP_NAME, timeout=600)
-        time.sleep(10)
+        expected_version = _read_workload_version()
+
+        juju.wait(
+            lambda _: (
+                _get_admin_schema_data(juju).get("migrated_workload_version") == expected_version
+                and _get_admin_schema_data(juju).get("schema_status") == "ready"
+            ),
+            delay=5,
+            timeout=1800,
+        )
+
+        juju.refresh(
+            APP_NAME,
+            path=charm,
+            resources=charm_resources,
+            base="ubuntu@26.04",
+        )
+
+        wait_active(juju, APP_NAME, timeout=1800)
 
         with fast_forward(juju):
-            # Delay time for application to settle. This is to accommodate for unit
-            # becoming active while application is still waiting.
-            time.sleep(10)
             assert_unit_active(juju, APP_NAME)
-
             run_sample_workflow(juju)
 
     def test_ui_relation(self, juju: jubilant.Juju):
@@ -82,5 +143,5 @@ class TestUpgrade:
         url = get_unit_url(juju, application=APP_NAME_UI, unit=0, port=8080)
         logger.info("curling app address: %s", url)
 
-        response = requests.get(url, timeout=300)
+        response = requests.get(url, timeout=1800)
         assert response.status_code == 200
