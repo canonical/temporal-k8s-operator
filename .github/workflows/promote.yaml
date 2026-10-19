@@ -20,6 +20,8 @@ jobs:
   promote:
     name: Promote charm
     runs-on: ubuntu-26.04
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
