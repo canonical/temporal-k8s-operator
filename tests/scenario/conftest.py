@@ -1,26 +1,50 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import dataclasses
 import json
+import types
+import unittest.mock
 
 import ops.testing
 import pytest
 
 from charm import TemporalK8SCharm
+from relations.s3_archival import construct_endpoint, retrieve_s3_parameters
+
+
+def s3_fingerprint(s3_config):
+    """Return the fingerprint the charm records in the peer data for the S3 bucket.
+
+    Args:
+        s3_config: The S3 relation data.
+
+    Returns:
+        The fingerprint of the S3 state the charm derives from the relation data.
+    """
+    s3_parameters, _ = retrieve_s3_parameters(types.SimpleNamespace(get_s3_connection_info=lambda: dict(s3_config)))
+    return TemporalK8SCharm._s3_fingerprint(
+        {
+            "bucket": s3_parameters["bucket"],
+            "endpoint": construct_endpoint(s3_parameters),
+            "region": s3_parameters["region"],
+            "aws_access_key_id": s3_parameters["access-key"],
+            "aws_secret_access_key": s3_parameters["secret-key"],
+            "uri_style": s3_parameters["s3-uri-style"],
+        }
+    )
 
 
 def pytest_configure(config):  # noqa: DCO020
     """Flags that can be configured to modify fixture behavior.
 
-    Used to determine how _state in the peer relation app databag is populated.
+    Used to determine how the peer relation app databag is populated, and whether S3 is related.
 
     Args:
         config: the pytest config object
     """
     config.addinivalue_line("markers", "peer_relation_skipped")
     config.addinivalue_line("markers", "config_skipped")
-    config.addinivalue_line("markers", "db_relation_skipped")
-    config.addinivalue_line("markers", "visibility_relation_skipped")
     config.addinivalue_line("markers", "parametrize_skip_if")
     config.addinivalue_line("markers", "s3_relation_skipped")
     config.addinivalue_line("markers", "openfga_auth_skipped")
@@ -41,6 +65,13 @@ def pytest_runtest_setup(item):
 @pytest.fixture
 def temporal_k8s_charm():
     yield TemporalK8SCharm
+
+
+@pytest.fixture(autouse=True)
+def create_bucket():
+    """Never reach a real S3 endpoint; the bucket is created unless a test sets a side effect."""
+    with unittest.mock.patch("charm.create_bucket_if_not_exists") as create_bucket_if_not_exists:
+        yield create_bucket_if_not_exists
 
 
 @pytest.fixture(scope="function")
@@ -90,6 +121,39 @@ def temporal_container_initialized(log_dir_execs):
             ),
         },
     )
+
+
+@pytest.fixture(scope="function")
+def configured_container(temporal_container_initialized):
+    """Return a builder of the container as the charm configured it."""
+
+    def build(state_out, status, check_status=ops.pebble.CheckStatus.UP):
+        """Build the container from the layers the charm planned.
+
+        Args:
+            state_out: The state after the charm planned the server.
+            status: The status of the temporal-server service.
+            check_status: The status of the temporal-server-running check.
+
+        Returns:
+            The container with the charm's layers and the service in the given status.
+        """
+        return dataclasses.replace(
+            temporal_container_initialized,
+            layers=state_out.get_container("temporal").layers,
+            service_statuses={"temporal-server": status},
+            check_infos=[
+                ops.testing.CheckInfo(
+                    "temporal-server-running",
+                    level=ops.pebble.CheckLevel.ALIVE,
+                    startup=ops.pebble.CheckStartup.UNSET,
+                    status=check_status,
+                    threshold=None,
+                )
+            ],
+        )
+
+    return build
 
 
 @pytest.fixture(scope="function")
@@ -173,6 +237,11 @@ def s3_config():
 
 
 @pytest.fixture(scope="function")
+def s3_bucket_fingerprint(s3_config):
+    return s3_fingerprint(s3_config)
+
+
+@pytest.fixture(scope="function")
 def postgres_db_data():
     return {
         "database": "temporal-k8s_db",
@@ -209,62 +278,29 @@ def tls_certificates_data():
 
 
 @pytest.fixture(scope="function")
-def peer_relation(request, s3_config, openfga_store_id, openfga_secret):
+def peer_relation(request, s3_config, openfga_store_id):
+    """The peer databag holds only what the charm cannot read from a relation.
+
+    That is the history shards, the OpenFGA authorization model, and the outcome of the S3 bucket
+    creation. The database connections, the OpenFGA store and the S3 credentials come from their
+    relations.
+    """
     if request.node.get_closest_marker("peer_relation_skipped"):
         return ops.testing.Relation(endpoint="peer")
 
-    state_data, database_connections_data = {}, {}
+    state_data = {}
 
     if not request.node.get_closest_marker("config_skipped"):
         state_data["num_history_shards"] = "1"
 
-    db_data = {
-        "dbname": "temporal-k8s_db",
-        "host": "myhost",
-        "port": "5432",
-        "password": "inner-light",
-        "user": "jean-luc@db",
-        "tls": False,
-    }
-
-    visibility_data = {
-        "dbname": "temporal-k8s_visibility",
-        "host": "myhost",
-        "port": "5432",
-        "password": "inner-light",
-        "user": "jean-luc@visibility",
-        "tls": False,
-    }
-
-    database_connections_data["db"] = db_data if not request.node.get_closest_marker("db_relation_skipped") else None
-    database_connections_data["visibility"] = (
-        visibility_data if not request.node.get_closest_marker("visibility_relation_skipped") else None
-    )
-    state_data["database_connections"] = json.dumps(database_connections_data)
-
     if not request.node.get_closest_marker("s3_relation_skipped"):
-        state_data["s3"] = json.dumps(
-            {
-                "bucket": s3_config["bucket"],
-                "endpoint": "s3.us-east-2.amazonaws.com",
-                "region": s3_config["region"],
-                "aws_access_key_id": s3_config["access-key"],
-                "aws_secret_access_key": s3_config["secret-key"],
-                "uri_style": s3_config["s3-uri-style"],
-                "bucket_created": True,
-            }
-        )
+        state_data["s3_bucket"] = json.dumps({"fingerprint": s3_fingerprint(s3_config), "bucket_created": True})
 
     if not request.node.get_closest_marker("openfga_uninitialized"):
         state_data["openfga"] = json.dumps(
             {
                 "store_id": openfga_store_id,
-                "token": openfga_secret.id,
-                "address": "127.0.0.1",
-                "port": "8080",
-                "scheme": "http",
                 "auth_model_id": None if request.node.get_closest_marker("openfga_auth_skipped") else "123",
-                "full_http_url": "http://127.0.0.1:8080",
             }
         )
 

@@ -11,11 +11,11 @@ import pytest
 
 
 @pytest.fixture
-def server_state(peer_relation, admin_relation, temporal_container, network):
+def server_state(peer_relation, admin_relation, db_relation, visibility_relation, temporal_container, network):
     return lambda leader: ops.testing.State(
         leader=leader,
         config={"num-history-shards": 1},
-        relations=[peer_relation, admin_relation],
+        relations=[peer_relation, admin_relation, db_relation, visibility_relation],
         containers=[temporal_container],
         networks=[network],
     )
