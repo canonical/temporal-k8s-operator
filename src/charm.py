@@ -576,14 +576,26 @@ class TemporalK8SCharm(CharmBase):
         if relation is not None:
             relation.data[self.app].pop(key, None)
 
-    def _openfga_state(self):
+    def _stored_openfga_state(self):
+        """Return the OpenFGA state persisted in the peer relation, in the format of the previous revisions.
+
+        Returns:
+            The persisted state dict, or None if there is none.
+        """
+        stored = self._peer_get("openfga")
+        return stored if isinstance(stored, dict) and stored else None
+
+    def _relation_openfga_state(self, stored):
         """Return the OpenFGA connection info read from the relation.
 
         The authorization model ID is the only value that cannot be read from the relation: it is created by an
         action and persisted in the peer relation, together with the ID of the store it belongs to.
 
+        Args:
+            stored: The OpenFGA state persisted in the peer relation, if any.
+
         Returns:
-            The OpenFGA state dict, or None if the relation does not provide a usable store yet.
+            The OpenFGA state dict, or None if the relation does not provide a usable store.
         """
         try:
             info = self.openfga.get_store_info()
@@ -593,9 +605,8 @@ class TemporalK8SCharm(CharmBase):
         if not info or not info.store_id or not info.http_api_url:
             return None
 
-        stored = self._peer_get("openfga")
         auth_model_id = None
-        if isinstance(stored, dict) and stored.get("store_id") == info.store_id:
+        if stored and stored.get("store_id") == info.store_id:
             auth_model_id = stored.get("auth_model_id")
 
         try:
@@ -604,14 +615,30 @@ class TemporalK8SCharm(CharmBase):
             logger.error("invalid OpenFGA store info: %s", exc)
             return None
 
+    def _openfga_state(self):
+        """Return the OpenFGA state the workload and the actions use.
+
+        The relation is the source of truth. As the previous revisions did, the state persisted in the peer
+        relation is used as it is while the relation does not provide a usable store (revoked, or an invalid
+        HTTP API URL), so what is reported then is what the persisted state lacks, if anything.
+
+        Returns:
+            The OpenFGA state dict, or None if there is neither a usable store nor a persisted state.
+        """
+        stored = self._stored_openfga_state()
+        return self._relation_openfga_state(stored) or stored
+
     def _store_openfga_auth_model_id(self, store_id, auth_model_id):
         """Persist the authorization model ID created for the given OpenFGA store.
+
+        The fields persisted by other revisions are left as they are: units still running them read them.
 
         Args:
             store_id: ID of the OpenFGA store the model belongs to.
             auth_model_id: ID of the authorization model.
         """
-        self._peer_set("openfga", {"store_id": store_id, "auth_model_id": auth_model_id})
+        stored = self._stored_openfga_state() or {}
+        self._peer_set("openfga", {**stored, "store_id": store_id, "auth_model_id": auth_model_id})
 
     @functools.cached_property
     def _s3_connection(self):
@@ -646,6 +673,10 @@ class TemporalK8SCharm(CharmBase):
     def _s3_state(self):
         """Return the S3 state read from the relation and the outcome of the bucket creation.
 
+        The outcome is the one recorded by the leader for the current credentials, or else the one the previous
+        revisions persisted in the `s3` value, if it was for the same credentials: a unit upgraded before the
+        leader is then configured like the units still running a previous revision.
+
         Returns:
             The S3 state dict, or None if the relation is not usable or its bucket was not processed yet.
         """
@@ -654,16 +685,28 @@ class TemporalK8SCharm(CharmBase):
             return None
 
         record = self._peer_get("s3_bucket")
-        if not isinstance(record, dict) or record.get("fingerprint") != self._s3_fingerprint(s3_state):
-            return None
-        return {**s3_state, "bucket_created": bool(record.get("bucket_created"))}
+        if isinstance(record, dict) and record.get("fingerprint") == self._s3_fingerprint(s3_state):
+            return {**s3_state, "bucket_created": bool(record.get("bucket_created"))}
+
+        legacy = self._peer_get("s3")
+        if isinstance(legacy, dict) and "bucket_created" in legacy:
+            credentials = {key: value for key, value in legacy.items() if key != "bucket_created"}
+            if credentials == s3_state:
+                return {**s3_state, "bucket_created": bool(legacy["bucket_created"])}
+        return None
 
     def _reconcile_peer_state(self, event):
         """Maintain the data the leader persists in the peer relation; leader only.
 
-        Only what cannot be read from its source is persisted: the outcome of the S3 bucket creation, the
-        OpenFGA authorization model, and a digest that tells the other units when what they are configured from
-        changed. Anything cached by older revisions is dropped.
+        This unit reads the data it is configured from from the relations. What cannot be read from its source is
+        persisted: the outcome of the S3 bucket creation, the OpenFGA authorization model, and a digest that tells
+        the other units when what they are configured from changed.
+
+        The `database_connections`, `s3` and `openfga` values are the ones the previous revisions read. During a
+        rolling upgrade the units still running one of them read these values from the peer relation, and the
+        leader may already be upgraded and the only one updating them, so they are never removed or reshaped
+        and are kept up to date, in the format of the previous revisions, for as long as the relations provide
+        data. They are not cleaned up, as there is no telling when the last unit left the previous revision.
 
         Args:
             event: The event being reconciled.
@@ -671,29 +714,88 @@ class TemporalK8SCharm(CharmBase):
         if not self.unit.is_leader() or not self._peer_relation_ready():
             return
 
-        for legacy_key in ("database_connections", "s3"):
-            self._peer_delete(legacy_key)
-
-        stored_openfga = self._peer_get("openfga")
-        if isinstance(event, RelationBrokenEvent) and event.relation.name == "openfga":
-            self._peer_delete("openfga")
-        elif isinstance(event, OpenFGAStoreCreateEvent):
-            self._reset_openfga_auth_model()
-        elif isinstance(stored_openfga, dict) and set(stored_openfga) - {"store_id", "auth_model_id"}:
-            self._store_openfga_auth_model_id(stored_openfga.get("store_id"), stored_openfga.get("auth_model_id"))
-
+        self._reconcile_openfga_peer_state(event)
         self._reconcile_s3_bucket(event)
+        self._reconcile_legacy_database_connections(event)
+        self._reconcile_legacy_s3(event)
         self._publish_relation_digest()
 
+    def _reconcile_openfga_peer_state(self, event):
+        """Keep the OpenFGA state persisted in the peer relation up to date with the relation; leader only.
+
+        The state is only replaced while the relation provides a usable store: when the store is revoked, or its
+        HTTP API URL is invalid, the persisted state stays as it is, until the relation is broken.
+
+        Args:
+            event: The event being reconciled.
+        """
+        if isinstance(event, RelationBrokenEvent) and event.relation.name == "openfga":
+            self._peer_delete("openfga")
+            return
+
+        stored = self._stored_openfga_state()
+        if isinstance(event, OpenFGAStoreCreateEvent):
+            # An authorization model has to be created again after the store is delivered, as it always was.
+            stored = None
+
+        state = self._relation_openfga_state(stored)
+        if state is not None and state != self._peer_get("openfga"):
+            self._peer_set("openfga", state)
+
+    def _reconcile_legacy_database_connections(self, event):
+        """Keep the `database_connections` value of the previous revisions up to date; leader only.
+
+        A database that does not provide usable connection info keeps the value it had, until its relation is gone.
+
+        Args:
+            event: The event being reconciled.
+        """
+        stored = self._peer_get("database_connections")
+        current = stored if isinstance(stored, dict) else {}
+        connections = {}
+        for rel_name in ("db", "visibility"):
+            connection = self._database_connection(rel_name)
+            relation_gone = self.model.get_relation(rel_name) is None or (
+                isinstance(event, RelationBrokenEvent) and event.relation.name == rel_name
+            )
+            if relation_gone:
+                connection = None
+            elif connection is None:
+                connection = current.get(rel_name)
+            connections[rel_name] = connection
+
+        if connections != stored and (stored is not None or any(connections.values())):
+            self._peer_set("database_connections", connections)
+
+    def _reconcile_legacy_s3(self, event):
+        """Keep the `s3` value of the previous revisions up to date; leader only.
+
+        Args:
+            event: The event being reconciled.
+        """
+        stored = self._peer_get("s3")
+        s3_state = self._s3_state()
+        if s3_state is not None:
+            if s3_state != stored:
+                self._peer_set("s3", s3_state)
+        elif stored is not None and (
+            isinstance(event, CredentialsGoneEvent) or not self.model.get_relation("s3-parameters")
+        ):
+            self._peer_set("s3", None)
+
     def _relation_digest(self) -> str:
-        """Return a digest of the data the workload is configured from, as read by this unit."""
+        """Return a digest of the data the workload is configured from, as read by this unit from the relations.
+
+        The OpenFGA state persisted in the peer relation is only used for the authorization model: what the
+        unit cannot read from the relation is not what it has to agree with the leader on.
+        """
         return hashlib.sha256(
             json.dumps(
                 {
                     "database_connections": {
                         rel_name: self._database_connection(rel_name) for rel_name in ("db", "visibility")
                     },
-                    "openfga": self._openfga_state(),
+                    "openfga": self._relation_openfga_state(self._stored_openfga_state()),
                     "s3": self._s3_state(),
                 },
                 sort_keys=True,
@@ -718,21 +820,12 @@ class TemporalK8SCharm(CharmBase):
             return True
         return self._relations_visible() and self._relation_digest() == published
 
-    def _reset_openfga_auth_model(self):
-        """Forget the authorization model whenever the OpenFGA store is (re)delivered.
-
-        An authorization model has to be created again after the store is delivered, as it always was.
-        """
-        info = self.openfga.get_store_info()
-        try:
-            self.openfga_relation._openfga_state_from_store_info(info)
-        except ValueError as exc:
-            logger.error("invalid OpenFGA store info: %s", exc)
-            return
-        self._store_openfga_auth_model_id(info.store_id, None)
-
     def _reconcile_s3_bucket(self, event):
         """Create the S3 bucket when the relation provides new credentials, and record the outcome.
+
+        The bucket is only checked when there is no record of the outcome for the current credentials, and when the
+        credentials are provided again. Whatever goes wrong while checking it is a failed attempt, which is
+        recorded like any other, so the endpoint is not contacted again on every event and no hook fails.
 
         Args:
             event: The event being reconciled.
@@ -756,6 +849,12 @@ class TemporalK8SCharm(CharmBase):
             create_bucket_if_not_exists(s3_parameters, s3_state["endpoint"])
         except (ClientError, ValueError):
             bucket_created = False
+        except Exception:  # pylint: disable=broad-exception-caught
+            # E.g. the endpoint cannot be reached: the previous revisions let this fail the credentials-changed hook.
+            logger.exception("failed to create the S3 bucket %s", s3_parameters.get("bucket"))
+            bucket_created = False
+        if not bucket_created:
+            logger.warning("S3 bucket %s could not be created or checked", s3_parameters.get("bucket"))
         self._peer_set("s3_bucket", {"fingerprint": fingerprint, "bucket_created": bucket_created})
 
     @staticmethod
