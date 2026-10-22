@@ -113,7 +113,7 @@ class TestListAuthRuleActionValidation:
         ),
     ],
 )
-def test_openfga_http_url_is_parsed_from_relation(
+def test_openfga_http_url_is_parsed_into_peer_state(
     context,
     action_state,
     openfga_data,
@@ -124,7 +124,7 @@ def test_openfga_http_url_is_parsed_from_relation(
     expected_port,
     expected_full_http_url,
 ):
-    """Parse the OpenFGA HTTP URL read from the relation."""
+    """Parse the OpenFGA HTTP URL into peer state."""
     state = _with_openfga_http_url(
         action_state,
         openfga_data,
@@ -137,27 +137,24 @@ def test_openfga_http_url_is_parsed_from_relation(
     )
 
     openfga = state.get_relations("openfga")[0]
-    with context(context.on.relation_changed(openfga), state) as manager:
-        state_out = manager.run()
-        openfga_state = manager.charm._openfga_state()
+    state_out = context.run(
+        context.on.relation_changed(openfga),
+        state,
+    )
+
+    peer = state_out.get_relations("peer")[0]
+    openfga_state = json.loads(peer.local_app_data["openfga"])
 
     assert openfga_state["scheme"] == expected_scheme
     assert openfga_state["address"] == expected_address
     assert openfga_state["port"] == expected_port
     assert openfga_state["full_http_url"] == expected_full_http_url
-    # Only the authorization model is persisted, the rest is read from the relation.
-    peer = state_out.get_relations("peer")[0]
-    assert json.loads(peer.local_app_data["openfga"]) == {
-        "store_id": openfga_data["store_id"],
-        "auth_model_id": None,
-    }
     assert state_out.unit_status == ops.BlockedStatus("missing openfga authorization model")
 
 
 def test_create_authorization_model_posts_full_http_url(context, action_state, openfga_data, openfga_store_id):
     """create-authorization-model POSTs full_http_url, including a path prefix."""
     state = _with_openfga_http_url(action_state, openfga_data, "https://openfga.example.com/some-prefix/")
-    state = _with_peer_openfga(state, {"store_id": openfga_store_id, "auth_model_id": None})
 
     mock_response = unittest.mock.MagicMock()
     mock_response.ok = True
@@ -176,9 +173,17 @@ def test_create_authorization_model_posts_full_http_url(context, action_state, o
     assert mock_post.call_args.args[0] == (
         f"https://openfga.example.com/some-prefix/stores/{openfga_store_id}/authorization-models"
     )
-    # The model is persisted with the store it belongs to.
+    # The model is persisted in the state, which keeps the format the previous revisions read.
     peer = state_out.get_relations("peer")[0]
-    assert json.loads(peer.local_app_data["openfga"]) == {"store_id": openfga_store_id, "auth_model_id": "modelid123"}
+    assert json.loads(peer.local_app_data["openfga"]) == {
+        "store_id": openfga_store_id,
+        "token": "openfga_token",
+        "address": "openfga.example.com",
+        "port": 443,
+        "scheme": "https",
+        "full_http_url": "https://openfga.example.com/some-prefix",
+        "auth_model_id": "modelid123",
+    }
 
 
 def test_get_ofga_client_uses_full_http_url():
@@ -254,7 +259,7 @@ def test_upgrade_charm_migrates_null_port_and_missing_full_http_url(
     openfga_data,
     openfga_store_id,
 ):
-    """upgrade-charm drops the portless 1.31 peer state: the info comes from the OpenFGA URL."""
+    """upgrade-charm backfills portless 1.31 peer state from the live OpenFGA URL."""
     state = _with_openfga_http_url(action_state, openfga_data, "https://openfga.example.com/")
     state = _with_peer_openfga(
         state,
@@ -262,12 +267,10 @@ def test_upgrade_charm_migrates_null_port_and_missing_full_http_url(
         extra_peer={"schema_ready": "true"},
     )
 
-    with context(context.on.upgrade_charm(), state) as manager:
-        state_out = manager.run()
-        openfga_state = manager.charm._openfga_state()
+    state_out = context.run(context.on.upgrade_charm(), state)
 
     peer = state_out.get_relations("peer")[0]
-    assert json.loads(peer.local_app_data["openfga"]) == {"store_id": openfga_store_id, "auth_model_id": "modelid123"}
+    openfga_state = json.loads(peer.local_app_data["openfga"])
     assert openfga_state["port"] == 443
     assert openfga_state["full_http_url"] == "https://openfga.example.com"
     assert openfga_state["auth_model_id"] == "modelid123"
@@ -282,7 +285,7 @@ def test_upgrade_charm_backfills_full_http_url_when_port_is_present(
     openfga_data,
     openfga_store_id,
 ):
-    """upgrade-charm still provides full_http_url when old peer state already has a port."""
+    """upgrade-charm still writes full_http_url when old peer state already has a port."""
     state = _with_openfga_http_url(action_state, openfga_data, "https://openfga.example.com:8443/")
     state = _with_peer_openfga(
         state,
@@ -290,12 +293,10 @@ def test_upgrade_charm_backfills_full_http_url_when_port_is_present(
         extra_peer={"schema_ready": "true"},
     )
 
-    with context(context.on.upgrade_charm(), state) as manager:
-        state_out = manager.run()
-        openfga_state = manager.charm._openfga_state()
+    state_out = context.run(context.on.upgrade_charm(), state)
 
     peer = state_out.get_relations("peer")[0]
-    assert json.loads(peer.local_app_data["openfga"]) == {"store_id": openfga_store_id, "auth_model_id": "modelid123"}
+    openfga_state = json.loads(peer.local_app_data["openfga"])
     assert openfga_state["port"] == 8443
     assert openfga_state["full_http_url"] == "https://openfga.example.com:8443"
     assert openfga_state["auth_model_id"] == "modelid123"
@@ -309,7 +310,7 @@ def test_upgrade_charm_blocks_when_full_http_url_cannot_be_migrated(
     action_state,
     openfga_store_id,
 ):
-    """Stale peer state without a usable relation blocks after upgrade."""
+    """Unrecoverable stale peer state blocks on missing full_http_url after upgrade."""
     relations = [rel for rel in action_state.relations if rel.endpoint != "openfga"]
     relations.append(ops.testing.Relation("openfga", remote_app_data={}))
     state = dataclasses.replace(action_state, relations=relations)
@@ -321,7 +322,7 @@ def test_upgrade_charm_blocks_when_full_http_url_cannot_be_migrated(
 
     state_out = context.run(context.on.upgrade_charm(), state)
 
-    assert state_out.unit_status == ops.BlockedStatus("openfga:temporal relation not ready")
+    assert state_out.unit_status == ops.BlockedStatus("openfga:missing parameters ['full_http_url']")
 
 
 @pytest.mark.openfga_uninitialized
@@ -362,7 +363,7 @@ def test_invalid_openfga_http_url_is_not_persisted_on_upgrade(
     openfga_data,
     openfga_store_id,
 ):
-    """Upgrade does not store an invalid URL, and keeps the authorization model."""
+    """Upgrade does not overwrite existing peer OpenFGA state with an invalid URL."""
     legacy_openfga = _legacy_openfga_state(openfga_store_id, port=None)
     state = _with_openfga_http_url(action_state, openfga_data, "https://openfga.example.com?foo=bar")
     state = _with_peer_openfga(state, legacy_openfga, extra_peer={"schema_ready": "true"})
@@ -372,7 +373,43 @@ def test_invalid_openfga_http_url_is_not_persisted_on_upgrade(
     peer = state_out.get_relations("peer")[0]
     openfga_state = json.loads(peer.local_app_data["openfga"])
 
-    assert openfga_state == {"store_id": openfga_store_id, "auth_model_id": legacy_openfga["auth_model_id"]}
+    assert openfga_state == legacy_openfga
     assert "full_http_url" not in openfga_state
     assert isinstance(state_out.unit_status, ops.BlockedStatus)
-    assert "openfga:temporal relation not ready" in str(state_out.unit_status)
+    assert "missing parameters" in str(state_out.unit_status)
+
+
+def _with_unusable_openfga_relation(state):
+    """Return state whose OpenFGA relation exists but provides no store info."""
+    relations = [rel for rel in state.relations if rel.endpoint != "openfga"]
+    relations.append(ops.testing.Relation("openfga", remote_app_data={}))
+    return dataclasses.replace(state, relations=relations)
+
+
+@unittest.mock.patch("socket.gethostbyname", return_value="127.0.0.1")
+def test_actions_run_on_the_persisted_state_while_the_relation_gives_no_store_info(
+    mock_dns, context, action_state, openfga_store_id
+):
+    """No store info is not 'missing openfga relation' while a state is persisted."""
+    state = _with_unusable_openfga_relation(action_state)
+    state = _with_peer_openfga(state, _legacy_openfga_state(openfga_store_id, port=None))
+
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        context.run(context.on.action("list-auth-rule", params={"user": ""}), state)
+
+    assert "missing openfga relation" not in str(exc_info.value)
+    assert "required" in str(exc_info.value)
+
+
+@pytest.mark.openfga_uninitialized
+@unittest.mock.patch("socket.gethostbyname", return_value="127.0.0.1")
+def test_actions_fail_on_a_missing_openfga_relation_without_store_info_or_persisted_state(
+    mock_dns, context, action_state
+):
+    """Without a usable store or a persisted state, the OpenFGA relation is missing."""
+    state = _with_unusable_openfga_relation(action_state)
+
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        context.run(context.on.action("list-auth-rule", params={"user": "someone"}), state)
+
+    assert "missing openfga relation" in str(exc_info.value)
