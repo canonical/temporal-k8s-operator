@@ -1126,7 +1126,7 @@ class TemporalK8SCharm(CharmBase):
 
         logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
-        container.restart(self.name)
+        container.restart("temporal-server")
         self.set_active_unit_status()
 
     def _server_running(self, container) -> bool:
