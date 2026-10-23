@@ -5,14 +5,19 @@
 
 This library provides the TemporalHostInfoProvider and TemporalHostInfoRequirer
 classes for charms that need to share Temporal server connection details
-(host, port and whether the frontend serves gRPC over TLS) over a Juju relation.
+(host, port and whether the endpoint serves gRPC over TLS) over a Juju relation.
 
-The `tls` field tells requirers which wire protocol the frontend speaks. It is
-derived by the provider from whether frontend TLS is configured, and requirers
+Providers can use multiple endpoints implementing this interface by passing
+`relation_name`, for example `temporal-host-info` for in-cluster clients and
+`temporal-external-host-info` for clients connecting through ingress. Requirers
+can keep their existing endpoint name when relating to either provider endpoint.
+
+The `tls` field tells requirers which wire protocol the published endpoint speaks.
+It is derived by the provider from that endpoint's TLS configuration, and requirers
 MUST honour it: dialling plaintext against a TLS frontend fails with
 "error reading server preface: EOF", and the reverse fails the TLS handshake.
 
-When `tls` is true, the requirer also needs the CA that issued the frontend
+When `tls` is true, the requirer also needs the CA that issued the endpoint's
 certificate in order to verify it. That CA is NOT carried on this relation;
 it is distributed over the `certificate_transfer` interface, so that CA
 rotation is handled by that library rather than reimplemented here.
@@ -43,7 +48,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 RELATION_NAME = "temporal-host-info"
 
@@ -59,6 +64,7 @@ class TemporalHostInfoProvider(Object):
         port: int,
         tls: Union[Callable[[], bool], bool] = False,
         host: Union[Callable[[], str], str, None] = None,
+        relation_name: str = RELATION_NAME,
     ):
         """Create a new instance of the TemporalHostInfoProvider class.
 
@@ -67,7 +73,7 @@ class TemporalHostInfoProvider(Object):
         :param: port: The port number to provide to requirers. This is typically
             the 'frontend' service port.
         :type port: int
-        :param: tls: Whether the frontend serves gRPC over TLS, or a callable
+        :param: tls: Whether the endpoint serves gRPC over TLS, or a callable
             returning it. Pass a callable when the value is not known at charm
             initialisation, which is the usual case since it depends on a
             certificates relation.
@@ -77,14 +83,18 @@ class TemporalHostInfoProvider(Object):
             frontend certificate can name. When omitted, the relation binding
             address is published.
         :type host: Union[Callable[[], str], str, None]
+        :param: relation_name: The endpoint implementing temporal-host-info.
+        :type relation_name: str
         """
-        super().__init__(charm, "temporal_host_info_provider")
+        key = "temporal_host_info_provider"
+        super().__init__(charm, key if relation_name == RELATION_NAME else f"{key}_{relation_name}")
         self.charm = charm
         self.port = port
+        self.relation_name = relation_name
         self._get_tls = tls if callable(tls) else lambda: tls
         self._get_host = host if callable(host) else lambda: host
-        charm.framework.observe(charm.on[RELATION_NAME].relation_joined, self._on_host_info_relation_changed)
-        charm.framework.observe(charm.on[RELATION_NAME].relation_changed, self._on_host_info_relation_changed)
+        charm.framework.observe(charm.on[relation_name].relation_joined, self._on_host_info_relation_changed)
+        charm.framework.observe(charm.on[relation_name].relation_changed, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on.leader_elected, self._on_config_changed)
         charm.framework.observe(charm.on.config_changed, self._on_config_changed)
 
@@ -101,7 +111,7 @@ class TemporalHostInfoProvider(Object):
         """
         if not self.charm.unit.is_leader() or "frontend" not in str(self.charm.config["services"]):
             return
-        relations = [relation] if relation else self.charm.model.relations.get(RELATION_NAME, [])
+        relations = [relation] if relation else self.charm.model.relations.get(self.relation_name, [])
         for rel in relations:
             app_data = rel.data[self.charm.app]
             app_data["host"] = self._resolve_host(rel)

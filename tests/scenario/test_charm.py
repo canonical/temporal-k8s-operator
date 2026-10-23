@@ -870,12 +870,15 @@ def test_host_info_tls_follows_frontend_certificates_relation(
     host_info_relation,
     frontend_certificates_relation,
     all_required_relations,
+    monkeypatch,
 ):
     # The host-info library doesn't observe the certificates relation, so
     # `_update` republishes on its events. `tls` must flip to true when
     # frontend-certificates joins with an issued certificate, and back to false
     # when the relation is broken -- without any host-info relation event.
-    all_required_relations.append(host_info_relation)
+    external = ops.testing.Relation("temporal-external-host-info")
+    all_required_relations.extend([host_info_relation, external])
+    monkeypatch.setattr("charm.socket.gethostbyname", lambda host: "10.0.0.42")
     state = dataclasses.replace(state, relations=all_required_relations)
 
     new_state = context.run(context.on.pebble_ready(temporal_container), state)
@@ -883,6 +886,7 @@ def test_host_info_tls_follows_frontend_certificates_relation(
     new_state = context.run(context.on.relation_changed(admin_relation), new_state)
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
     assert new_state.get_relation(host_info_relation.id).local_app_data["tls"] == "false"
+    assert new_state.get_relation(external.id).local_app_data["tls"] == "false"
 
     # Each step starts from the initialized container, as in the tests above:
     # after a replan the container's plan and check infos no longer match.
@@ -894,11 +898,13 @@ def test_host_info_tls_follows_frontend_certificates_relation(
     with unittest.mock.patch("charm.TemporalK8SCharm._certificate_is_available", return_value=True):
         new_state = context.run(context.on.relation_joined(frontend_certificates_relation), new_state)
     assert new_state.get_relation(host_info_relation.id).local_app_data["tls"] == "true"
+    assert new_state.get_relation(external.id).local_app_data["tls"] == "true"
 
     new_state = dataclasses.replace(new_state, containers=[temporal_container_initialized])
     frontend_certificates = new_state.get_relation(frontend_certificates_relation.id)
     new_state = context.run(context.on.relation_broken(frontend_certificates), new_state)
     assert new_state.get_relation(host_info_relation.id).local_app_data["tls"] == "false"
+    assert new_state.get_relation(external.id).local_app_data["tls"] == "false"
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -1512,3 +1518,94 @@ def test_host_info_publishes_in_cluster_fqdn(context, state):
 
     app_data = state_out.get_relations("temporal-host-info")[0].local_app_data
     assert app_data["host"] == f"temporal-k8s.{state.model.name}.svc.cluster.local"
+
+
+@pytest.mark.parametrize(
+    "url,host,port,tls",
+    [
+        (None, "10.0.0.42", "7233", "false"),
+        ("https://temporal.example.com", "temporal.example.com", "443", "true"),
+        ("https://temporal.example.com:8443", "temporal.example.com", "8443", "true"),
+        ("http://temporal.example.com", "temporal.example.com", "80", "false"),
+        ("http://temporal.example.com:8080", "temporal.example.com", "8080", "false"),
+        ("https://[2001:db8::1]:8443", "2001:db8::1", "8443", "true"),
+    ],
+)
+def test_external_host_info(context, state, url, host, port, tls):
+    external = ops.testing.Relation("temporal-external-host-info")
+    internal = ops.testing.Relation("temporal-host-info")
+    ingress = ops.testing.Relation("ingress", remote_app_data={"ingress": json.dumps({"url": url})} if url else {})
+    state = dataclasses.replace(state, relations=[external, internal, ingress])
+    with unittest.mock.patch("charm.socket.gethostbyname", return_value="10.0.0.42") as resolve:
+        state = context.run(context.on.relation_joined(internal), state)
+        state_out = context.run(context.on.relation_joined(external), state)
+    app_data = state_out.get_relation(external.id).local_app_data
+    assert app_data == ({"host": host, "port": port, "tls": tls} if state.leader else {})
+    internal_data = {"host": f"temporal-k8s.{state.model.name}.svc.cluster.local", "port": "7233", "tls": "false"}
+    assert state_out.get_relation(internal.id).local_app_data == (internal_data if state.leader else {})
+    service_lookup = unittest.mock.call(f"temporal-k8s.{state.model.name}.svc.cluster.local")
+    if state.leader and not url:
+        assert service_lookup in resolve.call_args_list
+    else:
+        assert service_lookup not in resolve.call_args_list
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_external_host_info_follows_ingress(context, state):
+    external = ops.testing.Relation("temporal-external-host-info")
+    ingress = ops.testing.Relation("ingress")
+    state = dataclasses.replace(state, relations=[external, ingress])
+    with unittest.mock.patch("charm.socket.gethostbyname", return_value="10.0.0.42"):
+        state = context.run(context.on.relation_joined(external), state)
+        assert state.get_relation(external.id).local_app_data["host"] == "10.0.0.42"
+
+        for url, host, port, tls in [
+            ("https://temporal.example.com", "temporal.example.com", "443", "true"),
+            ("http://new.example.com:8080", "new.example.com", "8080", "false"),
+            (None, "10.0.0.42", "7233", "false"),
+            ("https://temporal.example.com", "temporal.example.com", "443", "true"),
+        ]:
+            ingress = dataclasses.replace(
+                state.get_relation(ingress.id),
+                remote_app_data={"ingress": json.dumps({"url": url})} if url else {},
+            )
+            state = dataclasses.replace(state, relations=[state.get_relation(external.id), ingress])
+            state = context.run(context.on.relation_changed(ingress), state)
+            assert state.get_relation(external.id).local_app_data == {"host": host, "port": port, "tls": tls}
+
+        state = context.run(context.on.relation_broken(ingress), state)
+        assert state.get_relation(external.id).local_app_data == {
+            "host": "10.0.0.42",
+            "port": "7233",
+            "tls": "false",
+        }
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+@pytest.mark.parametrize("event_name", ["config_changed", "leader_elected", "update_status", "upgrade_charm"])
+def test_external_host_info_refreshes_service_ip(context, state, peer_relation, event_name):
+    external = ops.testing.Relation(
+        "temporal-external-host-info",
+        local_app_data={"host": "10.0.0.41", "port": "7233", "tls": "false"},
+    )
+    state = dataclasses.replace(state, relations=[external, peer_relation])
+    with unittest.mock.patch("charm.socket.gethostbyname", return_value="10.0.0.42"):
+        state_out = context.run(getattr(context.on, event_name)(), state)
+    assert state_out.get_relation(external.id).local_app_data["host"] == "10.0.0.42"
+
+
+@pytest.mark.parametrize("services", ["history", "frontend"])
+def test_external_host_info_without_ingress(context, state, services):
+    external = ops.testing.Relation("temporal-external-host-info")
+    state = dataclasses.replace(
+        state, relations=[external], config={"services": services, "external-hostname": "ignored.example.com"}
+    )
+    with (
+        unittest.mock.patch("charm.socket.gethostbyname", return_value="10.0.0.42"),
+        unittest.mock.patch("charm.TemporalK8SCharm._frontend_tls_enabled", return_value=True),
+    ):
+        state_out = context.run(context.on.relation_joined(external), state)
+    expected = {"host": "10.0.0.42", "port": "7233", "tls": "true"}
+    assert state_out.get_relation(external.id).local_app_data == (
+        expected if state.leader and services == "frontend" else {}
+    )

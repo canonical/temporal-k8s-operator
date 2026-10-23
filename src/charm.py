@@ -16,6 +16,7 @@ import os
 import re
 import socket
 from typing import Optional
+from urllib.parse import urlsplit
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -259,6 +260,45 @@ class TemporalK8SCharm(CharmBase):
         )
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+        self._external_host_info = TemporalHostInfoProvider(
+            self,
+            port=self._external_port(),
+            host=self._external_host,
+            tls=self._external_tls_enabled,
+            relation_name="temporal-external-host-info",
+        )
+        self.framework.observe(self.on.ingress_relation_changed, self._publish_external_host_info)
+        self.framework.observe(self.on.ingress_relation_broken, self._publish_external_host_info)
+        self.framework.observe(self.on.update_status, self._publish_external_host_info)
+        self.framework.observe(self.on.upgrade_charm, self._publish_external_host_info)
+
+    def _external_host(self) -> str:
+        """Return the ingress hostname, or the frontend Service ClusterIP."""
+        url = self.ingress.url if self.ingress.is_ready() else None
+        if url:
+            host = urlsplit(url).hostname
+            if not host:
+                raise ValueError(f"Ingress URL has no hostname: {url}")
+            return host
+        return socket.gethostbyname(self._in_cluster_fqdn)
+
+    def _external_port(self) -> int:
+        """Return the ingress listener port, or the frontend gRPC port."""
+        url = self.ingress.url if self.ingress.is_ready() else None
+        if url:
+            address = urlsplit(url)
+            return address.port or (443 if address.scheme == "https" else 80)
+        return SERVICE_PORTS["frontend"]["grpc"]
+
+    def _external_tls_enabled(self) -> bool:
+        """Return whether clients use TLS to reach the external endpoint."""
+        url = self.ingress.url if self.ingress.is_ready() else None
+        return urlsplit(url).scheme == "https" if url else self._frontend_tls_enabled()
+
+    def _publish_external_host_info(self, event: Optional[EventBase] = None) -> None:
+        """Refresh external connection details when ingress or Service IPs change."""
+        self._external_host_info.port = self._external_port()
+        self._external_host_info.publish()
 
     def _frontend_tls_enabled(self) -> bool:
         """Return whether the frontend is serving gRPC over TLS.
@@ -869,6 +909,7 @@ class TemporalK8SCharm(CharmBase):
         # are exactly the transitions that flip the published `tls` value and the
         # advertised ingress scheme. Only advertise what the workload is running.
         self._host_info.publish()
+        self._publish_external_host_info()
         self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
 
         self.unit.status = MaintenanceStatus("replanning application")
