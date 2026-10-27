@@ -94,6 +94,8 @@ class TemporalHostInfoProvider(Object):
         self.relation_name = relation_name
         self._get_tls = tls if callable(tls) else lambda: tls
         self._get_host = host if callable(host) else lambda: host
+        # An omitted or empty literal host opts into the binding address. A callable
+        # returning no host instead signals that its endpoint is unavailable.
         self._use_binding_address = not callable(host) and not host
         charm.framework.observe(charm.on[relation_name].relation_joined, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on[relation_name].relation_changed, self._on_host_info_relation_changed)
@@ -120,6 +122,7 @@ class TemporalHostInfoProvider(Object):
             app_data = rel.data[self.charm.app]
             host = self._resolve_host(rel)
             if not host and not self._use_binding_address:
+                # Withdraw stale details while the supplied endpoint is unavailable.
                 for key in ("host", "port", "tls"):
                     app_data.pop(key, None)
                 continue
@@ -154,12 +157,11 @@ class TemporalHostInfoProvider(Object):
         :rtype: str
         """
         host = self._get_host() or ""
+        # Never substitute a cluster-local binding for an unavailable external host.
         if not host and self._use_binding_address:
             binding = self.charm.model.get_binding(relation)
             if binding:
                 host = str(binding.network.bind_address)
-        if not host and self._use_binding_address:
-            logger.warning("Could not resolve host: no host was supplied and no binding address is available")
         return host
 
 
