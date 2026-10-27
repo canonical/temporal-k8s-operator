@@ -124,6 +124,19 @@ juju config ingress-configurator backend-addresses=<node-ip> backend-ports=<node
 
 ## 5. Connect a client
 
+For charmed clients outside the Kubernetes cluster, use the
+`temporal-external-host-info` endpoint instead of `temporal-host-info`. It publishes
+the ingress hostname, listener port and TLS signal only once ingress is ready;
+it never falls back to a cluster-local address. Connection details are withdrawn
+when ingress is revoked.
+
+```
+juju integrate temporal-k8s:temporal-external-host-info temporal-worker-k8s:temporal-host-info
+```
+
+For cross-model clients, offer and consume this endpoint before integrating it.
+The relation does not distribute the ingress CA; clients must also trust that CA.
+
 Map the routing hostname to HAProxy's public address, then connect over TLS. Fetch the CA
 that signed HAProxy's client-facing certificate (the certificate provider on the machine
 model) and pass it to the client:

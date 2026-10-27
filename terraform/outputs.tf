@@ -4,9 +4,10 @@ output "app_name" {
 
 output "provides" {
   value = {
-    metrics_endpoint   = "metrics-endpoint"
-    grafana_dashboard  = "grafana-dashboard"
-    temporal_host_info = "temporal-host-info"
+    metrics_endpoint            = "metrics-endpoint"
+    grafana_dashboard           = "grafana-dashboard"
+    temporal_host_info          = "temporal-host-info"
+    temporal_external_host_info = "temporal-external-host-info"
   }
 }
 

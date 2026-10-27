@@ -261,25 +261,21 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
         self._external_host_info = TemporalHostInfoProvider(
             self,
-            port=self._external_port(),
+            port=self._external_port,
             host=self._external_host,
             tls=self._external_tls_enabled,
             relation_name="temporal-external-host-info",
         )
-        self.framework.observe(self.on.ingress_relation_changed, self._publish_external_host_info)
-        self.framework.observe(self.on.ingress_relation_broken, self._publish_external_host_info)
-        self.framework.observe(self.on.update_status, self._publish_external_host_info)
         self.framework.observe(self.on.upgrade_charm, self._publish_external_host_info)
 
-    def _external_host(self) -> str:
-        """Return the ingress hostname, or the frontend Service ClusterIP."""
+    def _external_host(self) -> str | None:
+        """Return the ingress hostname only when ingress is ready."""
         url = self.ingress.url if self.ingress.is_ready() else None
-        if url:
-            host = urlsplit(url).hostname
-            if not host:
-                raise ValueError(f"Ingress URL has no hostname: {url}")
-            return host
-        return socket.gethostbyname(self._in_cluster_fqdn)
+        if not url:
+            logger.warning("Cannot publish external host info: ingress URL is not available")
+            return None
+        address = urlsplit(url)
+        return address.hostname
 
     def _external_port(self) -> int:
         """Return the ingress listener port, or the frontend gRPC port."""
@@ -295,8 +291,7 @@ class TemporalK8SCharm(CharmBase):
         return urlsplit(url).scheme == "https" if url else self._frontend_tls_enabled()
 
     def _publish_external_host_info(self, event: Optional[EventBase] = None) -> None:
-        """Refresh external connection details when ingress or Service IPs change."""
-        self._external_host_info.port = self._external_port()
+        """Refresh external connection details when ingress changes."""
         self._external_host_info.publish()
 
     def _frontend_tls_enabled(self) -> bool:
@@ -377,6 +372,7 @@ class TemporalK8SCharm(CharmBase):
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("This app's ingress URL: %s", event.url)
+        self._publish_external_host_info()
         # Without frontend TLS the charm advertises h2c. Traefik serves that
         # fine; ingress-configurator/HAProxy cannot, and will not reach the
         # backend. The provider is not identifiable from this side, so this is
@@ -394,6 +390,7 @@ class TemporalK8SCharm(CharmBase):
 
     def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent):
         logger.info("This app no longer has ingress")
+        self._publish_external_host_info()
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
