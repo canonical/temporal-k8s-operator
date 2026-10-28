@@ -278,17 +278,13 @@ class TemporalK8SCharm(CharmBase):
         return address.hostname
 
     def _external_port(self) -> int:
-        """Return the ingress listener port, or the frontend gRPC port."""
-        url = self.ingress.url if self.ingress.is_ready() else None
-        if url:
-            address = urlsplit(url)
-            return address.port or (443 if address.scheme == "https" else 80)
-        return SERVICE_PORTS["frontend"]["grpc"]
+        """Return the ingress listener port."""
+        address = urlsplit(self.ingress.url)
+        return address.port or (443 if address.scheme == "https" else 80)
 
     def _external_tls_enabled(self) -> bool:
         """Return whether clients use TLS to reach the external endpoint."""
-        url = self.ingress.url if self.ingress.is_ready() else None
-        return urlsplit(url).scheme == "https" if url else self._frontend_tls_enabled()
+        return urlsplit(self.ingress.url).scheme == "https"
 
     def _publish_external_host_info(self, event: Optional[EventBase] = None) -> None:
         """Refresh external connection details when ingress changes."""
