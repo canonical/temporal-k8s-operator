@@ -5,14 +5,19 @@
 
 This library provides the TemporalHostInfoProvider and TemporalHostInfoRequirer
 classes for charms that need to share Temporal server connection details
-(host, port and whether the frontend serves gRPC over TLS) over a Juju relation.
+(host, port and whether the endpoint serves gRPC over TLS) over a Juju relation.
 
-The `tls` field tells requirers which wire protocol the frontend speaks. It is
-derived by the provider from whether frontend TLS is configured, and requirers
+Providers can use multiple endpoints implementing this interface by passing
+`relation_name`, for example `temporal-host-info` for in-cluster clients and
+`temporal-external-host-info` for clients connecting through ingress. Requirers
+can keep their existing endpoint name when relating to either provider endpoint.
+
+The `tls` field tells requirers which wire protocol the published endpoint speaks.
+It is derived by the provider from that endpoint's TLS configuration, and requirers
 MUST honour it: dialling plaintext against a TLS frontend fails with
 "error reading server preface: EOF", and the reverse fails the TLS handshake.
 
-When `tls` is true, the requirer also needs the CA that issued the frontend
+When `tls` is true, the requirer also needs the CA that issued the endpoint's
 certificate in order to verify it. That CA is NOT carried on this relation;
 it is distributed over the `certificate_transfer` interface, so that CA
 rotation is handled by that library rather than reimplemented here.
@@ -43,7 +48,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 RELATION_NAME = "temporal-host-info"
 
@@ -56,18 +61,19 @@ class TemporalHostInfoProvider(Object):
     def __init__(
         self,
         charm: CharmBase,
-        port: int,
+        port: Union[Callable[[], int], int],
         tls: Union[Callable[[], bool], bool] = False,
-        host: Union[Callable[[], str], str, None] = None,
+        host: Union[Callable[[], str | None], str, None] = None,
+        relation_name: str = RELATION_NAME,
     ):
         """Create a new instance of the TemporalHostInfoProvider class.
 
         :param: charm: The charm that is using this interface.
         :type charm: CharmBase
         :param: port: The port number to provide to requirers. This is typically
-            the 'frontend' service port.
-        :type port: int
-        :param: tls: Whether the frontend serves gRPC over TLS, or a callable
+            the 'frontend' service port, or a callable returning it.
+        :type port: Union[Callable[[], int], int]
+        :param: tls: Whether the endpoint serves gRPC over TLS, or a callable
             returning it. Pass a callable when the value is not known at charm
             initialisation, which is the usual case since it depends on a
             certificates relation.
@@ -75,16 +81,24 @@ class TemporalHostInfoProvider(Object):
         :param: host: The host requirers should dial, or a callable returning
             it. Typically the frontend's in-cluster service FQDN, which the
             frontend certificate can name. When omitted, the relation binding
-            address is published.
-        :type host: Union[Callable[[], str], str, None]
+            address is published. If a supplied callable returns no host,
+            connection details are withdrawn until the endpoint is ready.
+        :type host: Union[Callable[[], str | None], str, None]
+        :param: relation_name: The endpoint implementing temporal-host-info.
+        :type relation_name: str
         """
-        super().__init__(charm, "temporal_host_info_provider")
+        key = "temporal_host_info_provider"
+        super().__init__(charm, key if relation_name == RELATION_NAME else f"{key}_{relation_name}")
         self.charm = charm
         self.port = port
+        self.relation_name = relation_name
         self._get_tls = tls if callable(tls) else lambda: tls
         self._get_host = host if callable(host) else lambda: host
-        charm.framework.observe(charm.on[RELATION_NAME].relation_joined, self._on_host_info_relation_changed)
-        charm.framework.observe(charm.on[RELATION_NAME].relation_changed, self._on_host_info_relation_changed)
+        # An omitted or empty literal host opts into the binding address. A callable
+        # returning no host instead signals that its endpoint is unavailable.
+        self._use_binding_address = not callable(host) and not host
+        charm.framework.observe(charm.on[relation_name].relation_joined, self._on_host_info_relation_changed)
+        charm.framework.observe(charm.on[relation_name].relation_changed, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on.leader_elected, self._on_config_changed)
         charm.framework.observe(charm.on.config_changed, self._on_config_changed)
 
@@ -93,7 +107,9 @@ class TemporalHostInfoProvider(Object):
 
         Call this whenever something the published data depends on changes --
         in particular when the frontend's TLS state changes -- since those
-        events are not observed by this library.
+        events are not observed by this library. A supplied host callable can
+        return None to withdraw connection details and notify requirers that
+        the endpoint is unavailable.
 
         :param: relation: A single relation to update. All relations are
             updated when omitted.
@@ -101,11 +117,17 @@ class TemporalHostInfoProvider(Object):
         """
         if not self.charm.unit.is_leader() or "frontend" not in str(self.charm.config["services"]):
             return
-        relations = [relation] if relation else self.charm.model.relations.get(RELATION_NAME, [])
+        relations = [relation] if relation else self.charm.model.relations.get(self.relation_name, [])
         for rel in relations:
             app_data = rel.data[self.charm.app]
-            app_data["host"] = self._resolve_host(rel)
-            app_data["port"] = str(self.port)
+            host = self._resolve_host(rel)
+            if not host and not self._use_binding_address:
+                # Withdraw stale details while the supplied endpoint is unavailable.
+                for key in ("host", "port", "tls"):
+                    app_data.pop(key, None)
+                continue
+            app_data["host"] = host
+            app_data["port"] = str(self.port() if callable(self.port) else self.port)
             app_data["tls"] = str(self._get_tls()).lower()
 
     def _on_host_info_relation_changed(self, event: RelationChangedEvent | RelationJoinedEvent):
@@ -135,12 +157,11 @@ class TemporalHostInfoProvider(Object):
         :rtype: str
         """
         host = self._get_host() or ""
-        if not host:
+        # Never substitute a cluster-local binding for an unavailable external host.
+        if not host and self._use_binding_address:
             binding = self.charm.model.get_binding(relation)
             if binding:
                 host = str(binding.network.bind_address)
-        if not host:
-            logger.warning("Could not resolve host: no host was supplied and no binding address is available")
         return host
 
 
@@ -275,6 +296,7 @@ class TemporalHostInfoRequirer(Object):
             host = app_data["host"]
             port = int(app_data["port"])
         except KeyError:
+            self.on.temporal_host_info_unavailable.emit()
             return
         tls = app_data.get("tls", "false").lower() == "true"
         self.on.temporal_host_info_changed.emit(host=host, port=port, tls=tls)

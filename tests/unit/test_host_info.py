@@ -53,7 +53,17 @@ class ProviderCharm(ops.CharmBase):
             framework: The charm framework.
         """
         super().__init__(framework)
-        self.host_info = TemporalHostInfoProvider(self, port=PROVIDER_PORT, host=self.HOST, tls=self.provider_tls())
+        self.host_info = TemporalHostInfoProvider(
+            self, port=self.provider_port(), host=self.HOST, tls=self.provider_tls()
+        )
+
+    def provider_port(self) -> Union[Callable[[], int], int]:
+        """Return the port to publish.
+
+        Returns:
+            The provider port.
+        """
+        return PROVIDER_PORT
 
     def provider_tls(self) -> Union[Callable[[], bool], bool]:
         """Return the value passed as the provider's `tls`.
@@ -114,6 +124,24 @@ class CallableHostProviderCharm(ProviderCharm):
     """
 
     HOST = staticmethod(lambda: SERVICE_FQDN)
+
+
+class CallablePortProviderCharm(ProviderCharm):
+    """Provider charm whose port can change after initialisation.
+
+    Attributes:
+        port: The current listener port.
+    """
+
+    port = PROVIDER_PORT
+
+    def provider_port(self) -> Callable[[], int]:
+        """Return a callable reading the current listener port.
+
+        Returns:
+            A callable returning the current listener port.
+        """
+        return lambda: self.port
 
 
 # Minimal requirer charm
@@ -230,6 +258,16 @@ def requirer_relation_no_data():
 # Provider tests
 class TestTemporalHostInfoProvider:
     """Unit tests for TemporalHostInfoProvider."""
+
+    def test_provider_evaluates_port_callable_when_publishing(
+        self, provider_state_with_ext_hostname, provider_relation
+    ):
+        """The listener port is evaluated at publish time, not initialisation."""
+        context = ops.testing.Context(CallablePortProviderCharm, meta=ProviderCharm.META, config=ProviderCharm.CONFIG)
+        with context(context.on.relation_joined(provider_relation), provider_state_with_ext_hostname) as manager:
+            manager.charm.port = 8443
+            state_out = manager.run()
+        assert state_out.get_relation(provider_relation.id).local_app_data["port"] == "8443"
 
     @pytest.mark.parametrize("charm_type", [HostProviderCharm, CallableHostProviderCharm])
     def test_provider_writes_supplied_host_on_relation_joined(
@@ -497,12 +535,12 @@ class TestTemporalHostInfoRequirer:
         assert event.host == EXTERNAL_HOSTNAME
         assert event.port == PROVIDER_PORT
 
-    def test_requirer_noop_when_data_missing(
+    def test_requirer_emits_unavailable_when_data_missing(
         self,
         requirer_context,
         requirer_relation_no_data,
     ):
-        """Requirer does not emit changed event when host/port not yet in relation data."""
+        """Missing or withdrawn connection details emit unavailable, not changed."""
         state = ops.testing.State(
             leader=True,
             relations=[requirer_relation_no_data],
@@ -513,6 +551,7 @@ class TestTemporalHostInfoRequirer:
             manager.run()
 
         assert len(charm.received_host_info_changed) == 0
+        assert len(charm.received_host_info_unavailable) == 1
 
     def test_requirer_emits_broken_event_on_relation_broken(
         self,
