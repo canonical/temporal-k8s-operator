@@ -11,18 +11,24 @@
 
 import functools
 import hashlib
+import json
 import logging
 import os
 import re
 import socket
 from typing import Optional
 
+from botocore.exceptions import ClientError
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
-from charms.data_platform_libs.v0.s3 import S3Requirer
+from charms.data_platform_libs.v0.s3 import (
+    CredentialsChangedEvent,
+    CredentialsGoneEvent,
+    S3Requirer,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder, LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.nginx_route import require_nginx_route
-from charms.openfga_k8s.v1.openfga import OpenFGARequires
+from charms.openfga_k8s.v1.openfga import OpenFGARequires, OpenFGAStoreCreateEvent
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.temporal_k8s.v0.temporal_host_info import TemporalHostInfoProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
@@ -39,8 +45,17 @@ from charms.traefik_k8s.v2.ingress import (
     IngressPerAppRevokedEvent,
 )
 from jinja2 import Environment, FileSystemLoader
-from ops import EventBase, main, pebble
-from ops.charm import CharmBase, RelationBrokenEvent
+from ops import main, pebble
+from ops.charm import (
+    CharmBase,
+    ConfigChangedEvent,
+    InstallEvent,
+    RelationBrokenEvent,
+    RelationEvent,
+    RelationJoinedEvent,
+    UpdateStatusEvent,
+    UpgradeCharmEvent,
+)
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
@@ -66,12 +81,12 @@ from literals import (
 from log import log_event_handler
 
 # import relations
-from relations.admin import Admin
 from relations.openfga import OpenFGA
-from relations.postgresql import Postgresql
-from relations.s3_archival import S3Integrator
-from relations.ui import UI
-from state import State
+from relations.s3_archival import (
+    construct_endpoint,
+    create_bucket_if_not_exists,
+    retrieve_s3_parameters,
+)
 
 CERTIFICATE_NAME = "temporal-frontend.pem"
 CERTS_DIR_PATH = "/etc/temporal"
@@ -90,6 +105,33 @@ logger = logging.getLogger(__name__)
 
 class SchemaPendingError(ValueError):
     """Raised while admin has not yet migrated the schema for this workload version."""
+
+
+class ExitWithStatusError(Exception):
+    """Exception raised to exit the reconciliation with a specific unit status."""
+
+    def __init__(self, msg: str, status_type):
+        """Construct.
+
+        Args:
+            msg: The status message.
+            status_type: The ops status class to report.
+        """
+        super().__init__(str(msg))
+        self.msg = str(msg)
+        self.status_type = status_type
+
+    @property
+    def status(self):
+        """Return the Juju unit status represented by this exception."""
+        return self.status_type(self.msg)
+
+
+class ExitWithoutStatusChange(Exception):
+    """Exception raised to exit the reconciliation leaving the unit status as it is.
+
+    The status that was announced for the event, if any, is kept; otherwise the previous status stays.
+    """
 
 
 def render(template_name, context):
@@ -124,14 +166,17 @@ class TemporalK8SCharm(CharmBase):
     """Temporal server charm.
 
     Attrs:
-        _state: used to store data that is persisted across invocations.
         external_hostname: DNS listing used for external connections.
     """
 
+    def _active_status(self):
+        """Return the active unit status depending on relations."""
+        message = "auth enabled" if self.config["auth-enabled"] else ""
+        return ActiveStatus(message)
+
     def set_active_unit_status(self):
         """Set active unit status depending on relations."""
-        message = "auth enabled" if self.config["auth-enabled"] else ""
-        self.unit.status = ActiveStatus(message)
+        self.unit.status = self._active_status()
 
     @property
     def external_hostname(self):
@@ -145,7 +190,6 @@ class TemporalK8SCharm(CharmBase):
             args: Ignore.
         """
         super().__init__(*args)
-        self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal"
         self.container = self.unit.get_container("temporal")
         self._extra_context = {}
@@ -153,13 +197,8 @@ class TemporalK8SCharm(CharmBase):
             dns.strip() for dns in self.config.get("frontend-cert-sans-dns", "").split(",") if dns.strip()
         ]
 
-        # Handle basic charm lifecycle.
-        self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.temporal_pebble_ready, self._on_temporal_pebble_ready)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
+        # Actions keep dedicated handlers: they have a request/response contract.
         self.framework.observe(self.on.restart_action, self._on_restart_action)
-        self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
-        self.framework.observe(self.on.update_status, self._on_update_status)
 
         # Handle postgresql relation.
         self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME)
@@ -168,11 +207,6 @@ class TemporalK8SCharm(CharmBase):
             relation_name="visibility",
             database_name=VISIBILITY_DB_NAME,
         )
-        self.postgresql = Postgresql(self)
-
-        # Handle admin and ui relations.
-        self.admin = Admin(self)
-        self.ui = UI(self)
 
         # Handle openfga relation
         self.openfga = OpenFGARequires(self, self.name)
@@ -180,7 +214,6 @@ class TemporalK8SCharm(CharmBase):
 
         # Handle S3 integrator relation
         self.s3_client = S3Requirer(self, "s3-parameters")
-        self.s3_relation = S3Integrator(self)
 
         # Handle Ingress (Nginx)
         self._require_nginx_route()
@@ -212,12 +245,6 @@ class TemporalK8SCharm(CharmBase):
             certificate_requests=[self._get_certificate_request_attributes()],
             mode=Mode.UNIT,
             refresh_events=[self.on.upgrade_charm, self.on.config_changed],
-        )
-        self.framework.observe(self.certificates.on.certificate_available, self._update)
-        self.framework.observe(self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined, self._update)
-        self.framework.observe(
-            self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
-            self._update,
         )
 
         # Host Info
@@ -256,8 +283,36 @@ class TemporalK8SCharm(CharmBase):
             relation_name="ingress",
             scheme=self._ingress_scheme,
         )
-        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
-        self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+
+        # Every event the charm reacts to converges on the single reconciler.
+        for event in [
+            self.on.install,
+            self.on.upgrade_charm,
+            self.on.config_changed,
+            self.on.update_status,
+            self.on.temporal_pebble_ready,
+            self.on.peer_relation_changed,
+            self.on.admin_relation_joined,
+            self.on.admin_relation_changed,
+            self.on.ui_relation_joined,
+            self.on.ui_relation_changed,
+            self.on.db_relation_broken,
+            self.on.visibility_relation_broken,
+            self.on.openfga_relation_broken,
+            self.db.on.database_created,
+            self.db.on.endpoints_changed,
+            self.visibility.on.database_created,
+            self.visibility.on.endpoints_changed,
+            self.openfga.on.openfga_store_created,
+            self.s3_client.on.credentials_changed,
+            self.s3_client.on.credentials_gone,
+            self.certificates.on.certificate_available,
+            self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined,
+            self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
+            self.ingress.on.ready,
+            self.ingress.on.revoked,
+        ]:
+            self.framework.observe(event, self._reconcile)
 
     def _frontend_tls_enabled(self) -> bool:
         """Return whether the frontend is serving gRPC over TLS.
@@ -277,11 +332,10 @@ class TemporalK8SCharm(CharmBase):
 
     # Frontend TLS handler
     def _handle_frontend_tls(self):
-        # Block if the unit is not configured as a frontend service but has the relation
+        # The unit is not configured as a frontend service but has the relation. The workload is still configured,
+        # without TLS, so this is only reported in the logs.
         if "frontend" not in self.config["services"] and self.model.get_relation(FRONTEND_CERTIFICATES_RELATION_NAME):
-            self.unit.status = BlockedStatus(
-                f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
-            )
+            logger.warning(f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration.")
             return
 
         # Pre-flight checks
@@ -305,9 +359,8 @@ class TemporalK8SCharm(CharmBase):
                 self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
                 self._extra_context[FRONTEND_CERTIFICATE_HASH_ENV] = self._stored_certificate_hash()
                 return
-            # Set unit to WaitingStatus if no certificate has been issued yet
-            logger.info("The certificate is not available yet.")
-            self.unit.status = WaitingStatus("Waiting for certificates to be available")
+            # No certificate has been issued yet: the workload is configured without TLS meanwhile.
+            logger.info("The certificate is not available yet. Waiting for certificates to be available")
             return
 
         self._extra_context.update(FRONTEND_TLS_CONFIGURATION)
@@ -324,56 +377,44 @@ class TemporalK8SCharm(CharmBase):
         # change the layer, so the replan restarts the server.
         self._extra_context[FRONTEND_CERTIFICATE_HASH_ENV] = self._stored_certificate_hash()
 
-    def _remove_certificates(self, event: EventBase) -> None:
-        """Remove frontend certificates from the workload container.
-
-        Args:
-          event: an event to verify if it is RelationBroken before proceeding with the removal.
-        """
-        if not isinstance(event, RelationBrokenEvent) or not event.relation.name == FRONTEND_CERTIFICATES_RELATION_NAME:
+    def _remove_certificates(self) -> None:
+        """Remove the frontend certificates from the workload container once the relation is gone."""
+        if self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
             return
         self._delete_certificate()
         self._delete_private_key()
 
-    def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
-        logger.info("This app's ingress URL: %s", event.url)
-        # Without frontend TLS the charm advertises h2c. Traefik serves that
-        # fine; ingress-configurator/HAProxy cannot, and will not reach the
-        # backend. The provider is not identifiable from this side, so this is
-        # a warning rather than a blocking condition -- blocking would make the
-        # working Traefik topology impossible. Logged here, when ingress is
-        # granted, rather than on every hook.
-        if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
-            logger.warning(
-                "ingress is related without %s: advertising the h2c scheme. Providers that require "
-                "HTTP/2 over TLS to the backend (ingress-configurator with HAProxy) will not be able "
-                "to reach the frontend; integrate %s if you are using one of those.",
-                FRONTEND_CERTIFICATES_RELATION_NAME,
-                FRONTEND_CERTIFICATES_RELATION_NAME,
-            )
-
-    def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent):
-        logger.info("This app no longer has ingress")
-
-    @log_event_handler(logger)
-    def _on_peer_relation_changed(self, event):
-        """Handle peer relation changes.
+    def _log_ingress_event(self, event) -> None:
+        """Log the ingress events, which have no further effect on the workload.
 
         Args:
-            event: The event triggered when the peer relation changed.
+            event: The event being reconciled.
         """
-        if self.unit.is_leader():
-            return
-
-        self.unit.status = WaitingStatus("configuring temporal")
-        self._update(event)
+        if isinstance(event, IngressPerAppReadyEvent):
+            logger.info("This app's ingress URL: %s", event.url)
+            # Without frontend TLS the charm advertises h2c. Traefik serves that
+            # fine; ingress-configurator/HAProxy cannot, and will not reach the
+            # backend. The provider is not identifiable from this side, so this is
+            # a warning rather than a blocking condition -- blocking would make the
+            # working Traefik topology impossible. Logged here, when ingress is
+            # granted, rather than on every hook.
+            if not self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME):
+                logger.warning(
+                    "ingress is related without %s: advertising the h2c scheme. Providers that require "
+                    "HTTP/2 over TLS to the backend (ingress-configurator with HAProxy) will not be able "
+                    "to reach the frontend; integrate %s if you are using one of those.",
+                    FRONTEND_CERTIFICATES_RELATION_NAME,
+                    FRONTEND_CERTIFICATES_RELATION_NAME,
+                )
+        elif isinstance(event, IngressPerAppRevokedEvent):
+            logger.info("This app no longer has ingress")
 
     def _require_nginx_route(self):
         """Require nginx-route relation based on current configuration.
 
         The single-ingress-solution constraint (`ingress` vs `nginx-route`) is
         enforced in `_validate` so that the resulting blocked status persists
-        through `_update` instead of being reset when the charm reconciles.
+        through `_reconcile` instead of being reset when the charm reconciles.
         """
         require_nginx_route(
             charm=self,
@@ -413,57 +454,665 @@ class TemporalK8SCharm(CharmBase):
         Returns:
             DB connection info dict.
         """
-        # Copy key/value pairs in a new dict as self._state.database_connections
-        # and its values (of type ops.framework.StoredDict) are not serializable.
-        database_connections = {}
+        database_connections = {
+            "db": self._database_connection("db"),
+            "visibility": self._database_connection("visibility"),
+        }
 
-        if self._state.database_connections is None or self._state.database_connections == {
-            "db": None,
-            "visibility": None,
-        }:
+        if all(db_conn is None for db_conn in database_connections.values()):
             raise ValueError("database relation not ready")
 
-        for rel_name, db_conn in self._state.database_connections.items():
+        for rel_name, db_conn in database_connections.items():
             if db_conn is None:
                 raise ValueError(f"{rel_name}:pgsql relation: no database connection available")
-            database_connections[rel_name] = dict(db_conn)
         return database_connections
 
-    @log_event_handler(logger)
-    def _on_install(self, event):
-        """Install temporal.
+    def _database_connection(self, rel_name):
+        """Return the connection info read from the given database relation.
 
         Args:
-            event: The event triggered when the relation changed.
+            rel_name: Name of the database relation, `db` or `visibility`.
+
+        Returns:
+            The connection info dict, or None if the relation does not provide a usable connection yet.
         """
-        if self.unit.is_leader():
-            self.unit.status = MaintenanceStatus("installing temporal")
+        if self.model.get_relation(rel_name) is None:
+            return None
 
-    @log_event_handler(logger)
-    def _on_temporal_pebble_ready(self, event):
-        """Define and start temporal using the Pebble API.
+        requirer = self.db if rel_name == "db" else self.visibility
+        relation_id = requirer.relations[0].id
+        relation_data = requirer.fetch_relation_data()[relation_id]
 
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        self._update(event)
+        endpoints = relation_data.get("endpoints", "").split(",")
+        primary_endpoint = endpoints[0].split(":")
+        if len(primary_endpoint) < 2:
+            return None
 
-    @log_event_handler(logger)
-    def _on_config_changed(self, event):
-        """Handle configuration changes.
+        db_conn = {
+            "dbname": DB_NAME if rel_name == "db" else VISIBILITY_DB_NAME,
+            "host": primary_endpoint[0],
+            "port": primary_endpoint[1],
+            "password": relation_data.get("password"),
+            "user": relation_data.get("username"),
+            "tls": relation_data.get("tls") == "True",
+        }
 
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        # Validate the frontend-cert-sans-dns configuration before proceeding
-        invalid_dns = [dns for dns in self._dns_entries if not self._valid_dns(dns)]
-        if invalid_dns:
-            self.unit.status = BlockedStatus("Invalid frontend-cert-sans-dns, please correct the value(s).")
-            logger.info(f"Invalid frontend-cert-sans-dns: {invalid_dns}")
+        if None in (db_conn["user"], db_conn["password"]):
+            return None
+        return db_conn
+
+    def _provide_admin_db_info(self):
+        """Provide the database connection info to the admin charm; leader only."""
+        if not self.unit.is_leader() or not self._peer_relation_ready():
             return
 
-        self.unit.status = WaitingStatus("configuring temporal")
-        self._update(event)
+        try:
+            database_connections = self.database_connections()
+        except ValueError as err:
+            logger.debug(f"admin:temporal: not providing database connections: {err}")
+            return
+
+        admin_relations = self.model.relations["admin"]
+        if not admin_relations:
+            logger.debug("admin:temporal: not providing database connections: admin not ready")
+            return
+        for relation in admin_relations:
+            logger.debug(f"admin:temporal: providing database connections on relation {relation.id}")
+            relation.data[self.app].update({"database_connections": json.dumps(database_connections)})
+
+    def _provide_server_status(self):
+        """Provide the current server status to the UI charm; leader only.
+
+        The status is published when the UI relation changes and, once healthy, on update-status.
+        """
+        if not self.unit.is_leader():
+            return
+
+        is_active = self.unit.status == ActiveStatus() or self.unit.status == ActiveStatus("auth enabled")
+
+        ui_relations = self.model.relations["ui"]
+        if not ui_relations:
+            logger.debug("ui:temporal: not providing server status: ui not ready")
+            return
+        for relation in ui_relations:
+            logger.debug(f"ui:temporal: providing server status on relation {relation.id}")
+            relation.data[self.app].update({"server_status": "ready" if is_active else "blocked"})
+
+    def _peer_relation_ready(self) -> bool:
+        """Report whether the peer relation is available."""
+        return bool(self.model.get_relation("peer"))
+
+    def _peer_get(self, key):
+        """Read a JSON encoded value from the peer relation application databag.
+
+        Args:
+            key: Name of the value.
+
+        Returns:
+            The value, or None if it is not set or the peer relation is not available.
+        """
+        relation = self.model.get_relation("peer")
+        if relation is None:
+            return None
+        return json.loads(relation.data[self.app].get(key, "null"))
+
+    def _peer_set(self, key, value):
+        """Write a JSON encoded value to the peer relation application databag.
+
+        Args:
+            key: Name of the value.
+            value: Value to store.
+        """
+        self.model.get_relation("peer").data[self.app][key] = json.dumps(value)
+
+    def _peer_delete(self, key):
+        """Delete a value from the peer relation application databag, if it is set.
+
+        Args:
+            key: Name of the value.
+        """
+        relation = self.model.get_relation("peer")
+        if relation is not None:
+            relation.data[self.app].pop(key, None)
+
+    def _stored_openfga_state(self):
+        """Return the OpenFGA state persisted in the peer relation, in the format of the previous revisions.
+
+        Returns:
+            The persisted state dict, or None if there is none.
+        """
+        stored = self._peer_get("openfga")
+        return stored if isinstance(stored, dict) and stored else None
+
+    def _relation_openfga_state(self, stored):
+        """Return the OpenFGA connection info read from the relation.
+
+        The authorization model ID is the only value that cannot be read from the relation: it is created by an
+        action and persisted in the peer relation, together with the ID of the store it belongs to.
+
+        Args:
+            stored: The OpenFGA state persisted in the peer relation, if any.
+
+        Returns:
+            The OpenFGA state dict, or None if the relation does not provide a usable store.
+        """
+        try:
+            info = self.openfga.get_store_info()
+        except ModelError as err:
+            logger.error("failed to read the OpenFGA store info: %s", err)
+            return None
+        if not info or not info.store_id or not info.http_api_url:
+            return None
+
+        auth_model_id = None
+        if stored and stored.get("store_id") == info.store_id:
+            auth_model_id = stored.get("auth_model_id")
+
+        try:
+            return self.openfga_relation._openfga_state_from_store_info(info, auth_model_id)
+        except ValueError as exc:
+            logger.error("invalid OpenFGA store info: %s", exc)
+            return None
+
+    def _openfga_state(self):
+        """Return the OpenFGA state the workload and the actions use.
+
+        The relation is the source of truth. As the previous revisions did, the state persisted in the peer
+        relation is used as it is while the relation does not provide a usable store (revoked, or an invalid
+        HTTP API URL), so what is reported then is what the persisted state lacks, if anything.
+
+        Returns:
+            The OpenFGA state dict, or None if there is neither a usable store nor a persisted state.
+        """
+        stored = self._stored_openfga_state()
+        return self._relation_openfga_state(stored) or stored
+
+    def _store_openfga_auth_model_id(self, store_id, auth_model_id):
+        """Persist the authorization model ID created for the given OpenFGA store.
+
+        The fields persisted by other revisions are left as they are: units still running them read them.
+
+        Args:
+            store_id: ID of the OpenFGA store the model belongs to.
+            auth_model_id: ID of the authorization model.
+        """
+        stored = self._stored_openfga_state() or {}
+        self._peer_set("openfga", {**stored, "store_id": store_id, "auth_model_id": auth_model_id})
+
+    @functools.cached_property
+    def _s3_connection(self):
+        """Return the S3 parameters read from the relation and the state derived from them.
+
+        Returns:
+            A tuple of the S3 parameters and the S3 state, both None if the relation does not provide usable
+            credentials.
+        """
+        if not self.model.get_relation("s3-parameters"):
+            return None, None
+
+        s3_parameters, missing_parameters = retrieve_s3_parameters(self.s3_client)
+        if missing_parameters:
+            return None, None
+
+        state = {
+            "bucket": s3_parameters.get("bucket"),
+            "endpoint": construct_endpoint(s3_parameters),
+            "region": s3_parameters.get("region"),
+            "aws_access_key_id": s3_parameters.get("access-key"),
+            "aws_secret_access_key": s3_parameters.get("secret-key"),
+            "uri_style": s3_parameters.get("s3-uri-style"),
+        }
+        return s3_parameters, state
+
+    @staticmethod
+    def _s3_fingerprint(s3_state) -> str:
+        """Return a fingerprint of the S3 state, to tell whether a bucket was already created for it."""
+        return hashlib.sha256(json.dumps(s3_state, sort_keys=True).encode()).hexdigest()
+
+    def _s3_state(self):
+        """Return the S3 state read from the relation and the outcome of the bucket creation.
+
+        The outcome is the one recorded by the leader for the current credentials, or else the one the previous
+        revisions persisted in the `s3` value, if it was for the same credentials: a unit upgraded before the
+        leader is then configured like the units still running a previous revision.
+
+        Returns:
+            The S3 state dict, or None if the relation is not usable or its bucket was not processed yet.
+        """
+        _, s3_state = self._s3_connection
+        if s3_state is None:
+            return None
+
+        record = self._peer_get("s3_bucket")
+        if isinstance(record, dict) and record.get("fingerprint") == self._s3_fingerprint(s3_state):
+            return {**s3_state, "bucket_created": bool(record.get("bucket_created"))}
+
+        legacy = self._peer_get("s3")
+        if isinstance(legacy, dict) and "bucket_created" in legacy:
+            credentials = {key: value for key, value in legacy.items() if key != "bucket_created"}
+            if credentials == s3_state:
+                return {**s3_state, "bucket_created": bool(legacy["bucket_created"])}
+        return None
+
+    def _reconcile_peer_state(self, event):
+        """Maintain the data the leader persists in the peer relation; leader only.
+
+        This unit reads the data it is configured from from the relations. What cannot be read from its source is
+        persisted: the outcome of the S3 bucket creation, the OpenFGA authorization model, and a digest that tells
+        the other units when what they are configured from changed.
+
+        The `database_connections`, `s3` and `openfga` values are the ones the previous revisions read. During a
+        rolling upgrade the units still running one of them read these values from the peer relation, and the
+        leader may already be upgraded and the only one updating them, so they are never removed or reshaped
+        and are kept up to date, in the format of the previous revisions, for as long as the relations provide
+        data. They are not cleaned up, as there is no telling when the last unit left the previous revision.
+
+        Args:
+            event: The event being reconciled.
+        """
+        if not self.unit.is_leader() or not self._peer_relation_ready():
+            return
+
+        self._reconcile_openfga_peer_state(event)
+        self._reconcile_s3_bucket(event)
+        self._reconcile_legacy_database_connections(event)
+        self._reconcile_legacy_s3(event)
+        self._publish_relation_digest()
+
+    def _reconcile_openfga_peer_state(self, event):
+        """Keep the OpenFGA state persisted in the peer relation up to date with the relation; leader only.
+
+        The state is only replaced while the relation provides a usable store: when the store is revoked, or its
+        HTTP API URL is invalid, the persisted state stays as it is, until the relation is broken.
+
+        Args:
+            event: The event being reconciled.
+        """
+        if isinstance(event, RelationBrokenEvent) and event.relation.name == "openfga":
+            self._peer_delete("openfga")
+            return
+
+        stored = self._stored_openfga_state()
+        if isinstance(event, OpenFGAStoreCreateEvent):
+            # An authorization model has to be created again after the store is delivered, as it always was.
+            stored = None
+
+        state = self._relation_openfga_state(stored)
+        if state is not None and state != self._peer_get("openfga"):
+            self._peer_set("openfga", state)
+
+    def _reconcile_legacy_database_connections(self, event):
+        """Keep the `database_connections` value of the previous revisions up to date; leader only.
+
+        A database that does not provide usable connection info keeps the value it had, until its relation is gone.
+
+        Args:
+            event: The event being reconciled.
+        """
+        stored = self._peer_get("database_connections")
+        current = stored if isinstance(stored, dict) else {}
+        connections = {}
+        for rel_name in ("db", "visibility"):
+            connection = self._database_connection(rel_name)
+            relation_gone = self.model.get_relation(rel_name) is None or (
+                isinstance(event, RelationBrokenEvent) and event.relation.name == rel_name
+            )
+            if relation_gone:
+                connection = None
+            elif connection is None:
+                connection = current.get(rel_name)
+            connections[rel_name] = connection
+
+        if connections != stored and (stored is not None or any(connections.values())):
+            self._peer_set("database_connections", connections)
+
+    def _reconcile_legacy_s3(self, event):
+        """Keep the `s3` value of the previous revisions up to date; leader only.
+
+        Args:
+            event: The event being reconciled.
+        """
+        stored = self._peer_get("s3")
+        s3_state = self._s3_state()
+        if s3_state is not None:
+            if s3_state != stored:
+                self._peer_set("s3", s3_state)
+        elif stored is not None and (
+            isinstance(event, CredentialsGoneEvent) or not self.model.get_relation("s3-parameters")
+        ):
+            self._peer_set("s3", None)
+
+    def _relation_digest(self) -> str:
+        """Return a digest of the data the workload is configured from, as read by this unit from the relations.
+
+        The OpenFGA state persisted in the peer relation is only used for the authorization model: what the
+        unit cannot read from the relation is not what it has to agree with the leader on.
+        """
+        return hashlib.sha256(
+            json.dumps(
+                {
+                    "database_connections": {
+                        rel_name: self._database_connection(rel_name) for rel_name in ("db", "visibility")
+                    },
+                    "openfga": self._relation_openfga_state(self._stored_openfga_state()),
+                    "s3": self._s3_state(),
+                },
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+
+    def _publish_relation_digest(self):
+        """Publish the digest of the data the workload is configured from; leader only.
+
+        The other units follow the leader: they react to the peer relation changing, and to the relation events
+        only once what they read agrees with the published digest. The digest is a notification, the data itself
+        is always read from the relations.
+        """
+        digest = self._relation_digest()
+        if self._peer_get("relation_digest") != digest:
+            self._peer_set("relation_digest", digest)
+
+    def _in_sync_with_leader(self) -> bool:
+        """Report whether this unit reads the same relation data as the leader does."""
+        published = self._peer_get("relation_digest")
+        if published is None:
+            return True
+        return self._relations_visible() and self._relation_digest() == published
+
+    def _reconcile_s3_bucket(self, event):
+        """Create the S3 bucket when the relation provides new credentials, and record the outcome.
+
+        The bucket is only checked when there is no record of the outcome for the current credentials, and when the
+        credentials are provided again. Whatever goes wrong while checking it is a failed attempt, which is
+        recorded like any other, so the endpoint is not contacted again on every event and no hook fails.
+
+        Args:
+            event: The event being reconciled.
+        """
+        s3_parameters, s3_state = self._s3_connection
+        if s3_state is None:
+            self._peer_delete("s3_bucket")
+            return
+
+        fingerprint = self._s3_fingerprint(s3_state)
+        record = self._peer_get("s3_bucket")
+        if (
+            isinstance(record, dict)
+            and record.get("fingerprint") == fingerprint
+            and not isinstance(event, CredentialsChangedEvent)
+        ):
+            return
+
+        bucket_created = True
+        try:
+            create_bucket_if_not_exists(s3_parameters, s3_state["endpoint"])
+        except (ClientError, ValueError):
+            bucket_created = False
+        except Exception:  # pylint: disable=broad-exception-caught
+            # E.g. the endpoint cannot be reached: the previous revisions let this fail the credentials-changed hook.
+            logger.exception("failed to create the S3 bucket %s", s3_parameters.get("bucket"))
+            bucket_created = False
+        if not bucket_created:
+            logger.warning("S3 bucket %s could not be created or checked", s3_parameters.get("bucket"))
+        self._peer_set("s3_bucket", {"fingerprint": fingerprint, "bucket_created": bucket_created})
+
+    @staticmethod
+    def _relation_name(event):
+        """Return the name of the relation the event is about, or None if it is not a relation event."""
+        return event.relation.name if isinstance(event, RelationEvent) else None
+
+    def _is_source_event(self, event) -> bool:
+        """Report whether the event is about the data the workload is configured from, other than the config.
+
+        The leader acts on these events and the other units follow it, see `_in_sync_with_leader`.
+        """
+        return self._relation_name(event) in ("db", "visibility", "openfga", "s3-parameters") or isinstance(
+            event, (OpenFGAStoreCreateEvent, CredentialsChangedEvent, CredentialsGoneEvent)
+        )
+
+    def _handle_passive_event(self, event) -> bool:
+        """Handle the events that only report, publish or log: they never reconfigure the workload.
+
+        Args:
+            event: The event being reconciled.
+
+        Returns:
+            True if the event was handled, False if it has to be reconciled.
+        """
+        if isinstance(event, InstallEvent):
+            if self.unit.is_leader():
+                self.unit.status = MaintenanceStatus("installing temporal")
+            return True
+        if isinstance(event, (IngressPerAppReadyEvent, IngressPerAppRevokedEvent)):
+            self._log_ingress_event(event)
+            return True
+        if self._relation_name(event) == "ui":
+            self._provide_server_status()
+            return True
+        if self._relation_name(event) == "admin" and isinstance(event, RelationJoinedEvent):
+            self._provide_admin_db_info()
+            return True
+        return False
+
+    def _ignore_event(self, event) -> bool:
+        """Report whether there is nothing to reconcile for the event on this unit.
+
+        Args:
+            event: The event being reconciled.
+
+        Returns:
+            True if the event is ignored.
+        """
+        relation_name = self._relation_name(event)
+        leader = self.unit.is_leader()
+        if isinstance(event, UpgradeCharmEvent):
+            # The workload container is restarted by the upgrade, and reconciled on pebble-ready.
+            return not leader
+        if relation_name == "peer" and leader:
+            # The leader is the one writing to the peer relation.
+            return True
+        if relation_name in ("admin", "db", "visibility", "openfga") and not self._peer_relation_ready():
+            return True
+        if isinstance(event, OpenFGAStoreCreateEvent):
+            info = self.openfga.get_store_info() if event.store_id else None
+            if not info or not info.http_api_url:
+                return True
+        if isinstance(event, CredentialsChangedEvent) and self._s3_connection[1] is None:
+            return True
+        # A non-leader unit waits for the leader to have acted on the data, and for itself to read the same: a unit
+        # that is being removed, for instance, loses its relations before the leader knows anything about it.
+        return (
+            not leader and (relation_name == "peer" or self._is_source_event(event)) and not self._in_sync_with_leader()
+        )
+
+    def _pending_status(self, event):
+        """Return the status the event announces while it is reconciled.
+
+        It stays as the unit status if the reconciliation ends without a status of its own, e.g. because the
+        workload container cannot be reached yet.
+
+        Args:
+            event: The event being reconciled.
+
+        Returns:
+            The status, or None if the event does not announce one.
+        """
+        relation_name = self._relation_name(event)
+        if isinstance(event, ConfigChangedEvent) or relation_name == "peer":
+            return WaitingStatus("configuring temporal")
+        if relation_name == "admin":
+            return WaitingStatus("handling schema ready change")
+        if not self.unit.is_leader() and self._is_source_event(event):
+            return WaitingStatus("configuring temporal")
+        if relation_name in ("db", "visibility") and not isinstance(event, RelationBrokenEvent):
+            return WaitingStatus(f"handling {relation_name} change")
+        return None
+
+    @log_event_handler(logger)
+    def _reconcile(self, event):
+        """Reconcile the charm towards the desired state; idempotent for every event.
+
+        Whatever the event, a reconciliation that reaches the workload ends with the "replanning application"
+        status; only update-status, which is the periodic health check, reports the unit as active.
+
+        Args:
+            event: The event that triggered the reconciliation.
+        """
+        if self._handle_passive_event(event) or self._ignore_event(event):
+            return
+
+        pending_status = self._pending_status(event)
+        try:
+            if isinstance(event, ConfigChangedEvent):
+                self._check_frontend_dns()
+
+            self._reconcile_peer_state(event)
+            if self._relation_name(event) in ("db", "visibility") and not isinstance(event, RelationBrokenEvent):
+                self._provide_admin_db_info()
+
+            if self.app.planned_units() == 0:
+                logger.info("application is being removed, skipping temporal configuration")
+                raise ExitWithoutStatusChange()
+
+            self._check_ready(event)
+            if isinstance(event, UpdateStatusEvent):
+                self._provide_admin_db_info()
+
+            if self.unit.is_leader():
+                self._open_service_ports()
+            container = self._check_container_can_connect()
+
+            context = self._build_context()
+            self._remove_certificates()
+            self._handle_frontend_tls()
+            context.update(self._extra_context)
+
+            self._configure_log_rotation(container)
+            self._configure_workload(container, context)
+            replanned = self._apply_layer(container, context)
+
+            if replanned or not isinstance(event, UpdateStatusEvent):
+                # The certificates relation is not observed by the host-info or ingress
+                # libraries, so republish both here: this runs on certificate_available
+                # and on the frontend-certificates relation joining and breaking, which
+                # are exactly the transitions that flip the published `tls` value and the
+                # advertised ingress scheme. Only advertise what the workload is running.
+                self._host_info.publish()
+                self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
+                raise ExitWithStatusError("replanning application", MaintenanceStatus)
+            self._check_server_healthy(container)
+        except ExitWithoutStatusChange:
+            if pending_status is not None:
+                self.unit.status = pending_status
+            return
+        except ExitWithStatusError as e:
+            self.unit.status = e.status
+            return
+
+        self.set_active_unit_status()
+        self._provide_server_status()
+
+    def _check_ready(self, event):
+        """Verify that the configuration and the relations are valid and ready.
+
+        update-status never reports a failure of these checks: the unit keeps the status the event that caused
+        the failure gave it.
+
+        Args:
+            event: The event being reconciled.
+
+        Raises:
+            ExitWithoutStatusChange: If the checks fail on update-status.
+            ExitWithStatusError: If the checks fail on any other event.
+        """
+        try:
+            self._check_relations_visible()
+            self._check_configuration()
+        except ExitWithStatusError as err:
+            if isinstance(event, UpdateStatusEvent):
+                raise ExitWithoutStatusChange() from err
+            raise
+
+    def _check_frontend_dns(self):
+        """Validate the frontend-cert-sans-dns configuration; only checked when the configuration changes.
+
+        Raises:
+            ExitWithStatusError: If one of the configured names is not a valid DNS name.
+        """
+        invalid_dns = [dns for dns in self._dns_entries if not self._valid_dns(dns)]
+        if invalid_dns:
+            logger.info(f"Invalid frontend-cert-sans-dns: {invalid_dns}")
+            raise ExitWithStatusError("Invalid frontend-cert-sans-dns, please correct the value(s).", BlockedStatus)
+
+    def _relations_visible(self) -> bool:
+        """Report whether the relations the workload is configured from expose their remote units to this unit.
+
+        A non-leader unit added after the relations were established cannot read their data before the remote
+        units have joined it, and must not mistake that for relations that are not ready.
+        """
+        if self.unit.is_leader():
+            return True
+
+        relation_names = ["db", "visibility", "s3-parameters"]
+        if self.config["auth-enabled"]:
+            relation_names.append("openfga")
+        for relation_name in relation_names:
+            relation = self.model.get_relation(relation_name)
+            if relation is not None and not relation.units:
+                return False
+        return True
+
+    def _check_relations_visible(self):
+        """Wait on a non-leader unit until the relations it has not joined yet expose their remote units.
+
+        Raises:
+            ExitWithStatusError: If a relation the workload is configured from is not visible to the unit yet.
+        """
+        if not self._relations_visible():
+            raise ExitWithStatusError("configuring temporal", WaitingStatus)
+
+    def _check_configuration(self):
+        """Validate that configuration and relations are valid and ready.
+
+        Raises:
+            ExitWithStatusError: If the configuration or the relations are not valid or ready.
+        """
+        try:
+            self._validate()
+        except ValueError as err:
+            status_type = WaitingStatus if isinstance(err, SchemaPendingError) else BlockedStatus
+            raise ExitWithStatusError(str(err), status_type) from err
+
+    def _check_container_can_connect(self):
+        """Verify that the workload container is reachable.
+
+        Raises:
+            ExitWithoutStatusChange: If the container cannot be connected to; the unit status is left as it is
+                and the next event reconciles again.
+
+        Returns:
+            The workload container.
+        """
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            raise ExitWithoutStatusChange()
+        return container
+
+    def _check_server_healthy(self, container):
+        """Verify that the Temporal server is up, and perform the periodic maintenance (update-status only).
+
+        Args:
+            container: application container.
+
+        Raises:
+            ExitWithStatusError: If the server status check is failing.
+        """
+        check = container.get_check("temporal-server-running")
+        if check.status != CheckStatus.UP:
+            raise ExitWithStatusError("Status check: DOWN", MaintenanceStatus)
+
+        self._run_log_rotation(container)
+        self.unit.set_workload_version(WORKLOAD_VERSION)
 
     @log_event_handler(logger)
     def _on_restart_action(self, event):
@@ -479,47 +1128,6 @@ class TemporalK8SCharm(CharmBase):
         container.restart(self.name)
         self.set_active_unit_status()
 
-    @log_event_handler(logger)
-    def _on_update_status(self, event):
-        """Handle `update-status` events.
-
-        Args:
-            event: The `update-status` event triggered at intervals.
-        """
-        try:
-            self._validate()
-        except ValueError:
-            return
-
-        should_update = self.postgresql.update_db_relation_data_in_state(event)
-        if should_update:
-            self._update(event)
-            return
-
-        container = self.unit.get_container(self.name)
-        valid_pebble_plan = self._validate_pebble_plan(container)
-        if not valid_pebble_plan:
-            self._update(event)
-            return
-
-        if not self._server_running(container):
-            # A previous replan may have failed to start the server: retry it.
-            self._update(event)
-            return
-
-        check = container.get_check("temporal-server-running")
-        if check.status != CheckStatus.UP:
-            self.unit.status = MaintenanceStatus("Status check: DOWN")
-            return
-
-        # Run log rotation
-        self._run_log_rotation(container)
-
-        self.unit.set_workload_version(WORKLOAD_VERSION)
-        self.set_active_unit_status()
-        if self.unit.is_leader():
-            self.ui._provide_server_status()
-
     def _server_running(self, container) -> bool:
         """Check whether the Temporal server Pebble service is running.
 
@@ -532,21 +1140,6 @@ class TemporalK8SCharm(CharmBase):
         try:
             return container.get_service("temporal-server").is_running()
         except (ModelError, pebble.ConnectionError):
-            return False
-
-    def _validate_pebble_plan(self, container):
-        """Validate Temporal server pebble plan.
-
-        Args:
-            container: application container
-
-        Returns:
-            bool of pebble plan validity
-        """
-        try:
-            plan = container.get_plan().to_dict()
-            return bool(plan["services"]["temporal-server"]["on-check-failure"])
-        except (KeyError, pebble.ConnectionError):
             return False
 
     def _run_log_rotation(self, container):
@@ -589,7 +1182,7 @@ class TemporalK8SCharm(CharmBase):
         log_level = self.model.config["log-level"].lower()
         if log_level not in VALID_LOG_LEVELS:
             raise ValueError(f"config: invalid log level {log_level!r}")
-        if not self._state.is_ready():
+        if not self._peer_relation_ready():
             raise ValueError("peer relation not ready")
 
         # Validate config.
@@ -597,7 +1190,7 @@ class TemporalK8SCharm(CharmBase):
             if not any(service == item.value for item in ValidServiceTypes):
                 raise ValueError(f"error in services config: invalid service {service!r}")
 
-        num_history_shards = self._state.num_history_shards
+        num_history_shards = self._peer_get("num_history_shards")
         if num_history_shards is None:
             if self.config.get("num-history-shards", "") == "" or self.config.get("num-history-shards") <= 0:
                 raise ValueError(
@@ -605,7 +1198,7 @@ class TemporalK8SCharm(CharmBase):
                 )
 
             if self.unit.is_leader():
-                self._state.num_history_shards = self.config.get("num-history-shards")
+                self._peer_set("num_history_shards", self.config.get("num-history-shards"))
 
         elif num_history_shards != self.config["num-history-shards"]:
             message = f"value of 'num-history-shards' config cannot be changed after deployment. Value should be {num_history_shards}"
@@ -632,21 +1225,23 @@ class TemporalK8SCharm(CharmBase):
 
         # Validate OpenFGA relation.
         if self.config["auth-enabled"]:
-            if not self._state.openfga:
+            openfga = self._openfga_state()
+            if not openfga:
                 raise ValueError("openfga:temporal relation not ready")
-            missing_params = self._check_missing_params(self._state.openfga, REQUIRED_OPENFGA_KEYS)
+            missing_params = self._check_missing_params(openfga, REQUIRED_OPENFGA_KEYS)
             if len(missing_params) > 0:
                 raise ValueError(f"openfga:missing parameters {missing_params!r}")
-            if not self._state.openfga["auth_model_id"]:
+            if not openfga["auth_model_id"]:
                 raise ValueError("missing openfga authorization model")
 
         # Validate S3 relation.
-        if self._state.s3:
-            missing_params = self._check_missing_params(self._state.s3, REQUIRED_S3_PARAMETERS)
+        s3 = self._s3_state()
+        if s3:
+            missing_params = self._check_missing_params(s3, REQUIRED_S3_PARAMETERS)
             if len(missing_params) > 0:
                 raise ValueError(f"s3:missing parameters {missing_params!r}")
 
-            if not self._state.s3.get("bucket_created"):
+            if not s3.get("bucket_created"):
                 raise ValueError("s3:archival failed to create s3 bucket.")
 
     def _validate_admin_schema(self):
@@ -678,7 +1273,7 @@ class TemporalK8SCharm(CharmBase):
         if "frontend" not in self.config["services"]:
             raise ValueError("Not a frontend service, please remove ingress integration.")
         # Ingress without frontend-certificates is valid (h2c, e.g. Traefik);
-        # `_on_ingress_ready` warns about it once ingress is granted.
+        # `_log_ingress_event` warns about it once ingress is granted.
 
     def _open_service_ports(self):
         """Open the respective ports based on Temporal service."""
@@ -702,30 +1297,12 @@ class TemporalK8SCharm(CharmBase):
             close_port(port=SERVICE_PORTS["internal-frontend"]["grpc"])
             close_port(port=SERVICE_PORTS["internal-frontend"]["http"])
 
-    def _update(self, event):
-        """Update the Temporal server configuration and replan its execution.
+    def _build_context(self):
+        """Build the workload configuration context from the configuration and the relations.
 
-        Args:
-            event: The event triggered when the relation changed.
+        Returns:
+            The context dict used to render the workload configuration and to set the service environment.
         """
-        if self.app.planned_units() == 0:
-            logger.info("application is being removed, skipping temporal configuration")
-            return
-
-        try:
-            self._validate()
-        except ValueError as err:
-            self.unit.status = (WaitingStatus if isinstance(err, SchemaPendingError) else BlockedStatus)(str(err))
-            return
-
-        if self.unit.is_leader():
-            self._open_service_ports()
-
-        container = self.unit.get_container(self.name)
-        if not container.can_connect():
-            event.defer()
-            return
-
         logger.info("configuring temporal")
         options = {
             "log-level": "LOG_LEVEL",
@@ -737,8 +1314,9 @@ class TemporalK8SCharm(CharmBase):
                 "LOG_FORMAT": LOG_FORMAT,
             }
         )
-        db_conn = self._state.database_connections["db"]
-        visibility_conn = self._state.database_connections["visibility"]
+        database_connections = self.database_connections()
+        db_conn = database_connections["db"]
+        visibility_conn = database_connections["visibility"]
         context.update(
             {
                 "DB_NAME": db_conn["dbname"],
@@ -752,7 +1330,7 @@ class TemporalK8SCharm(CharmBase):
                 "VISIBILITY_USER": visibility_conn["user"],
                 "VISIBILITY_PSWD": visibility_conn["password"],
                 "TEMPORAL_BROADCAST_ADDRESS": str(self.model.get_binding("peer").network.bind_address),
-                "NUM_HISTORY_SHARDS": self._state.num_history_shards,
+                "NUM_HISTORY_SHARDS": self._peer_get("num_history_shards"),
                 "SQL_MAX_CONNS": self.config["persistence-max-conns"],
                 "SQL_MAX_IDLE_CONNS": self.config["persistence-max-idle-conns"],
                 "SQL_MAX_CONN_TIME": self.config["persistence-max-conn-time"],
@@ -764,7 +1342,7 @@ class TemporalK8SCharm(CharmBase):
         )
 
         if self.config["auth-enabled"]:
-            openfga = self._state.openfga
+            openfga = self._openfga_state()
             context.update(
                 {
                     "AUTH_ENABLED": True,
@@ -793,30 +1371,30 @@ class TemporalK8SCharm(CharmBase):
                 }
             )
 
-        if self._state.s3:
+        s3 = self._s3_state()
+        if s3:
             context.update(
                 {
                     "ARCHIVAL_ENABLED": True,
-                    "ARCHIVAL_BUCKET_REGION": self._state.s3.get("region"),
-                    "ARCHIVAL_ENDPOINT": self._state.s3.get("endpoint"),
-                    "ARCHIVAL_URI_STYLE": self._state.s3.get("uri_style"),
-                    "AWS_ACCESS_KEY_ID": self._state.s3.get("aws_access_key_id"),
-                    "AWS_SECRET_ACCESS_KEY": self._state.s3.get("aws_secret_access_key"),
+                    "ARCHIVAL_BUCKET_REGION": s3.get("region"),
+                    "ARCHIVAL_ENDPOINT": s3.get("endpoint"),
+                    "ARCHIVAL_URI_STYLE": s3.get("uri_style"),
+                    "AWS_ACCESS_KEY_ID": s3.get("aws_access_key_id"),
+                    "AWS_SECRET_ACCESS_KEY": s3.get("aws_secret_access_key"),
                 }
             )
 
-        # If the relation is broken, remove certificates. This runs first so
-        # that the stored-certificate fallback in `_handle_frontend_tls` can't
-        # keep TLS configured with files that are about to be deleted.
-        self._remove_certificates(event)
-        # Handle frontend TLS
-        self._handle_frontend_tls()
-        context.update(self._extra_context)
+        return context
 
-        self._configure_log_rotation(container)
+    def _configure_workload(self, container, context):
+        """Write the workload configuration files, unless they are already up to date.
 
+        Args:
+            container: The Temporal workload container.
+            context: The workload configuration context.
+        """
         config = render("config.jinja", context)
-        container.push("/etc/temporal/config/charm.yaml", config, make_dirs=True)
+        self._push_if_changed(container, "/etc/temporal/config/charm.yaml", config)
 
         dynamic_context = {
             "GLOBAL_RPS_LIMIT": self.config["global-rps-limit"],
@@ -824,8 +1402,33 @@ class TemporalK8SCharm(CharmBase):
             "LONG_POLL_INTERVAL": self.config["long-poll-interval"],
         }
         dynamic_config = render("dynamic_config.jinja", dynamic_context)
-        container.push("/etc/temporal/config/dynamicconfig/docker.yaml", dynamic_config, make_dirs=True)
+        self._push_if_changed(container, "/etc/temporal/config/dynamicconfig/docker.yaml", dynamic_config)
 
+    def _push_if_changed(self, container, path, content):
+        """Write a file to the container unless it already has the given content.
+
+        Args:
+            container: The Temporal workload container.
+            path: Path of the file in the container.
+            content: Content of the file.
+        """
+        if container.exists(path) and container.pull(path).read() == content:
+            return
+        container.push(path, content, make_dirs=True)
+
+    def _apply_layer(self, container, context) -> bool:
+        """Add the Pebble layer and replan when the plan changed or the server is not running.
+
+        Args:
+            container: The Temporal workload container.
+            context: The workload configuration context, used as the service environment.
+
+        Raises:
+            ExitWithStatusError: If the server cannot be started.
+
+        Returns:
+            True if the workload was replanned, False if it was already up to date.
+        """
         logger.info("planning temporal execution")
         services = self.config["services"].split(",")
         services_args = " ".join(f"--service={service}" for service in services)
@@ -858,19 +1461,15 @@ class TemporalK8SCharm(CharmBase):
                 }
             },
         }
+        plan_before = container.get_plan().to_dict()
         container.add_layer(self.name, pebble_layer, combine=True)
-        if not self._replan(container):
-            return
+        plan_changed = container.get_plan().to_dict() != plan_before
 
-        # The certificates relation is not observed by the host-info or ingress
-        # libraries, so republish both here: this runs on certificate_available
-        # and on the frontend-certificates relation joining and breaking, which
-        # are exactly the transitions that flip the published `tls` value and the
-        # advertised ingress scheme. Only advertise what the workload is running.
-        self._host_info.publish()
-        self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
-
-        self.unit.status = MaintenanceStatus("replanning application")
+        # A previous replan may have failed to start the server: retry it.
+        if not plan_changed and self._server_running(container):
+            return False
+        self._replan(container)
+        return True
 
     def _configure_log_rotation(self, container):
         """Create the log directory and push the logrotate configuration.
@@ -896,24 +1495,22 @@ class TemporalK8SCharm(CharmBase):
     create 0640 ubuntu ubuntu
 }}
 """
-        container.push("/etc/logrotate.d/temporal-server", logrotate_config, make_dirs=True)
+        self._push_if_changed(container, "/etc/logrotate.d/temporal-server", logrotate_config)
 
-    def _replan(self, container) -> bool:
+    def _replan(self, container):
         """Replan the workload, blocking the unit instead of failing the hook if it cannot start.
 
         Args:
             container: The Temporal workload container.
 
-        Returns:
-            True if the replan succeeded, False otherwise.
+        Raises:
+            ExitWithStatusError: If the server cannot be started.
         """
         try:
             container.replan()
         except pebble.ChangeError as err:
             logger.error("failed to start temporal server: %s", err)
-            self.unit.status = BlockedStatus("failed to start temporal server; check logs")
-            return False
-        return True
+            raise ExitWithStatusError("failed to start temporal server; check logs", BlockedStatus) from err
 
     # Helpers for frontend TLS
     def _relation_created(self, relation_name: str) -> bool:
@@ -946,7 +1543,7 @@ class TemporalK8SCharm(CharmBase):
         This is also reached from the host-info and ingress libraries' own
         handlers (via the `tls` and `scheme` callables), which can run before
         Pebble is up; the files can't be checked then, so report not usable.
-        `_update` republishes both once the container is ready.
+        `_reconcile` republishes both once the container is ready.
         """
         return (
             self._relation_created(FRONTEND_CERTIFICATES_RELATION_NAME)
