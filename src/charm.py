@@ -1122,14 +1122,14 @@ class TemporalK8SCharm(CharmBase):
         """Restart the temporal server, even if there are no changes.
 
         Args:
-            event: The event triggered when the relation changed.
+            event: The action event that requested the restart.
         """
         container = self.unit.get_container(self.name)
 
         logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
         container.restart("temporal-server")
-        self.set_active_unit_status()
+        self._reconcile(event)
 
     def _server_running(self, container) -> bool:
         """Check whether the Temporal server Pebble service is running.
