@@ -18,7 +18,6 @@ import re
 import socket
 from typing import Optional
 
-from botocore.exceptions import ClientError
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import (
     CredentialsChangedEvent,
@@ -82,11 +81,8 @@ from log import log_event_handler
 
 # import relations
 from relations.openfga import OpenFGA
-from relations.s3_archival import (
-    construct_endpoint,
-    create_bucket_if_not_exists,
-    retrieve_s3_parameters,
-)
+from relations.postgresql import Postgresql
+from relations.s3_archival import S3Archival, create_bucket_if_not_exists
 
 CERTIFICATE_NAME = "temporal-frontend.pem"
 CERTS_DIR_PATH = "/etc/temporal"
@@ -208,6 +204,7 @@ class TemporalK8SCharm(CharmBase):
             database_name=VISIBILITY_DB_NAME,
             extra_user_roles="admin",
         )
+        self.postgresql = Postgresql(self)
 
         # Handle openfga relation
         self.openfga = OpenFGARequires(self, self.name)
@@ -215,6 +212,7 @@ class TemporalK8SCharm(CharmBase):
 
         # Handle S3 integrator relation
         self.s3_client = S3Requirer(self, "s3-parameters")
+        self.s3_archival = S3Archival(self, self._create_s3_bucket)
 
         # Handle Ingress (Nginx)
         self._require_nginx_route()
@@ -427,80 +425,8 @@ class TemporalK8SCharm(CharmBase):
         )
 
     def database_connections(self):
-        """Return connection info for the related databases.
-
-        The connection info is returned as a dict like the following:
-
-            {
-                "db": {
-                    "dbname": "...",
-                    "host": "...",
-                    "port": "...",
-                    "user": "...",
-                    "password": "...",
-                },  # or None.
-
-                "visibility": {
-                    "dbname": "...",
-                    "host": "...",
-                    "port": "...",
-                    "user": "...",
-                    "password": "...",
-                },  # or None.
-            }
-
-        Raises:
-            ValueError: one of the databases is not connected yet
-
-        Returns:
-            DB connection info dict.
-        """
-        database_connections = {
-            "db": self._database_connection("db"),
-            "visibility": self._database_connection("visibility"),
-        }
-
-        if all(db_conn is None for db_conn in database_connections.values()):
-            raise ValueError("database relation not ready")
-
-        for rel_name, db_conn in database_connections.items():
-            if db_conn is None:
-                raise ValueError(f"{rel_name}:pgsql relation: no database connection available")
-        return database_connections
-
-    def _database_connection(self, rel_name):
-        """Return the connection info read from the given database relation.
-
-        Args:
-            rel_name: Name of the database relation, `db` or `visibility`.
-
-        Returns:
-            The connection info dict, or None if the relation does not provide a usable connection yet.
-        """
-        if self.model.get_relation(rel_name) is None:
-            return None
-
-        requirer = self.db if rel_name == "db" else self.visibility
-        relation_id = requirer.relations[0].id
-        relation_data = requirer.fetch_relation_data()[relation_id]
-
-        endpoints = relation_data.get("endpoints", "").split(",")
-        primary_endpoint = endpoints[0].split(":")
-        if len(primary_endpoint) < 2:
-            return None
-
-        db_conn = {
-            "dbname": DB_NAME if rel_name == "db" else VISIBILITY_DB_NAME,
-            "host": primary_endpoint[0],
-            "port": primary_endpoint[1],
-            "password": relation_data.get("password"),
-            "user": relation_data.get("username"),
-            "tls": relation_data.get("tls") == "True",
-        }
-
-        if None in (db_conn["user"], db_conn["password"]):
-            return None
-        return db_conn
+        """Return connection info for the related databases."""
+        return self.postgresql.database_connections()
 
     def _provide_admin_db_info(self):
         """Provide the database connection info to the admin charm; leader only."""
@@ -576,124 +502,22 @@ class TemporalK8SCharm(CharmBase):
         if relation is not None:
             relation.data[self.app].pop(key, None)
 
-    def _stored_openfga_state(self):
-        """Return the OpenFGA state persisted in the peer relation, in the format of the previous revisions.
-
-        Returns:
-            The persisted state dict, or None if there is none.
-        """
-        stored = self._peer_get("openfga")
-        return stored if isinstance(stored, dict) and stored else None
-
-    def _relation_openfga_state(self, stored):
-        """Return the OpenFGA connection info read from the relation.
-
-        The authorization model ID is the only value that cannot be read from the relation: it is created by an
-        action and persisted in the peer relation, together with the ID of the store it belongs to.
-
-        Args:
-            stored: The OpenFGA state persisted in the peer relation, if any.
-
-        Returns:
-            The OpenFGA state dict, or None if the relation does not provide a usable store.
-        """
-        try:
-            info = self.openfga.get_store_info()
-        except ModelError as err:
-            logger.error("failed to read the OpenFGA store info: %s", err)
-            return None
-        if not info or not info.store_id or not info.http_api_url:
-            return None
-
-        auth_model_id = None
-        if stored and stored.get("store_id") == info.store_id:
-            auth_model_id = stored.get("auth_model_id")
-
-        try:
-            return self.openfga_relation._openfga_state_from_store_info(info, auth_model_id)
-        except ValueError as exc:
-            logger.error("invalid OpenFGA store info: %s", exc)
-            return None
+    def _create_s3_bucket(self, s3_parameters, endpoint):
+        """Create an S3 bucket using the relation helper."""
+        create_bucket_if_not_exists(s3_parameters, endpoint)
 
     def _openfga_state(self):
-        """Return the OpenFGA state the workload and the actions use.
-
-        The relation is the source of truth. As the previous revisions did, the state persisted in the peer
-        relation is used as it is while the relation does not provide a usable store (revoked, or an invalid
-        HTTP API URL), so what is reported then is what the persisted state lacks, if anything.
-
-        Returns:
-            The OpenFGA state dict, or None if there is neither a usable store nor a persisted state.
-        """
-        stored = self._stored_openfga_state()
-        return self._relation_openfga_state(stored) or stored
+        """Return OpenFGA state through its relation helper."""
+        return self.openfga_relation.state()
 
     def _store_openfga_auth_model_id(self, store_id, auth_model_id):
-        """Persist the authorization model ID created for the given OpenFGA store.
-
-        The fields persisted by other revisions are left as they are: units still running them read them.
-
-        Args:
-            store_id: ID of the OpenFGA store the model belongs to.
-            auth_model_id: ID of the authorization model.
-        """
-        stored = self._stored_openfga_state() or {}
-        self._peer_set("openfga", {**stored, "store_id": store_id, "auth_model_id": auth_model_id})
-
-    @functools.cached_property
-    def _s3_connection(self):
-        """Return the S3 parameters read from the relation and the state derived from them.
-
-        Returns:
-            A tuple of the S3 parameters and the S3 state, both None if the relation does not provide usable
-            credentials.
-        """
-        if not self.model.get_relation("s3-parameters"):
-            return None, None
-
-        s3_parameters, missing_parameters = retrieve_s3_parameters(self.s3_client)
-        if missing_parameters:
-            return None, None
-
-        state = {
-            "bucket": s3_parameters.get("bucket"),
-            "endpoint": construct_endpoint(s3_parameters),
-            "region": s3_parameters.get("region"),
-            "aws_access_key_id": s3_parameters.get("access-key"),
-            "aws_secret_access_key": s3_parameters.get("secret-key"),
-            "uri_style": s3_parameters.get("s3-uri-style"),
-        }
-        return s3_parameters, state
+        """Persist an OpenFGA authorization model ID through its relation helper."""
+        self.openfga_relation.store_auth_model_id(store_id, auth_model_id)
 
     @staticmethod
     def _s3_fingerprint(s3_state) -> str:
-        """Return a fingerprint of the S3 state, to tell whether a bucket was already created for it."""
-        return hashlib.sha256(json.dumps(s3_state, sort_keys=True).encode()).hexdigest()
-
-    def _s3_state(self):
-        """Return the S3 state read from the relation and the outcome of the bucket creation.
-
-        The outcome is the one recorded by the leader for the current credentials, or else the one the previous
-        revisions persisted in the `s3` value, if it was for the same credentials: a unit upgraded before the
-        leader is then configured like the units still running a previous revision.
-
-        Returns:
-            The S3 state dict, or None if the relation is not usable or its bucket was not processed yet.
-        """
-        _, s3_state = self._s3_connection
-        if s3_state is None:
-            return None
-
-        record = self._peer_get("s3_bucket")
-        if isinstance(record, dict) and record.get("fingerprint") == self._s3_fingerprint(s3_state):
-            return {**s3_state, "bucket_created": bool(record.get("bucket_created"))}
-
-        legacy = self._peer_get("s3")
-        if isinstance(legacy, dict) and "bucket_created" in legacy:
-            credentials = {key: value for key, value in legacy.items() if key != "bucket_created"}
-            if credentials == s3_state:
-                return {**s3_state, "bucket_created": bool(legacy["bucket_created"])}
-        return None
+        """Return a fingerprint of the S3 state for compatibility with existing callers."""
+        return S3Archival.fingerprint(s3_state)
 
     def _reconcile_peer_state(self, event):
         """Maintain the data the leader persists in the peer relation; leader only.
@@ -714,74 +538,12 @@ class TemporalK8SCharm(CharmBase):
         if not self.unit.is_leader() or not self._peer_relation_ready():
             return
 
-        self._reconcile_openfga_peer_state(event)
-        self._reconcile_s3_bucket(event)
-        self._reconcile_legacy_database_connections(event)
-        self._reconcile_legacy_s3(event)
+        self.openfga_relation.reconcile_peer_state(event)
+        if self.s3_archival.reconcile_bucket(event):
+            raise ExitWithStatusError("waiting for S3 bucket creation", WaitingStatus)
+        self.postgresql.reconcile_peer_state(event)
+        self.s3_archival.reconcile_legacy_peer_state(event)
         self._publish_relation_digest()
-
-    def _reconcile_openfga_peer_state(self, event):
-        """Keep the OpenFGA state persisted in the peer relation up to date with the relation; leader only.
-
-        The state is only replaced while the relation provides a usable store: when the store is revoked, or its
-        HTTP API URL is invalid, the persisted state stays as it is, until the relation is broken.
-
-        Args:
-            event: The event being reconciled.
-        """
-        if isinstance(event, RelationBrokenEvent) and event.relation.name == "openfga":
-            self._peer_delete("openfga")
-            return
-
-        stored = self._stored_openfga_state()
-        if isinstance(event, OpenFGAStoreCreateEvent):
-            # An authorization model has to be created again after the store is delivered, as it always was.
-            stored = None
-
-        state = self._relation_openfga_state(stored)
-        if state is not None and state != self._peer_get("openfga"):
-            self._peer_set("openfga", state)
-
-    def _reconcile_legacy_database_connections(self, event):
-        """Keep the `database_connections` value of the previous revisions up to date; leader only.
-
-        A database that does not provide usable connection info keeps the value it had, until its relation is gone.
-
-        Args:
-            event: The event being reconciled.
-        """
-        stored = self._peer_get("database_connections")
-        current = stored if isinstance(stored, dict) else {}
-        connections = {}
-        for rel_name in ("db", "visibility"):
-            connection = self._database_connection(rel_name)
-            relation_gone = self.model.get_relation(rel_name) is None or (
-                isinstance(event, RelationBrokenEvent) and event.relation.name == rel_name
-            )
-            if relation_gone:
-                connection = None
-            elif connection is None:
-                connection = current.get(rel_name)
-            connections[rel_name] = connection
-
-        if connections != stored and (stored is not None or any(connections.values())):
-            self._peer_set("database_connections", connections)
-
-    def _reconcile_legacy_s3(self, event):
-        """Keep the `s3` value of the previous revisions up to date; leader only.
-
-        Args:
-            event: The event being reconciled.
-        """
-        stored = self._peer_get("s3")
-        s3_state = self._s3_state()
-        if s3_state is not None:
-            if s3_state != stored:
-                self._peer_set("s3", s3_state)
-        elif stored is not None and (
-            isinstance(event, CredentialsGoneEvent) or not self.model.get_relation("s3-parameters")
-        ):
-            self._peer_set("s3", None)
 
     def _relation_digest(self) -> str:
         """Return a digest of the data the workload is configured from, as read by this unit from the relations.
@@ -793,10 +555,11 @@ class TemporalK8SCharm(CharmBase):
             json.dumps(
                 {
                     "database_connections": {
-                        rel_name: self._database_connection(rel_name) for rel_name in ("db", "visibility")
+                        relation_name: self.postgresql.database_connection(relation_name)
+                        for relation_name in ("db", "visibility")
                     },
-                    "openfga": self._relation_openfga_state(self._stored_openfga_state()),
-                    "s3": self._s3_state(),
+                    "openfga": self.openfga_relation.relation_state(),
+                    "s3": self.s3_archival.state(),
                 },
                 sort_keys=True,
             ).encode()
@@ -819,42 +582,6 @@ class TemporalK8SCharm(CharmBase):
         if published is None:
             return True
         return self._relations_visible() and self._relation_digest() == published
-
-    def _reconcile_s3_bucket(self, event):
-        """Create the S3 bucket when the relation provides new credentials, and record the outcome.
-
-        The bucket is only checked when there is no record of the outcome for the current credentials, and when the
-        credentials are provided again. Permanent failures are recorded; transient failures leave no record and
-        wait for the next event to retry.
-
-        Args:
-            event: The event being reconciled.
-        """
-        s3_parameters, s3_state = self._s3_connection
-        if s3_state is None:
-            self._peer_delete("s3_bucket")
-            return
-
-        fingerprint = self._s3_fingerprint(s3_state)
-        record = self._peer_get("s3_bucket")
-        if (
-            isinstance(record, dict)
-            and record.get("fingerprint") == fingerprint
-            and not isinstance(event, CredentialsChangedEvent)
-        ):
-            return
-
-        bucket_created = True
-        try:
-            create_bucket_if_not_exists(s3_parameters, s3_state["endpoint"])
-        except (ClientError, ValueError):
-            bucket_created = False
-        except Exception as err:  # pylint: disable=broad-exception-caught
-            logger.exception("failed to create the S3 bucket %s", s3_parameters.get("bucket"))
-            raise ExitWithStatusError("waiting for S3 bucket creation", WaitingStatus) from err
-        if not bucket_created:
-            logger.warning("S3 bucket %s could not be created or checked", s3_parameters.get("bucket"))
-        self._peer_set("s3_bucket", {"fingerprint": fingerprint, "bucket_created": bucket_created})
 
     @staticmethod
     def _relation_name(event):
@@ -917,7 +644,7 @@ class TemporalK8SCharm(CharmBase):
             info = self.openfga.get_store_info() if event.store_id else None
             if not info or not info.http_api_url:
                 return True
-        if isinstance(event, CredentialsChangedEvent) and self._s3_connection[1] is None:
+        if isinstance(event, CredentialsChangedEvent) and self.s3_archival.connection[1] is None:
             return True
         # A non-leader unit waits for the leader to have acted on the data, and for itself to read the same: a unit
         # that is being removed, for instance, loses its relations before the leader knows anything about it.
@@ -1228,7 +955,7 @@ class TemporalK8SCharm(CharmBase):
 
         # Validate OpenFGA relation.
         if self.config["auth-enabled"]:
-            openfga = self._openfga_state()
+            openfga = self.openfga_relation.state()
             if not openfga:
                 raise ValueError("openfga:temporal relation not ready")
             missing_params = self._check_missing_params(openfga, REQUIRED_OPENFGA_KEYS)
@@ -1238,7 +965,7 @@ class TemporalK8SCharm(CharmBase):
                 raise ValueError("missing openfga authorization model")
 
         # Validate S3 relation.
-        s3 = self._s3_state()
+        s3 = self.s3_archival.state()
         if s3:
             missing_params = self._check_missing_params(s3, REQUIRED_S3_PARAMETERS)
             if len(missing_params) > 0:
@@ -1345,7 +1072,7 @@ class TemporalK8SCharm(CharmBase):
         )
 
         if self.config["auth-enabled"]:
-            openfga = self._openfga_state()
+            openfga = self.openfga_relation.state()
             context.update(
                 {
                     "AUTH_ENABLED": True,
@@ -1374,7 +1101,7 @@ class TemporalK8SCharm(CharmBase):
                 }
             )
 
-        s3 = self._s3_state()
+        s3 = self.s3_archival.state()
         if s3:
             context.update(
                 {
