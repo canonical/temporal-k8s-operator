@@ -10,6 +10,7 @@ from enum import Enum
 from urllib.parse import urlsplit
 
 import requests
+from charms.openfga_k8s.v1.openfga import OpenFGAStoreCreateEvent
 from openfga_sdk import ReadRequestTupleKey
 from openfga_sdk.client import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models.check_request import ClientCheckRequest
@@ -21,6 +22,8 @@ from openfga_sdk.exceptions import ApiException
 from openfga_sdk.models.check_response import CheckResponse
 from openfga_sdk.models.read_response import ReadResponse
 from ops import framework
+from ops.charm import RelationBrokenEvent
+from ops.model import ModelError
 from requests.exceptions import RequestException
 
 from literals import ALLOWED_OFGA_ROLES
@@ -140,6 +143,88 @@ class OpenFGA(framework.Object):
             "full_http_url": info.http_api_url.rstrip("/"),
             "auth_model_id": auth_model_id,
         }
+
+    def state(self):
+        """Return the OpenFGA state the workload and actions use.
+
+        The relation is authoritative. When it cannot provide a usable store, persisted data is
+        retained.
+        This preserves prior state during relation transitions.
+
+        Returns:
+            The OpenFGA state dict, or None if there is neither a usable store nor persisted state.
+        """
+        stored = self._stored_state()
+        return self._relation_state(stored) or stored
+
+    def relation_state(self):
+        """Return state from the live relation, retaining its persisted authorization model ID.
+
+        Returns:
+            The OpenFGA state dict, or None if the relation does not provide a usable store.
+        """
+        return self._relation_state(self._stored_state())
+
+    def store_auth_model_id(self, store_id, auth_model_id):
+        """Persist the authorization model ID created for an OpenFGA store.
+
+        Args:
+            store_id: ID of the OpenFGA store the model belongs to.
+            auth_model_id: ID of the authorization model.
+        """
+        stored = self._stored_state() or {}
+        self.charm._peer_set("openfga", {**stored, "store_id": store_id, "auth_model_id": auth_model_id})
+
+    def reconcile_peer_state(self, event):
+        """Keep OpenFGA peer state up to date with the relation; leader only.
+
+        Args:
+            event: The event being reconciled.
+        """
+        charm = self.charm
+        if isinstance(event, RelationBrokenEvent) and event.relation.name == "openfga":
+            charm._peer_delete("openfga")
+            return
+
+        stored = self._stored_state()
+        if isinstance(event, OpenFGAStoreCreateEvent):
+            stored = None
+
+        state = self._relation_state(stored)
+        if state is not None and state != charm._peer_get("openfga"):
+            charm._peer_set("openfga", state)
+
+    def _stored_state(self):
+        """Return the OpenFGA state persisted in the peer relation."""
+        stored = self.charm._peer_get("openfga")
+        return stored if isinstance(stored, dict) and stored else None
+
+    def _relation_state(self, stored):
+        """Return usable OpenFGA connection info from the relation.
+
+        Args:
+            stored: The OpenFGA state persisted in the peer relation, if any.
+
+        Returns:
+            The state dict, or None if the relation does not provide a usable store.
+        """
+        try:
+            info = self.charm.openfga.get_store_info()
+        except ModelError as err:
+            logger.error("failed to read the OpenFGA store info: %s", err)
+            return None
+        if not info or not info.store_id or not info.http_api_url:
+            return None
+
+        auth_model_id = None
+        if stored and stored.get("store_id") == info.store_id:
+            auth_model_id = stored.get("auth_model_id")
+
+        try:
+            return self._openfga_state_from_store_info(info, auth_model_id)
+        except ValueError as exc:
+            logger.error("invalid OpenFGA store info: %s", exc)
+            return None
 
     @log_event_handler(logger)
     def _on_create_authorization_model_action(self, event):

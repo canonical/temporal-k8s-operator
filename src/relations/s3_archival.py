@@ -3,11 +3,18 @@
 
 """Archival implementation."""
 
+import functools
+import hashlib
+import json
 import logging
 
 import boto3
 import botocore
 from botocore.exceptions import ClientError
+from charms.data_platform_libs.v0.s3 import (
+    CredentialsChangedEvent,
+    CredentialsGoneEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,3 +132,135 @@ def create_bucket_if_not_exists(s3_parameters, endpoint):
         except ClientError as error:
             logger.exception("Couldn't create bucket named '%s' in region=%s.", bucket_name, region)
             raise error
+
+
+class S3Archival:
+    """Read S3 relation data and preserve bucket state during rolling upgrades.
+
+    Attributes:
+        charm: The charm that owns the S3 requirer and peer relation.
+        connection: S3 parameters and normalized state derived from the relation.
+        bucket_creator: Function that ensures the S3 bucket exists.
+    """
+
+    def __init__(self, charm, bucket_creator):
+        """Construct the helper.
+
+        Args:
+            charm: The charm that owns the S3 requirer and peer relation.
+            bucket_creator: Function that ensures the S3 bucket exists.
+        """
+        self.charm = charm
+        self.bucket_creator = bucket_creator
+
+    @functools.cached_property
+    def connection(self):
+        """Return S3 relation parameters and the normalized state derived from them."""
+        charm = self.charm
+        if not charm.model.get_relation("s3-parameters"):
+            return None, None
+
+        s3_parameters, missing_parameters = retrieve_s3_parameters(charm.s3_client)
+        if missing_parameters:
+            return None, None
+
+        state = {
+            "bucket": s3_parameters.get("bucket"),
+            "endpoint": construct_endpoint(s3_parameters),
+            "region": s3_parameters.get("region"),
+            "aws_access_key_id": s3_parameters.get("access-key"),
+            "aws_secret_access_key": s3_parameters.get("secret-key"),
+            "uri_style": s3_parameters.get("s3-uri-style"),
+        }
+        return s3_parameters, state
+
+    @staticmethod
+    def fingerprint(s3_state) -> str:
+        """Return a fingerprint of the S3 state.
+
+        Args:
+            s3_state: The normalized S3 connection data.
+
+        Returns:
+            A deterministic fingerprint for the connection data.
+        """
+        return hashlib.sha256(json.dumps(s3_state, sort_keys=True).encode()).hexdigest()
+
+    def state(self):
+        """Return usable S3 state and its recorded bucket outcome, if available.
+
+        Returns:
+            The S3 state dict, or None if the relation is unusable or the bucket outcome is not
+            recorded.
+        """
+        charm = self.charm
+        _, s3_state = self.connection
+        if s3_state is None:
+            return None
+
+        record = charm._peer_get("s3_bucket")
+        if isinstance(record, dict) and record.get("fingerprint") == self.fingerprint(s3_state):
+            return {**s3_state, "bucket_created": bool(record.get("bucket_created"))}
+
+        legacy = charm._peer_get("s3")
+        if isinstance(legacy, dict) and "bucket_created" in legacy:
+            credentials = {key: value for key, value in legacy.items() if key != "bucket_created"}
+            if credentials == s3_state:
+                return {**s3_state, "bucket_created": bool(legacy["bucket_created"])}
+        return None
+
+    def reconcile_legacy_peer_state(self, event):
+        """Keep the legacy S3 peer data up to date for rolling upgrades.
+
+        Args:
+            event: The event being reconciled.
+        """
+        charm = self.charm
+        stored = charm._peer_get("s3")
+        state = self.state()
+        if state is not None:
+            if state != stored:
+                charm._peer_set("s3", state)
+        elif stored is not None and (
+            isinstance(event, CredentialsGoneEvent) or not charm.model.get_relation("s3-parameters")
+        ):
+            charm._peer_set("s3", None)
+
+    def reconcile_bucket(self, event):
+        """Create the bucket for new credentials and persist permanent outcomes.
+
+        Args:
+            event: The event being reconciled.
+
+        Returns:
+            True when a transient error occurred.
+        """
+        charm = self.charm
+        s3_parameters, s3_state = self.connection
+        if s3_state is None:
+            charm._peer_delete("s3_bucket")
+            return False
+
+        fingerprint = self.fingerprint(s3_state)
+        record = charm._peer_get("s3_bucket")
+        if (
+            isinstance(record, dict)
+            and record.get("fingerprint") == fingerprint
+            and not isinstance(event, CredentialsChangedEvent)
+        ):
+            return False
+
+        try:
+            self.bucket_creator(s3_parameters, s3_state["endpoint"])
+        except (ClientError, ValueError):
+            bucket_created = False
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.exception("failed to create the S3 bucket %s", s3_parameters.get("bucket"))
+            return True
+        else:
+            bucket_created = True
+
+        if not bucket_created:
+            logger.warning("S3 bucket %s could not be created or checked", s3_parameters.get("bucket"))
+        charm._peer_set("s3_bucket", {"fingerprint": fingerprint, "bucket_created": bucket_created})
+        return False
