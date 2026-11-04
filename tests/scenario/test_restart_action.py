@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Scenario tests for the restart action."""
@@ -38,7 +38,7 @@ def test_restart_action_restarts_the_pebble_service(context, container_with_serv
 
     container = state_out.get_container("temporal")
     assert container.service_statuses["temporal-server"] == pebble.ServiceStatus.ACTIVE
-    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+    assert state_out.unit_status == ops.BlockedStatus("peer relation not ready")
 
 
 def test_restart_action_reports_restarting_status(context, container_with_service):

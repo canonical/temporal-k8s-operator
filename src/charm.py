@@ -824,8 +824,8 @@ class TemporalK8SCharm(CharmBase):
         """Create the S3 bucket when the relation provides new credentials, and record the outcome.
 
         The bucket is only checked when there is no record of the outcome for the current credentials, and when the
-        credentials are provided again. Whatever goes wrong while checking it is a failed attempt, which is
-        recorded like any other, so the endpoint is not contacted again on every event and no hook fails.
+        credentials are provided again. Permanent failures are recorded; transient failures leave no record and
+        wait for the next event to retry.
 
         Args:
             event: The event being reconciled.
@@ -849,10 +849,9 @@ class TemporalK8SCharm(CharmBase):
             create_bucket_if_not_exists(s3_parameters, s3_state["endpoint"])
         except (ClientError, ValueError):
             bucket_created = False
-        except Exception:  # pylint: disable=broad-exception-caught
-            # E.g. the endpoint cannot be reached: the previous revisions let this fail the credentials-changed hook.
+        except Exception as err:  # pylint: disable=broad-exception-caught
             logger.exception("failed to create the S3 bucket %s", s3_parameters.get("bucket"))
-            bucket_created = False
+            raise ExitWithStatusError("waiting for S3 bucket creation", WaitingStatus) from err
         if not bucket_created:
             logger.warning("S3 bucket %s could not be created or checked", s3_parameters.get("bucket"))
         self._peer_set("s3_bucket", {"fingerprint": fingerprint, "bucket_created": bucket_created})
@@ -953,8 +952,8 @@ class TemporalK8SCharm(CharmBase):
     def _reconcile(self, event):
         """Reconcile the charm towards the desired state; idempotent for every event.
 
-        Whatever the event, a reconciliation that reaches the workload ends with the "replanning application"
-        status; only update-status, which is the periodic health check, reports the unit as active.
+        A reconciliation that changes the workload ends with the "replanning application" status. Once it is
+        settled, the unit is active; only update-status performs the periodic health check.
 
         Args:
             event: The event that triggered the reconciliation.
@@ -1000,8 +999,11 @@ class TemporalK8SCharm(CharmBase):
                 # advertised ingress scheme. Only advertise what the workload is running.
                 self._host_info.publish()
                 self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
+
+            if replanned:
                 raise ExitWithStatusError("replanning application", MaintenanceStatus)
-            self._check_server_healthy(container)
+            if isinstance(event, UpdateStatusEvent):
+                self._check_server_healthy(container)
         except ExitWithoutStatusChange:
             if pending_status is not None:
                 self.unit.status = pending_status
@@ -1120,14 +1122,14 @@ class TemporalK8SCharm(CharmBase):
         """Restart the temporal server, even if there are no changes.
 
         Args:
-            event: The event triggered when the relation changed.
+            event: The action event that requested the restart.
         """
         container = self.unit.get_container(self.name)
 
         logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
         container.restart("temporal-server")
-        self.set_active_unit_status()
+        self._reconcile(event)
 
     def _server_running(self, container) -> bool:
         """Check whether the Temporal server Pebble service is running.
