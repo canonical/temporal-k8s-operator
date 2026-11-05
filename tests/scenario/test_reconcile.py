@@ -1127,13 +1127,14 @@ def test_bucket_is_created_when_the_credentials_change(
     assert environment["AWS_ACCESS_KEY_ID"] == "access"
 
 
+@pytest.mark.parametrize("code", ["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidBucketName"])
 def test_bucket_creation_failure_blocks_until_the_credentials_change_again(
-    context, server_state, create_bucket, s3_relation, s3_bucket_fingerprint
+    context, server_state, create_bucket, s3_relation, s3_bucket_fingerprint, code
 ):
     """Bucket creation failure blocks until the credentials change again."""
     state = _without_bucket_record(server_state(True))
     s3 = state.get_relation(s3_relation.id)
-    create_bucket.side_effect = ClientError({"Error": {"Code": "AccessDenied"}}, "CreateBucket")
+    create_bucket.side_effect = ClientError({"Error": {"Code": code}}, "CreateBucket")
 
     state_out = context.run(context.on.relation_changed(s3), state)
 
@@ -1155,14 +1156,25 @@ def test_bucket_creation_failure_blocks_until_the_credentials_change_again(
     assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
 
 
-def test_bucket_creation_error_blocks(context, server_state, create_bucket, s3_relation):
-    """Bucket creation error blocks."""
+def test_bucket_creation_error_blocks(context, server_state, create_bucket, s3_relation, s3_bucket_fingerprint):
+    """Malformed endpoint errors are recorded and not retried on unrelated events."""
     state = _without_bucket_record(server_state(True))
-    create_bucket.side_effect = ValueError("no session")
+    create_bucket.side_effect = ValueError("Invalid endpoint: malformed endpoint")
 
     state_out = context.run(context.on.relation_changed(state.get_relation(s3_relation.id)), state)
 
     assert state_out.unit_status == ops.BlockedStatus("s3:archival failed to create s3 bucket.")
+    record = {"fingerprint": s3_bucket_fingerprint, "bucket_created": False}
+    assert _peer(state_out)["s3_bucket"] == record
+    assert not state_out.get_container("temporal").plan.services
+
+    create_bucket.reset_mock()
+    state_out = context.run(context.on.update_status(), state_out)
+
+    create_bucket.assert_not_called()
+    assert _peer(state_out)["s3_bucket"] == record
+    assert state_out.unit_status == ops.BlockedStatus("s3:archival failed to create s3 bucket.")
+    assert not state_out.get_container("temporal").plan.services
 
 
 NETWORK_ERRORS = [
@@ -1173,8 +1185,22 @@ NETWORK_ERRORS = [
     RuntimeError("unexpected"),
 ]
 
+TRANSIENT_CLIENT_ERRORS = [
+    pytest.param(ClientError({"Error": {"Code": code}}, "CreateBucket"), id=code)
+    for code in ["SlowDown", "RequestTimeout", "InternalError"]
+] + [
+    pytest.param(
+        ClientError(
+            {"Error": {"Code": "UnknownError"}, "ResponseMetadata": {"HTTPStatusCode": status}},
+            "CreateBucket",
+        ),
+        id=f"http-{status}",
+    )
+    for status in [429, 500, 502, 503, 504]
+]
 
-@pytest.mark.parametrize("error", NETWORK_ERRORS, ids=lambda error: type(error).__name__)
+
+@pytest.mark.parametrize("error", NETWORK_ERRORS + TRANSIENT_CLIENT_ERRORS, ids=lambda error: type(error).__name__)
 @pytest.mark.parametrize("event_name", ["relation_changed", "config_changed", "update_status", "pebble_ready"])
 def test_bucket_transient_failure_waits_without_recording_the_outcome(
     context,
@@ -1207,24 +1233,34 @@ def test_bucket_transient_failure_waits_without_recording_the_outcome(
     assert not state_out.get_container("temporal").plan.services
 
 
-@pytest.mark.parametrize("error", NETWORK_ERRORS, ids=lambda error: type(error).__name__)
+@pytest.mark.parametrize("error", NETWORK_ERRORS + TRANSIENT_CLIENT_ERRORS, ids=lambda error: type(error).__name__)
+@pytest.mark.parametrize("event_name", ["config_changed", "update_status"])
 def test_bucket_transient_failure_is_retried_on_the_next_event(
-    context, server_state, create_bucket, s3_relation, s3_bucket_fingerprint, error
+    context, server_state, create_bucket, s3_relation, s3_bucket_fingerprint, error, event_name
 ):
-    """Bucket transient failure is retried on the next event."""
+    """Retry unchanged credentials on the next config or status event and enable archival."""
     state = _without_bucket_record(server_state(True))
     create_bucket.side_effect = error
     state_out = context.run(context.on.relation_changed(state.get_relation(s3_relation.id)), state)
     assert "s3_bucket" not in _peer(state_out)
     assert state_out.unit_status == ops.WaitingStatus("waiting for S3 bucket creation")
+    assert not state_out.get_container("temporal").plan.services
+    original_call = create_bucket.call_args
 
     create_bucket.reset_mock()
     create_bucket.side_effect = None
 
-    state_out = context.run(context.on.config_changed(), state_out)
+    state_out = context.run(getattr(context.on, event_name)(), state_out)
 
     create_bucket.assert_called_once()
+    assert create_bucket.call_args == original_call
     assert _peer(state_out)["s3_bucket"] == {"fingerprint": s3_bucket_fingerprint, "bucket_created": True}
+    assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
+    environment = _environment(state_out)
+    assert environment["ARCHIVAL_ENABLED"] is True
+    assert environment["ARCHIVAL_BUCKET_REGION"] == "region"
+    assert environment["AWS_ACCESS_KEY_ID"] == "access"
+    assert environment["AWS_SECRET_ACCESS_KEY"] == "secret"
 
 
 def test_bucket_network_failure_is_tried_again_when_the_relation_data_changes(
