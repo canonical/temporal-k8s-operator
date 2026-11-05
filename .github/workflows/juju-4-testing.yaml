@@ -1,26 +1,30 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-# Nightly integration tests against Juju 4.x via the team's shared reusable
+# Weekly integration tests against Juju 4.x via the team's shared reusable
 # workflow. Each test command gets its own runner provisioned by concierge.
-# Scheduled failures open/update one issue labelled `juju-4`.
+# Scheduled failures open/update one issue labelled `juju-4` and `bug`.
 
-name: Juju 4.x Tests
+name: juju-4-testing
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
 
 on:
   schedule:
-    # Run at 02:17 UTC every day
-    - cron: '17 2 * * *'
+    # Run at 00:17 UTC every Monday
+    - cron: '17 0 * * 1'
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
 jobs:
   integration:
     name: Integration tests [juju 4.x]
-    uses: canonical/workflows-team/.github/workflows/juju-nightly.yaml@main
+    uses: canonical/workflows-team/.github/workflows/juju-testing.yaml@main
     with:
       juju-channel: "4.1/edge"
       # Matches the runner label used by tests.yaml.
@@ -41,14 +45,14 @@ jobs:
         "just integration tests/integration/test_server_upgrade.py"]
       # test_upgrades.py is excluded until the upgrade scenario supports
       # postgresql-k8s 16 (TODO in tests/integration/test_upgrades.py).
-      issue-label: juju-4
+      issue-labels: juju-4,bug
 
   # Ingress needs both k8s and lxd controllers (HAProxy is a machine charm),
   # so it uses concierge.yaml instead of the k8s preset. provider stays k8s
   # so kubeconfig is written and pod diagnostics are collected.
   ingress:
     name: Ingress integration test [juju 4.x]
-    uses: canonical/workflows-team/.github/workflows/juju-nightly.yaml@main
+    uses: canonical/workflows-team/.github/workflows/juju-testing.yaml@main
     with:
       juju-channel: "4.1/edge"
       concierge-config: .github/workflows/concierge.yaml
@@ -59,4 +63,4 @@ jobs:
       extra-snaps: ""
       test-commands: '["just integration tests/integration/test_ingress.py"]'
       extra-env: '{"POSTGRESQL_CHANNEL": "16/stable", "POSTGRESQL_FORCE": "true"}'
-      issue-label: juju-4
+      issue-labels: juju-4,bug
