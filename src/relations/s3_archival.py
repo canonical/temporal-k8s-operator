@@ -90,6 +90,28 @@ def construct_endpoint(s3_parameters):
     return endpoint
 
 
+def _is_retryable_s3_error(error: ClientError) -> bool:
+    """Identify transient S3 failures that should be retried rather than cached."""
+    return error.response.get("Error", {}).get("Code") in {
+        "SlowDown",
+        "Throttling",
+        "ThrottlingException",
+        "RequestLimitExceeded",
+        "TooManyRequestsException",
+        "RequestTimeout",
+        "RequestTimeoutException",
+        "InternalError",
+        "InternalFailure",
+        "ServiceUnavailable",
+    } or error.response.get("ResponseMetadata", {}).get("HTTPStatusCode") in {
+        429,
+        500,
+        502,
+        503,
+        504,
+    }
+
+
 def create_bucket_if_not_exists(s3_parameters, endpoint):
     """Create the S3 bucket if it does not exist.
 
@@ -99,7 +121,7 @@ def create_bucket_if_not_exists(s3_parameters, endpoint):
 
     Raises:
         e (ValueError): if a session could not be created.
-        error (ClientError): if the bucket could not be created.
+        error (ClientError): if a bucket check failed transiently or creation failed.
     """
     bucket_name = s3_parameters["bucket"]
     region = s3_parameters.get("region")
@@ -119,7 +141,9 @@ def create_bucket_if_not_exists(s3_parameters, endpoint):
         bucket.meta.client.head_bucket(Bucket=bucket_name)
         logger.info("Bucket %s exists.", bucket_name)
         exists = True
-    except ClientError:
+    except ClientError as error:
+        if _is_retryable_s3_error(error):
+            raise
         logger.warning("Bucket %s doesn't exist or you don't have access to it.", bucket_name)
         exists = False
 
@@ -252,7 +276,12 @@ class S3Archival:
 
         try:
             self.bucket_creator(s3_parameters, s3_state["endpoint"])
-        except (ClientError, ValueError):
+        except ClientError as error:
+            if _is_retryable_s3_error(error):
+                logger.exception("failed to create the S3 bucket %s", s3_parameters.get("bucket"))
+                return True
+            bucket_created = False
+        except ValueError:
             bucket_created = False
         except Exception:  # pylint: disable=broad-exception-caught
             logger.exception("failed to create the S3 bucket %s", s3_parameters.get("bucket"))
