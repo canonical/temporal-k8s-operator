@@ -39,6 +39,7 @@ import yaml
 from conftest import (
     ADMIN_BASE,
     POSTGRESQL_CHANNEL,
+    POSTGRESQL_FORCE,
     SELF_SIGNED_CERTIFICATES_CHANNEL,
     TEMPORAL_CHANNEL,
 )
@@ -95,7 +96,7 @@ def topology(juju_factory: pytest_jubilant.JujuFactory, charm: Path):
     # --- Kubernetes model ---
     k8s_juju.deploy(charm, APP_NAME, resources=resources, config={"num-history-shards": 2})
     k8s_juju.deploy(TEMPORAL_ADMIN, channel=TEMPORAL_CHANNEL, base=ADMIN_BASE)
-    k8s_juju.deploy(POSTGRESQL_K8S, channel=POSTGRESQL_CHANNEL, trust=True)
+    k8s_juju.deploy(POSTGRESQL_K8S, channel=POSTGRESQL_CHANNEL, trust=True, force=POSTGRESQL_FORCE)
     k8s_juju.deploy(SELF_SIGNED, channel=SELF_SIGNED_CERTIFICATES_CHANNEL)
     k8s_juju.deploy(INGRESS_CONFIGURATOR, channel=INGRESS_CONFIGURATOR_CHANNEL, trust=True)
 
