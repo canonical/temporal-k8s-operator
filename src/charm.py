@@ -729,8 +729,10 @@ class TemporalK8SCharm(CharmBase):
 
             if replanned:
                 raise ExitWithStatusError("replanning application", MaintenanceStatus)
+            self._check_server_healthy(container)
             if isinstance(event, UpdateStatusEvent):
-                self._check_server_healthy(container)
+                self._run_log_rotation(container)
+                self.unit.set_workload_version(WORKLOAD_VERSION)
         except ExitWithoutStatusChange:
             if pending_status is not None:
                 self.unit.status = pending_status
@@ -829,7 +831,7 @@ class TemporalK8SCharm(CharmBase):
         return container
 
     def _check_server_healthy(self, container):
-        """Verify that the Temporal server is up, and perform the periodic maintenance (update-status only).
+        """Verify that the Temporal server is up.
 
         Args:
             container: application container.
@@ -840,9 +842,6 @@ class TemporalK8SCharm(CharmBase):
         check = container.get_check("temporal-server-running")
         if check.status != CheckStatus.UP:
             raise ExitWithStatusError("Status check: DOWN", MaintenanceStatus)
-
-        self._run_log_rotation(container)
-        self.unit.set_workload_version(WORKLOAD_VERSION)
 
     @log_event_handler(logger)
     def _on_restart_action(self, event):
