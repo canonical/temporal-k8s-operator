@@ -22,6 +22,8 @@ from openfga_sdk.exceptions import ApiException
 from openfga_sdk.models.check_response import CheckResponse
 from openfga_sdk.models.read_response import ReadResponse
 from ops import framework
+from ops.charm import RelationBrokenEvent
+from ops.model import ModelError
 from requests.exceptions import RequestException
 
 from literals import ALLOWED_OFGA_ROLES
@@ -69,17 +71,7 @@ class OpenFGA(framework.Object):
         """
         super().__init__(charm, "openfga")
         self.charm = charm
-        # Register OpenFGA relation handlers.
-        charm.framework.observe(
-            charm.openfga.on.openfga_store_created,
-            self._on_openfga_store_created,
-        )
-
-        charm.framework.observe(
-            charm.on.upgrade_charm,
-            self._on_upgrade_charm,
-        )
-
+        # Register the action handlers; the relation events go through the charm's reconciler.
         charm.framework.observe(
             charm.on.create_authorization_model_action,
             self._on_create_authorization_model_action,
@@ -110,43 +102,15 @@ class OpenFGA(framework.Object):
             self._on_list_system_admins_action,
         )
 
-        charm.framework.observe(charm.on.openfga_relation_broken, self._on_openfga_relation_broken)
-
-    @log_event_handler(logger)
-    def _on_openfga_store_created(self, event: OpenFGAStoreCreateEvent):
-        """Handle OpenFGA relation created event.
-
-        Args:
-            event: The event triggered when the relation is created.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not event.store_id:
-            logger.info("openfga relation revoked, no store id")
-            return
-
-        info = self.charm.openfga.get_store_info()
-        if not info or not info.http_api_url:
-            logger.info("openfga relation revoked, no store info found")
-            return
-
-        try:
-            self.charm._state.openfga = self._openfga_state_from_store_info(info)
-        except ValueError as exc:
-            logger.error("invalid OpenFGA store info: %s", exc)
-
-        self.charm._update(event)
-
     def _openfga_state_from_store_info(self, info, auth_model_id=None):
-        """Build peer OpenFGA state from live store info.
+        """Build the OpenFGA state from live store info.
 
         Args:
             info: OpenFGA store info from the relation.
             auth_model_id: Existing authorization model ID to preserve, if any.
 
         Returns:
-            dict: OpenFGA peer state.
+            dict: OpenFGA state.
 
         Raises:
             ValueError: If the OpenFGA HTTP API URL is invalid.
@@ -180,64 +144,87 @@ class OpenFGA(framework.Object):
             "auth_model_id": auth_model_id,
         }
 
-    def _migrate_openfga_state(self) -> bool:
-        """Backfill OpenFGA state written by older charm revisions.
+    def state(self):
+        """Return the OpenFGA state the workload and actions use.
+
+        The relation is authoritative. When it cannot provide a usable store, persisted data is
+        retained.
+        This preserves prior state during relation transitions.
 
         Returns:
-            True if peer OpenFGA state was rewritten, False otherwise.
+            The OpenFGA state dict, or None if there is neither a usable store nor persisted state.
         """
-        openfga = self.charm._state.openfga
+        stored = self._stored_state()
+        return self._relation_state(stored) or stored
 
-        if not openfga:
-            return False
+    def relation_state(self):
+        """Return state from the live relation, retaining its persisted authorization model ID.
 
-        if openfga.get("full_http_url") and openfga.get("port") is not None:
-            return False
+        Returns:
+            The OpenFGA state dict, or None if the relation does not provide a usable store.
+        """
+        return self._relation_state(self._stored_state())
 
-        info = self.charm.openfga.get_store_info()
-        if not info or not info.http_api_url:
-            return False
+    def store_auth_model_id(self, store_id, auth_model_id):
+        """Persist the authorization model ID created for an OpenFGA store.
 
-        auth_model_id = openfga.get("auth_model_id") if openfga.get("store_id") == info.store_id else None
+        Args:
+            store_id: ID of the OpenFGA store the model belongs to.
+            auth_model_id: ID of the authorization model.
+        """
+        stored = self._stored_state() or {}
+        self.charm._peer_set("openfga", {**stored, "store_id": store_id, "auth_model_id": auth_model_id})
+
+    def reconcile_peer_state(self, event):
+        """Keep OpenFGA peer state up to date with the relation; leader only.
+
+        Args:
+            event: The event being reconciled.
+        """
+        charm = self.charm
+        if isinstance(event, RelationBrokenEvent) and event.relation.name == "openfga":
+            charm._peer_delete("openfga")
+            return
+
+        stored = self._stored_state()
+        if isinstance(event, OpenFGAStoreCreateEvent):
+            stored = None
+
+        state = self._relation_state(stored)
+        if state is not None and state != charm._peer_get("openfga"):
+            charm._peer_set("openfga", state)
+
+    def _stored_state(self):
+        """Return the OpenFGA state persisted in the peer relation."""
+        stored = self.charm._peer_get("openfga")
+        return stored if isinstance(stored, dict) and stored else None
+
+    def _relation_state(self, stored):
+        """Return usable OpenFGA connection info from the relation.
+
+        Args:
+            stored: The OpenFGA state persisted in the peer relation, if any.
+
+        Returns:
+            The state dict, or None if the relation does not provide a usable store.
+        """
+        try:
+            info = self.charm.openfga.get_store_info()
+        except ModelError as err:
+            logger.error("failed to read the OpenFGA store info: %s", err)
+            return None
+        if not info or not info.store_id or not info.http_api_url:
+            return None
+
+        auth_model_id = None
+        if stored and stored.get("store_id") == info.store_id:
+            auth_model_id = stored.get("auth_model_id")
 
         try:
-            new_state = self._openfga_state_from_store_info(info, auth_model_id)
+            return self._openfga_state_from_store_info(info, auth_model_id)
         except ValueError as exc:
-            logger.error("failed to migrate OpenFGA state: %s", exc)
-            return False
-
-        self.charm._state.openfga = new_state
-        return True
-
-    @log_event_handler(logger)
-    def _on_upgrade_charm(self, event):
-        """Migrate persisted OpenFGA peer state after a charm upgrade.
-
-        Args:
-            event: The event triggered when the charm is upgraded.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        self._migrate_openfga_state()
-        self.charm._update(event)
-
-    @log_event_handler(logger)
-    def _on_openfga_relation_broken(self, event) -> None:
-        """Handle broken relations with OpenFGA.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not self.charm._state.is_ready():
-            event.defer()
-            return
-
-        self.charm._state.openfga = None
-        self.charm._update(event)
+            logger.error("invalid OpenFGA store info: %s", exc)
+            return None
 
     @log_event_handler(logger)
     def _on_create_authorization_model_action(self, event):
@@ -249,7 +236,7 @@ class OpenFGA(framework.Object):
         if not self.charm.unit.is_leader():
             return
 
-        if not _check_openfga_relation(self.charm._state, event):
+        if not _check_openfga_relation(self.charm._openfga_state(), event):
             return
 
         model = event.params["model"]
@@ -262,7 +249,7 @@ class OpenFGA(framework.Object):
             event.fail("failed to parse model json")
             return
 
-        openfga_data = self.charm._state.openfga
+        openfga_data = self.charm._openfga_state()
         url = f"{openfga_data['full_http_url']}/stores/{openfga_data['store_id']}/authorization-models"
         headers = _build_headers(openfga_data)
 
@@ -280,12 +267,9 @@ class OpenFGA(framework.Object):
 
         event.set_results({"result": "successfully created authorization model"})
 
-        # Replacing the whole openfga dict to include the auth model id.
-        self.charm._state.openfga = {
-            **self.charm._state.openfga,
-            "auth_model_id": authorization_model_id,
-        }
-        self.charm._update(event)
+        # Only the model ID is persisted; the rest of the state is read from the relation.
+        self.charm._store_openfga_auth_model_id(openfga_data["store_id"], authorization_model_id)
+        self.charm._reconcile(event)
 
     @log_event_handler(logger)
     def _on_list_auth_rule_action(self, event):
@@ -294,7 +278,7 @@ class OpenFGA(framework.Object):
         Args:
             event: The event triggered when the action is performed.
         """
-        if not _check_openfga_relation(self.charm._state, event):
+        if not _check_openfga_relation(self.charm._openfga_state(), event):
             return
 
         valid_combinations = [{"user"}, {"group"}, {"namespace"}]
@@ -305,7 +289,7 @@ class OpenFGA(framework.Object):
         user = event.params.get("user")
         group = event.params.get("group")
         namespace = event.params.get("namespace")
-        openfga_data = self.charm._state.openfga
+        openfga_data = self.charm._openfga_state()
 
         if user:
             if not user.strip():
@@ -336,7 +320,7 @@ class OpenFGA(framework.Object):
         Args:
             event: The event triggered when the action is performed.
         """
-        if not _check_openfga_relation(self.charm._state, event):
+        if not _check_openfga_relation(self.charm._openfga_state(), event):
             return
 
         valid_combinations = [{"user", "group"}, {"user", "namespace", "role"}, {"group", "namespace", "role"}]
@@ -348,7 +332,7 @@ class OpenFGA(framework.Object):
         group = event.params.get("group")
         namespace = event.params.get("namespace")
         role = event.params.get("role")
-        openfga_data = self.charm._state.openfga
+        openfga_data = self.charm._openfga_state()
 
         if user and group:
             body = ClientCheckRequest(
@@ -387,10 +371,10 @@ class OpenFGA(framework.Object):
         Args:
             event: The event triggered when the action is performed.
         """
-        if not _check_openfga_relation(self.charm._state, event):
+        if not _check_openfga_relation(self.charm._openfga_state(), event):
             return
 
-        openfga_data = self.charm._state.openfga
+        openfga_data = self.charm._openfga_state()
         admin_groups = self.charm.config["auth-admin-groups"].split(",")
         results = {key: [] for key in admin_groups}
 
@@ -427,7 +411,7 @@ class OpenFGA(framework.Object):
         Args:
             event: The event triggered when the action is performed.
         """
-        if not _check_openfga_relation(self.charm._state, event):
+        if not _check_openfga_relation(self.charm._openfga_state(), event):
             return
 
         asyncio.run(self._perform_add_or_remove_auth_rule(event, AuthRuleActionType.CREATE))
@@ -439,7 +423,7 @@ class OpenFGA(framework.Object):
         Args:
             event: The event triggered when the action is performed.
         """
-        if not _check_openfga_relation(self.charm._state, event):
+        if not _check_openfga_relation(self.charm._openfga_state(), event):
             return
 
         asyncio.run(self._perform_add_or_remove_auth_rule(event, AuthRuleActionType.DELETE))
@@ -460,7 +444,7 @@ class OpenFGA(framework.Object):
         group = event.params.get("group")
         namespace = event.params.get("namespace")
         role = event.params.get("role")
-        openfga_data = self.charm._state.openfga
+        openfga_data = self.charm._openfga_state()
 
         if user:
             op_tuple = [
@@ -731,17 +715,17 @@ def _parse_model_json(model, event):
         return None
 
 
-def _check_openfga_relation(state, event):
+def _check_openfga_relation(openfga_data, event):
     """Check for presence of OpenFGA relation.
 
     Args:
-        state: Model provided through the action.
+        openfga_data: OpenFGA state, or None when the relation is not ready.
         event: The event triggered when the action is performed.
 
     Returns:
         Whether or not the OpenFGA relation exists.
     """
-    if not state.openfga:
+    if not openfga_data:
         event.fail("missing openfga relation")
         logger.info("missing openfga relation")
         return False
