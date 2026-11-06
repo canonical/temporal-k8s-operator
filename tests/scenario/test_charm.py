@@ -1566,7 +1566,7 @@ def test_external_host_info_follows_ingress(context, state):
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-@pytest.mark.parametrize("event_name", ["config_changed", "leader_elected", "upgrade_charm"])
+@pytest.mark.parametrize("event_name", ["config_changed", "leader_elected"])
 def test_external_host_info_withdraws_stale_data_without_ingress(context, state, peer_relation, event_name):
     external = ops.testing.Relation(
         "temporal-external-host-info",
@@ -1605,22 +1605,48 @@ def test_external_host_info_without_ingress_hostname(context, state):
 
 
 @pytest.mark.parametrize(
-    "url,accessor,error",
+    "ready,url,expected",
     [
-        ("https://[invalid", "_external_host", "Invalid IPv6 URL"),
-        ("https://[invalid", "_external_port", "Invalid IPv6 URL"),
-        ("https://[invalid", "_external_tls_enabled", "Invalid IPv6 URL"),
-        ("https://temporal.test:invalid", "_external_port", "Port could not be cast to integer"),
-        ("https://temporal.test:65536", "_external_port", "Port out of range"),
+        (True, "https://temporal.example.com", ("temporal.example.com", 443, True)),
+        (True, "http://temporal.example.com", ("temporal.example.com", 80, False)),
+        (True, "https://temporal.example.com:8443", ("temporal.example.com", 8443, True)),
+        (True, "http://temporal.example.com:8080", ("temporal.example.com", 8080, False)),
+        (False, "https://temporal.example.com", None),
+        (True, None, None),
+        (True, "", None),
+        (True, "https:///missing-host", None),
+        (True, "temporal.example.com", None),
+        (True, "ftp://temporal.example.com", None),
+        (True, "https://[invalid", None),
+        (True, "https://temporal.test:invalid", None),
+        (True, "https://temporal.test:65536", None),
     ],
 )
-def test_external_accessors_invalid_ingress_url(context, state, url, accessor, error):
+def test_external_endpoint(context, state, ready, url, expected):
     with (
-        unittest.mock.patch("charm.IngressPerAppRequirer.is_ready", return_value=True),
+        unittest.mock.patch("charm.IngressPerAppRequirer.is_ready", return_value=ready),
         unittest.mock.patch(
             "charm.IngressPerAppRequirer.url", new_callable=unittest.mock.PropertyMock, return_value=url
         ),
         context(context.on.update_status(), state) as manager,
     ):
-        with pytest.raises(ValueError, match=error):
-            getattr(manager.charm, accessor)()
+        assert manager.charm._external_endpoint() == expected
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_external_host_info_withdrawn_on_malformed_ingress_url(context, state):
+    external = ops.testing.Relation(
+        "temporal-external-host-info",
+        local_app_data={"host": "temporal.example.com", "port": "443", "tls": "true"},
+    )
+    state = dataclasses.replace(state, relations=[external])
+    with (
+        unittest.mock.patch("charm.IngressPerAppRequirer.is_ready", return_value=True),
+        unittest.mock.patch(
+            "charm.IngressPerAppRequirer.url",
+            new_callable=unittest.mock.PropertyMock,
+            return_value="https://temporal.test:invalid",
+        ),
+    ):
+        state_out = context.run(context.on.relation_changed(external), state)
+    assert state_out.get_relation(external.id).local_app_data == {}

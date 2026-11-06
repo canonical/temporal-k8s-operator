@@ -259,36 +259,46 @@ class TemporalK8SCharm(CharmBase):
         )
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+        self._external_host, port, self._external_tls = self._external_endpoint() or (None, 443, False)
         self._external_host_info = TemporalHostInfoProvider(
             self,
-            port=self._external_port,
-            host=self._external_host,
-            tls=self._external_tls_enabled,
+            host=lambda: self._external_host,
+            port=port,
+            tls=lambda: self._external_tls,
             relation_name="temporal-external-host-info",
         )
-        self.framework.observe(self.on.upgrade_charm, self._publish_external_host_info)
 
-    def _external_host(self) -> str | None:
-        """Return the ingress hostname only when ingress is ready."""
+    def _publish_external_host_info(self) -> None:
+        """Refresh external connection details before publishing them."""
+        self._external_host, self._external_host_info.port, self._external_tls = self._external_endpoint() or (
+            None,
+            443,
+            False,
+        )
+        self._external_host_info.publish()
+
+    def _external_endpoint(self) -> tuple[str, int, bool] | None:
+        """Return the ingress (hostname, port, tls_enabled), or None when unavailable.
+
+        The port falls back to the scheme default when the ingress URL omits it.
+        A missing or malformed URL is logged and treated as no endpoint, so a bad
+        URL from the ingress provider withdraws the details instead of erroring.
+        """
         url = self.ingress.url if self.ingress.is_ready() else None
         if not url:
-            logger.warning("Cannot publish external host info: ingress URL is not available")
+            logger.debug("No external endpoint: ingress URL is not available")
             return None
-        address = urlsplit(url)
-        return address.hostname
-
-    def _external_port(self) -> int:
-        """Return the ingress listener port."""
-        address = urlsplit(self.ingress.url)
-        return address.port or (443 if address.scheme == "https" else 80)
-
-    def _external_tls_enabled(self) -> bool:
-        """Return whether clients use TLS to reach the external endpoint."""
-        return urlsplit(self.ingress.url).scheme == "https"
-
-    def _publish_external_host_info(self, event: Optional[EventBase] = None) -> None:
-        """Refresh external connection details when ingress changes."""
-        self._external_host_info.publish()
+        try:
+            address = urlsplit(url)
+            port = address.port
+        except ValueError as err:
+            logger.warning("No external endpoint: invalid ingress URL %r: %s", url, err)
+            return None
+        if not address.hostname or address.scheme not in ("http", "https"):
+            logger.warning("No external endpoint: invalid ingress URL %r", url)
+            return None
+        tls_enabled = address.scheme == "https"
+        return address.hostname, port or (443 if tls_enabled else 80), tls_enabled
 
     def _frontend_tls_enabled(self) -> bool:
         """Return whether the frontend is serving gRPC over TLS.
@@ -901,7 +911,6 @@ class TemporalK8SCharm(CharmBase):
         # are exactly the transitions that flip the published `tls` value and the
         # advertised ingress scheme. Only advertise what the workload is running.
         self._host_info.publish()
-        self._publish_external_host_info()
         self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
 
         self.unit.status = MaintenanceStatus("replanning application")

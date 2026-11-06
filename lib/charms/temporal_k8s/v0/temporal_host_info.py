@@ -5,19 +5,19 @@
 
 This library provides the TemporalHostInfoProvider and TemporalHostInfoRequirer
 classes for charms that need to share Temporal server connection details
-(host, port and whether the endpoint serves gRPC over TLS) over a Juju relation.
+(host, port and whether the frontend serves gRPC over TLS) over a Juju relation.
 
 Providers can use multiple endpoints implementing this interface by passing
 `relation_name`, for example `temporal-host-info` for in-cluster clients and
 `temporal-external-host-info` for clients connecting through ingress. Requirers
 can keep their existing endpoint name when relating to either provider endpoint.
 
-The `tls` field tells requirers which wire protocol the published endpoint speaks.
-It is derived by the provider from that endpoint's TLS configuration, and requirers
+The `tls` field tells requirers which wire protocol the frontend speaks. It is
+derived by the provider from whether frontend TLS is configured, and requirers
 MUST honour it: dialling plaintext against a TLS frontend fails with
 "error reading server preface: EOF", and the reverse fails the TLS handshake.
 
-When `tls` is true, the requirer also needs the CA that issued the endpoint's
+When `tls` is true, the requirer also needs the CA that issued the frontend
 certificate in order to verify it. That CA is NOT carried on this relation;
 it is distributed over the `certificate_transfer` interface, so that CA
 rotation is handled by that library rather than reimplemented here.
@@ -61,7 +61,7 @@ class TemporalHostInfoProvider(Object):
     def __init__(
         self,
         charm: CharmBase,
-        port: Union[Callable[[], int], int],
+        port: int,
         tls: Union[Callable[[], bool], bool] = False,
         host: Union[Callable[[], str | None], str, None] = None,
         relation_name: str = RELATION_NAME,
@@ -71,8 +71,8 @@ class TemporalHostInfoProvider(Object):
         :param: charm: The charm that is using this interface.
         :type charm: CharmBase
         :param: port: The port number to provide to requirers. This is typically
-            the 'frontend' service port, or a callable returning it.
-        :type port: Union[Callable[[], int], int]
+            the 'frontend' service port.
+        :type port: int
         :param: tls: Whether the endpoint serves gRPC over TLS, or a callable
             returning it. Pass a callable when the value is not known at charm
             initialisation, which is the usual case since it depends on a
@@ -127,7 +127,7 @@ class TemporalHostInfoProvider(Object):
                     app_data.pop(key, None)
                 continue
             app_data["host"] = host
-            app_data["port"] = str(self.port() if callable(self.port) else self.port)
+            app_data["port"] = str(self.port)
             app_data["tls"] = str(self._get_tls()).lower()
 
     def _on_host_info_relation_changed(self, event: RelationChangedEvent | RelationJoinedEvent):
@@ -162,6 +162,8 @@ class TemporalHostInfoProvider(Object):
             binding = self.charm.model.get_binding(relation)
             if binding:
                 host = str(binding.network.bind_address)
+            if not host:
+                logger.warning("Could not resolve host: no host was supplied and no binding address is available")
         return host
 
 
