@@ -239,9 +239,7 @@ def test_update_status_down_does_not_report_the_workload_version(context, server
     assert state_final.workload_version == ""
 
 
-def test_config_changed_reports_server_down_without_replanning(
-    context, server_state, bring_up, configured_container
-):
+def test_config_changed_reports_server_down_without_replanning(context, server_state, bring_up, configured_container):
     """Config changed reports a failed health check when the plan is unchanged."""
     state_out = bring_up(server_state(True))
     plan = state_out.get_container("temporal").plan.to_dict()
