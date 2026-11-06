@@ -1,0 +1,62 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Nightly integration tests against Juju 4.x via the team's shared reusable
+# workflow. Each test command gets its own runner provisioned by concierge.
+# Scheduled failures open/update one issue labelled `juju-4`.
+
+name: Juju 4.x Tests
+
+on:
+  schedule:
+    # Run at 02:17 UTC every day
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  integration:
+    name: Integration tests [juju 4.x]
+    uses: canonical/workflows-team/.github/workflows/juju-nightly.yaml@main
+    with:
+      juju-channel: "4.1/edge"
+      # Matches the runner label used by tests.yaml.
+      runner: self-hosted-linux-amd64-resolute-large
+      timeout-minutes: 120
+      # charmcraft pinned via name/channel: the k8s preset installs it at the
+      # default channel first, then the extra snap refreshes it to 4.x/stable.
+      extra-snaps: "charmcraft/4.x/stable,astral-uv,just,kubectl"
+      # 16/stable supports Juju 4; --force bypasses the base check until
+      # postgresql-k8s declares Juju 4 support.
+      extra-env: '{"POSTGRESQL_CHANNEL": "16/stable", "POSTGRESQL_FORCE": "true"}'
+      test-commands: >-
+        ["just integration tests/integration/test_auth.py",
+        "just integration tests/integration/test_charm.py",
+        "just integration tests/integration/test_host_info.py",
+        "just integration tests/integration/test_pgbouncer.py",
+        "just integration tests/integration/test_scaling.py",
+        "just integration tests/integration/test_server_upgrade.py"]
+      # test_upgrades.py is excluded until the upgrade scenario supports
+      # postgresql-k8s 16 (TODO in tests/integration/test_upgrades.py).
+      issue-label: juju-4
+
+  # Ingress needs both k8s and lxd controllers (HAProxy is a machine charm),
+  # so it uses concierge.yaml instead of the k8s preset. provider stays k8s
+  # so kubeconfig is written and pod diagnostics are collected.
+  ingress:
+    name: Ingress integration test [juju 4.x]
+    uses: canonical/workflows-team/.github/workflows/juju-nightly.yaml@main
+    with:
+      juju-channel: "4.1/edge"
+      concierge-config: .github/workflows/concierge.yaml
+      provider: k8s
+      runner: self-hosted-linux-amd64-resolute-large
+      timeout-minutes: 120
+      # Tooling snaps are declared under host.snaps in concierge.yaml.
+      extra-snaps: ""
+      test-commands: '["just integration tests/integration/test_ingress.py"]'
+      extra-env: '{"POSTGRESQL_CHANNEL": "16/stable", "POSTGRESQL_FORCE": "true"}'
+      issue-label: juju-4

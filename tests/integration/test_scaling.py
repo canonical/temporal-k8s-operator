@@ -8,7 +8,7 @@ import pathlib
 
 import jubilant
 import pytest
-from conftest import ADMIN_BASE, POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import ADMIN_BASE, POSTGRESQL_CHANNEL, POSTGRESQL_FORCE, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -56,7 +56,7 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
 
     juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL, base=ADMIN_BASE)
     juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    juju.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True)
+    juju.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True, force=POSTGRESQL_FORCE)
     juju.deploy(PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True, config={"max_db_connections": 20})
 
     with fast_forward(juju):

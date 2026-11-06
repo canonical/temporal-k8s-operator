@@ -9,7 +9,7 @@ import time
 
 import jubilant
 import pytest
-from conftest import POSTGRESQL_CHANNEL, TEMPORAL_CHANNEL
+from conftest import POSTGRESQL_CHANNEL, POSTGRESQL_FORCE, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -44,7 +44,7 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path):
         resources={"temporal-admin-image": "temporalio/admin-tools:1.20.0"},
     )
     juju.deploy(APP_NAME_UI, channel=TEMPORAL_CHANNEL)
-    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True)
+    juju.deploy("postgresql-k8s", channel=POSTGRESQL_CHANNEL, trust=True, force=POSTGRESQL_FORCE)
 
     with fast_forward(juju):
         wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, APP_NAME_UI, timeout=600)
