@@ -88,6 +88,7 @@ CERTIFICATE_NAME = "temporal-frontend.pem"
 CERTS_DIR_PATH = "/etc/temporal"
 FRONTEND_CERTIFICATES_RELATION_NAME = "frontend-certificates"
 PRIVATE_KEY_NAME = "temporal-frontend.key"
+TEMPORAL_SERVICE_NAME = "temporal-server"
 # Hash of the stored certificate and key in the Pebble environment, so a new
 # certificate restarts the server.
 FRONTEND_CERTIFICATE_HASH_ENV = "TEMPORAL_TLS_FRONTEND_CERT_HASH"
@@ -197,12 +198,11 @@ class TemporalK8SCharm(CharmBase):
         self.framework.observe(self.on.restart_action, self._on_restart_action)
 
         # Handle postgresql relation.
-        self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME, extra_user_roles="admin")
+        self.db = DatabaseRequires(self, relation_name="db", database_name=DB_NAME)
         self.visibility = DatabaseRequires(
             self,
             relation_name="visibility",
             database_name=VISIBILITY_DB_NAME,
-            extra_user_roles="admin",
         )
         self.postgresql = Postgresql(self)
 
@@ -680,7 +680,7 @@ class TemporalK8SCharm(CharmBase):
         """Reconcile the charm towards the desired state; idempotent for every event.
 
         A reconciliation that changes the workload ends with the "replanning application" status. Once it is
-        settled, the unit is active; only update-status performs the periodic health check.
+        settled, the server health is checked on every reconciliation; periodic maintenance runs on update-status.
 
         Args:
             event: The event that triggered the reconciliation.
@@ -729,8 +729,10 @@ class TemporalK8SCharm(CharmBase):
 
             if replanned:
                 raise ExitWithStatusError("replanning application", MaintenanceStatus)
+            self._check_server_healthy(container)
             if isinstance(event, UpdateStatusEvent):
-                self._check_server_healthy(container)
+                self._run_log_rotation(container)
+                self.unit.set_workload_version(WORKLOAD_VERSION)
         except ExitWithoutStatusChange:
             if pending_status is not None:
                 self.unit.status = pending_status
@@ -829,7 +831,9 @@ class TemporalK8SCharm(CharmBase):
         return container
 
     def _check_server_healthy(self, container):
-        """Verify that the Temporal server is up, and perform the periodic maintenance (update-status only).
+        """Verify that the Temporal server is up during every reconciliation.
+
+        Periodic maintenance is performed separately on update-status.
 
         Args:
             container: application container.
@@ -841,9 +845,6 @@ class TemporalK8SCharm(CharmBase):
         if check.status != CheckStatus.UP:
             raise ExitWithStatusError("Status check: DOWN", MaintenanceStatus)
 
-        self._run_log_rotation(container)
-        self.unit.set_workload_version(WORKLOAD_VERSION)
-
     @log_event_handler(logger)
     def _on_restart_action(self, event):
         """Restart the temporal server, even if there are no changes.
@@ -852,10 +853,13 @@ class TemporalK8SCharm(CharmBase):
             event: The action event that requested the restart.
         """
         container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            event.fail("Cannot restart Temporal: wait for the workload container to connect, then retry.")
+            return
 
         logger.info("restarting temporal")
         self.unit.status = MaintenanceStatus("restarting temporal")
-        container.restart("temporal-server")
+        container.restart(TEMPORAL_SERVICE_NAME)
         self._reconcile(event)
 
     def _server_running(self, container) -> bool:
@@ -868,7 +872,7 @@ class TemporalK8SCharm(CharmBase):
             True if the service is running, False otherwise.
         """
         try:
-            return container.get_service("temporal-server").is_running()
+            return container.get_service(TEMPORAL_SERVICE_NAME).is_running()
         except (ModelError, pebble.ConnectionError):
             return False
 
@@ -1168,7 +1172,7 @@ class TemporalK8SCharm(CharmBase):
         pebble_layer = {
             "summary": "temporal server layer",
             "services": {
-                "temporal-server": {
+                TEMPORAL_SERVICE_NAME: {
                     "summary": "temporal server",
                     "command": "temporal-server --env charm start " + services_args,
                     "startup": "enabled",
