@@ -3,6 +3,8 @@
 
 """Scenario tests for the restart action."""
 
+import unittest.mock
+
 import ops.testing
 import pytest
 from ops import pebble
@@ -48,3 +50,16 @@ def test_restart_action_reports_restarting_status(context, container_with_servic
     context.run(context.on.action("restart"), state)
 
     assert ops.MaintenanceStatus("restarting temporal") in context.unit_status_history
+
+
+def test_restart_action_fails_when_container_is_unreachable(context):
+    """The action fails without attempting to restart an unreachable container."""
+    container = ops.testing.Container("temporal", can_connect=False)
+    state = ops.testing.State(containers={container}, leader=True)
+
+    with unittest.mock.patch.object(ops.model.Container, "restart") as restart:
+        with pytest.raises(ops.testing.ActionFailed) as exc_info:
+            context.run(context.on.action("restart"), state)
+
+    assert str(exc_info.value) == "Cannot restart Temporal: wait for the workload container to connect, then retry."
+    restart.assert_not_called()
