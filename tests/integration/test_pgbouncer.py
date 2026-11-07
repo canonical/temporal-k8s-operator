@@ -37,9 +37,13 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
 
     with fast_forward(juju):
         wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, PGBOUNCER_APP_NAME, timeout=600)
+        wait_active(juju, POSTGRESQL_APP_NAME, timeout=600)
 
-        # Add integrations and wait for apps to become active and idle
+        # First, integrate PgBouncer with PostgreSQL and wait for both to be active
         juju.integrate(PGBOUNCER_APP_NAME, POSTGRESQL_APP_NAME)
+        wait_active(juju, POSTGRESQL_APP_NAME, PGBOUNCER_APP_NAME, timeout=600)
+
+        # Then integrate with Temporal and wait for all to become active
         juju.integrate(f"{APP_NAME}:db", f"{PGBOUNCER_APP_NAME}:database")
         juju.integrate(f"{APP_NAME}:visibility", f"{PGBOUNCER_APP_NAME}:database")
         juju.integrate(f"{APP_NAME}:admin", f"{APP_NAME_ADMIN}:admin")

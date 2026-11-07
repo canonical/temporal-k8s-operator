@@ -172,9 +172,18 @@ async def _run_sample_workflow(url: str, count=1):
         count: Number of workflows to run.
     """
     # Juju active may precede Temporal matching/worker scheduling readiness in CI.
-    await asyncio.sleep(45)
-
-    client = await Client.connect(url)
+    # Retry Client.connect() to handle transient connection errors during startup.
+    client = None
+    async for attempt in tenacity.AsyncRetrying(
+        stop=tenacity.stop_after_attempt(10),
+        wait=tenacity.wait_incrementing(start=5, increment=5),
+        reraise=True,
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+    ):
+        with attempt:
+            logger.info("Attempting to connect to Temporal frontend at %s", url)
+            client = await Client.connect(url)
+            logger.info("Successfully connected to Temporal frontend")
 
     workflow_error_types: tuple = (WorkflowFailureError,)
     if temporal_sdk_bridge is not None:
