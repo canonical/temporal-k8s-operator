@@ -267,6 +267,10 @@ class TemporalK8SCharm(CharmBase):
             tls=lambda: self._external_tls,
             relation_name="temporal-external-host-info",
         )
+        for relation_name in ("temporal-external-host-info", "ingress"):
+            self.framework.observe(self.on[relation_name].relation_joined, self._update)
+            self.framework.observe(self.on[relation_name].relation_changed, self._update)
+            self.framework.observe(self.on[relation_name].relation_broken, self._update)
 
     def _publish_external_host_info(self) -> None:
         """Refresh external connection details before publishing them."""
@@ -536,6 +540,10 @@ class TemporalK8SCharm(CharmBase):
 
         should_update = self.postgresql.update_db_relation_data_in_state(event)
         if should_update:
+            self._update(event)
+            return
+
+        if self._relation_created("temporal-external-host-info") and not self._external_endpoint():
             self._update(event)
             return
 
@@ -912,8 +920,15 @@ class TemporalK8SCharm(CharmBase):
         # advertised ingress scheme. Only advertise what the workload is running.
         self._host_info.publish()
         self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
+        self._publish_external_host_info()
 
-        self.unit.status = MaintenanceStatus("replanning application")
+        if self._relation_created("temporal-external-host-info") and not self._external_host:
+            if not self.model.get_relation("ingress"):
+                self.unit.status = BlockedStatus("Missing ingress relation for temporal-external-host-info")
+            else:
+                self.unit.status = WaitingStatus("Waiting for ingress info for temporal-external-host-info")
+        else:
+            self.unit.status = MaintenanceStatus("replanning application")
 
     def _configure_log_rotation(self, container):
         """Create the log directory and push the logrotate configuration.

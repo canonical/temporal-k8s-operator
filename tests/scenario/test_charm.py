@@ -1405,6 +1405,95 @@ def test_missing_pebble_plan(context, state, temporal_container, temporal_contai
         assert state_out.get_container("temporal").plan.to_dict() is not None
 
 
+@pytest.mark.parametrize(
+    "ingress_data,expected_status",
+    [
+        (None, ops.BlockedStatus("Missing ingress relation for temporal-external-host-info")),
+        ({}, ops.WaitingStatus("Waiting for ingress info for temporal-external-host-info")),
+        (
+            {"ingress": json.dumps({"url": "https://temporal.example.com:invalid"})},
+            ops.WaitingStatus("Waiting for ingress info for temporal-external-host-info"),
+        ),
+    ],
+)
+def test_external_host_info_status(context, state, temporal_container, ingress_data, expected_status):
+    """Unavailable external endpoints remain visible even during update-status."""
+    external = ops.testing.Relation("temporal-external-host-info")
+    relations = [r for r in state.relations if r.endpoint != "nginx-route"]
+    relations.append(external)
+    if ingress_data is not None:
+        relations.append(ops.testing.Relation("ingress", remote_app_data=ingress_data))
+    state = dataclasses.replace(state, relations=relations)
+
+    state_out = context.run(context.on.relation_joined(external), state)
+
+    assert state_out.unit_status == expected_status
+    assert state_out.get_container("temporal").service_statuses["temporal-server"] == ops.pebble.ServiceStatus.ACTIVE
+    assert state_out.get_relation(external.id).local_app_data == {}
+
+    state_out = dataclasses.replace(state_out, containers=[temporal_container])
+    state_out = context.run(context.on.update_status(), state_out)
+    assert state_out.unit_status == expected_status
+
+
+def test_external_host_info_status_recovers(context, state, temporal_container, temporal_container_initialized):
+    """Ingress arrival, withdrawal and relation removal update the unit status."""
+    external = ops.testing.Relation("temporal-external-host-info")
+    ingress = ops.testing.Relation("ingress")
+    relations = [r for r in state.relations if r.endpoint != "nginx-route"]
+    state = dataclasses.replace(state, relations=[*relations, external])
+    state_out = context.run(context.on.relation_joined(external), state)
+    assert isinstance(state_out.unit_status, ops.BlockedStatus)
+
+    state_out = dataclasses.replace(
+        state_out, relations=[*state_out.relations, ingress], containers=[temporal_container]
+    )
+    state_out = context.run(context.on.relation_joined(ingress), state_out)
+    assert isinstance(state_out.unit_status, ops.WaitingStatus)
+    if state.leader:
+        assert state_out.get_relation(ingress.id).local_app_data["port"] == "7233"
+
+    ready_ingress = dataclasses.replace(
+        ingress, remote_app_data={"ingress": json.dumps({"url": "https://temporal.example.com"})}
+    )
+    state_out = dataclasses.replace(
+        state_out, relations=[*relations, external, ready_ingress], containers=[temporal_container]
+    )
+    state_out = context.run(context.on.relation_changed(ready_ingress), state_out)
+    assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
+    if state.leader:
+        assert state_out.get_relation(external.id).local_app_data == {
+            "host": "temporal.example.com",
+            "port": "443",
+            "tls": "true",
+        }
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    with (
+        unittest.mock.patch("charm.TemporalK8SCharm._validate_pebble_plan", return_value=True),
+        unittest.mock.patch("charm.TemporalK8SCharm._server_running", return_value=True),
+    ):
+        state_out = context.run(context.on.update_status(), state_out)
+    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+
+    state_out = dataclasses.replace(
+        state_out, relations=[*relations, external, ingress], containers=[temporal_container]
+    )
+    state_out = context.run(context.on.relation_changed(ingress), state_out)
+    assert isinstance(state_out.unit_status, ops.WaitingStatus)
+    assert state_out.get_relation(external.id).local_app_data == {}
+
+    state_out = dataclasses.replace(state_out, containers=[temporal_container])
+    state_out = context.run(context.on.relation_broken(state_out.get_relation(ingress.id)), state_out)
+    assert isinstance(state_out.unit_status, ops.BlockedStatus)
+    state_out = dataclasses.replace(
+        state_out,
+        relations=[r for r in state_out.relations if r.endpoint != "ingress"],
+        containers=[temporal_container],
+    )
+    state_out = context.run(context.on.relation_broken(state_out.get_relation(external.id)), state_out)
+    assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
+
+
 def test_rendering():
     expected_output = textwrap.dedent(
         """
