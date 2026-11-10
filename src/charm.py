@@ -290,7 +290,7 @@ class TemporalK8SCharm(CharmBase):
         """
         url = self.ingress.url if self.ingress.is_ready() else None
         if not url:
-            logger.debug("No external endpoint: ingress URL is not available")
+            logger.info("No external endpoint: ingress URL is not available")
             return None
         try:
             address = urlsplit(url)
