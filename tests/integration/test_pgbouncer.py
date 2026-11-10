@@ -8,7 +8,7 @@ import pathlib
 
 import jubilant
 import pytest
-from conftest import POSTGRESQL_CHANNEL, POSTGRESQL_FORCE, TEMPORAL_CHANNEL
+from conftest import ADMIN_BASE, POSTGRESQL_CHANNEL, POSTGRESQL_FORCE, TEMPORAL_CHANNEL
 from helpers import (
     APP_NAME,
     APP_NAME_ADMIN,
@@ -33,10 +33,11 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, charm_resources: dict):
     juju.deploy(charm, APP_NAME, resources=charm_resources, config={"num-history-shards": 1}, num_units=3)
     juju.deploy(POSTGRESQL_APP_NAME, channel=POSTGRESQL_CHANNEL, trust=True, force=POSTGRESQL_FORCE)
     juju.deploy(PGBOUNCER_APP_NAME, channel=PGBOUNCER_CHANNEL, trust=True)
-    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL)
+    juju.deploy(APP_NAME_ADMIN, channel=TEMPORAL_CHANNEL, base=ADMIN_BASE)
 
     with fast_forward(juju):
-        wait_blocked(juju, APP_NAME, APP_NAME_ADMIN, PGBOUNCER_APP_NAME, timeout=600)
+        # Admin readiness depends on its server relation; check it after integrating.
+        wait_blocked(juju, APP_NAME, PGBOUNCER_APP_NAME, timeout=600)
         wait_active(juju, POSTGRESQL_APP_NAME, timeout=600)
 
         # First, integrate PgBouncer with PostgreSQL and wait for both to be active
