@@ -185,6 +185,9 @@ async def _run_sample_workflow(url: str, count=1):
             client = await Client.connect(url)
             logger.info("Successfully connected to Temporal frontend")
 
+    if client is None:
+        raise RuntimeError("Temporal frontend connection did not produce a client")
+
     workflow_error_types: tuple = (WorkflowFailureError,)
     if temporal_sdk_bridge is not None:
         workflow_error_types = (WorkflowFailureError, temporal_sdk_bridge.RPCError)
