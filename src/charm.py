@@ -922,6 +922,9 @@ class TemporalK8SCharm(CharmBase):
         self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
         self._publish_external_host_info()
 
+        self._set_unit_status()
+
+    def _set_unit_status(self):
         if self._relation_created("temporal-external-host-info") and not self._external_host:
             if not self.model.get_relation("ingress"):
                 self.unit.status = BlockedStatus("Missing ingress relation for temporal-external-host-info")
