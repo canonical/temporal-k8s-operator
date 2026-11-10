@@ -9,12 +9,90 @@
 import dataclasses
 import json
 import unittest.mock
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import ops
 import ops.testing
 import pytest
 
 from relations.openfga import _get_ofga_client
+
+
+@pytest.fixture
+def proxy_environment(monkeypatch):
+    """Isolate proxy environment changes made by charm initialization."""
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"):
+        for key in (f"JUJU_CHARM_{name}", name, name.lower()):
+            monkeypatch.setenv(key, "")
+            monkeypatch.delenv(key)
+
+
+@pytest.fixture
+def openfga_http_server():
+    """Serve OpenFGA responses and record direct versus proxy request targets."""
+    paths = []
+
+    class Handler(BaseHTTPRequestHandler):
+        """Minimal OpenFGA endpoint and HTTP proxy stub."""
+
+        def do_POST(self):  # noqa: N802
+            """Record a request and return the response expected by the action."""
+            self.rfile.read(int(self.headers["Content-Length"]))
+            paths.append(self.path)
+            body = {"allowed": True} if self.path.endswith("/check") else {"authorization_model_id": "modelid123"}
+            data = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_port}", paths
+        finally:
+            server.shutdown()
+            thread.join()
+
+
+@pytest.mark.parametrize("bypass", [False, True])
+@pytest.mark.parametrize(
+    "action,params,endpoint",
+    [
+        ("create-authorization-model", {"model": '{"type_definitions": []}'}, "authorization-models"),
+        ("check-auth-rule", {"user": "alice", "group": "admins"}, "check"),
+    ],
+)
+def test_openfga_actions_use_juju_proxy(
+    monkeypatch,
+    proxy_environment,
+    openfga_http_server,
+    context,
+    action_state,
+    action,
+    params,
+    endpoint,
+    bypass,
+):
+    """Requests and the SDK route through Juju's proxy unless NO_PROXY matches."""
+    url, paths = openfga_http_server
+    monkeypatch.setenv("JUJU_CHARM_HTTP_PROXY", url)
+    monkeypatch.setenv("JUJU_CHARM_NO_PROXY", "127.0.0.1" if bypass else "")
+    peer = action_state.get_relations("peer")[0]
+    openfga = json.loads(peer.local_app_data["openfga"])
+    openfga["full_http_url"] = url
+    openfga["store_id"] = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+    openfga["auth_model_id"] = "01ARZ3NDEKTSV4RRFFQ69G5FAW"
+    state = _with_peer_openfga(action_state, openfga)
+
+    with unittest.mock.patch("charm.TemporalK8SCharm._update", autospec=True):
+        context.run(context.on.action(action, params=params), state)
+
+    path = f"/stores/{openfga['store_id']}/{endpoint}"
+    assert paths == [path if bypass else f"{url}{path}"]
 
 
 @pytest.fixture

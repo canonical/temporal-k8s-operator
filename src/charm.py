@@ -145,6 +145,15 @@ class TemporalK8SCharm(CharmBase):
             args: Ignore.
         """
         super().__init__(*args)
+
+        # Set proxy environment variables from Juju proxy config
+        # For use by HTTP clients for Juju actions that must respect proxy settings.
+        for name in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"):
+            value = os.environ.get(f"JUJU_CHARM_{name}")
+            if value is not None:
+                os.environ[name] = value
+                os.environ[name.lower()] = value
+
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal"
         self.container = self.unit.get_container("temporal")
