@@ -152,34 +152,16 @@ def test_openfga_http_url_is_parsed_into_peer_state(
     assert state_out.unit_status == ops.BlockedStatus("missing openfga authorization model")
 
 
-def test_create_authorization_model_posts_full_http_url(context, action_state, openfga_store_id):
+def test_create_authorization_model_posts_full_http_url(context, action_state, openfga_data, openfga_store_id):
     """create-authorization-model POSTs full_http_url, including a path prefix."""
-    peer = action_state.get_relations("peer")[0]
-    openfga = json.loads(peer.local_app_data["openfga"])
-    openfga.update(
-        {
-            "address": "127.0.0.1",
-            "port": 8080,
-            "scheme": "http",
-            "full_http_url": "https://openfga.example.com/some-prefix",
-            "auth_model_id": None,
-        }
-    )
-    relations = [rel for rel in action_state.relations if rel.endpoint != "peer"]
-    relations.append(
-        dataclasses.replace(
-            peer,
-            local_app_data={**peer.local_app_data, "openfga": json.dumps(openfga)},
-        )
-    )
-    state = dataclasses.replace(action_state, relations=relations)
+    state = _with_openfga_http_url(action_state, openfga_data, "https://openfga.example.com/some-prefix/")
 
     mock_response = unittest.mock.MagicMock()
     mock_response.ok = True
     mock_response.json.return_value = {"authorization_model_id": "modelid123"}
 
     with unittest.mock.patch("relations.openfga.requests.post", return_value=mock_response) as mock_post:
-        context.run(
+        state_out = context.run(
             context.on.action(
                 "create-authorization-model",
                 params={"model": json.dumps({"type_definitions": []})},
@@ -191,6 +173,17 @@ def test_create_authorization_model_posts_full_http_url(context, action_state, o
     assert mock_post.call_args.args[0] == (
         f"https://openfga.example.com/some-prefix/stores/{openfga_store_id}/authorization-models"
     )
+    # The model is persisted in the state, which keeps the format the previous revisions read.
+    peer = state_out.get_relations("peer")[0]
+    assert json.loads(peer.local_app_data["openfga"]) == {
+        "store_id": openfga_store_id,
+        "token": "openfga_token",
+        "address": "openfga.example.com",
+        "port": 443,
+        "scheme": "https",
+        "full_http_url": "https://openfga.example.com/some-prefix",
+        "auth_model_id": "modelid123",
+    }
 
 
 def test_get_ofga_client_uses_full_http_url():
@@ -384,3 +377,39 @@ def test_invalid_openfga_http_url_is_not_persisted_on_upgrade(
     assert "full_http_url" not in openfga_state
     assert isinstance(state_out.unit_status, ops.BlockedStatus)
     assert "missing parameters" in str(state_out.unit_status)
+
+
+def _with_unusable_openfga_relation(state):
+    """Return state whose OpenFGA relation exists but provides no store info."""
+    relations = [rel for rel in state.relations if rel.endpoint != "openfga"]
+    relations.append(ops.testing.Relation("openfga", remote_app_data={}))
+    return dataclasses.replace(state, relations=relations)
+
+
+@unittest.mock.patch("socket.gethostbyname", return_value="127.0.0.1")
+def test_actions_run_on_the_persisted_state_while_the_relation_gives_no_store_info(
+    mock_dns, context, action_state, openfga_store_id
+):
+    """No store info is not 'missing openfga relation' while a state is persisted."""
+    state = _with_unusable_openfga_relation(action_state)
+    state = _with_peer_openfga(state, _legacy_openfga_state(openfga_store_id, port=None))
+
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        context.run(context.on.action("list-auth-rule", params={"user": ""}), state)
+
+    assert "missing openfga relation" not in str(exc_info.value)
+    assert "required" in str(exc_info.value)
+
+
+@pytest.mark.openfga_uninitialized
+@unittest.mock.patch("socket.gethostbyname", return_value="127.0.0.1")
+def test_actions_fail_on_a_missing_openfga_relation_without_store_info_or_persisted_state(
+    mock_dns, context, action_state
+):
+    """Without a usable store or a persisted state, the OpenFGA relation is missing."""
+    state = _with_unusable_openfga_relation(action_state)
+
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        context.run(context.on.action("list-auth-rule", params={"user": "someone"}), state)
+
+    assert "missing openfga relation" in str(exc_info.value)
