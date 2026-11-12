@@ -46,6 +46,37 @@ juju integrate temporal-k8s:temporal-host-info  temporal-admin-k8s:temporal-host
 > **Deprecation notice: `server-name` is removed.** 
 The `temporal-host-info` relation must be used.
 
+### Admin on a different Kubernetes cluster
+
+`temporal-k8s` provides two endpoints that implement the `temporal-host-info` interface:
+
+- `temporal-host-info` publishes the Temporal frontend's Kubernetes cluster-internal DNS
+  hostname (for example `temporal-k8s.<model>.svc.cluster.local`). Use it when the admin
+  charm runs on the **same Kubernetes cluster** as the server, whether in the same model or
+  a different one.
+- `temporal-external-host-info` publishes the hostname configured for the server's
+  `ingress` relation, along with the ingress listener port and whether it serves TLS. Use it
+  when the admin charm runs on a **different Kubernetes cluster** from the server, where the
+  cluster-internal hostname cannot be resolved.
+
+The external endpoint requires the server to be exposed through ingress (see
+[Configure ingress](../how-to/configure-ingress.md)). It publishes nothing until ingress is
+ready, and withdraws its data when ingress is removed. Offer it from the server model and
+integrate it with the admin charm's `temporal-host-info` endpoint:
+
+```bash
+# In the server model
+juju offer temporal-k8s:temporal-external-host-info temporal-k8s-external
+
+# In the admin model
+juju consume <controller>:admin/<server-model>.temporal-k8s-external
+juju integrate temporal-admin-k8s:temporal-host-info temporal-k8s-external
+```
+
+When the ingress serves TLS, also integrate `temporal-admin-k8s:receive-ca-cert` with the
+provider of the CA that signed the ingress certificate; the host-info relation does not
+carry a CA.
+
 Monitor relations until they settle:
 ```bash
 juju status --relations
