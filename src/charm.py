@@ -920,7 +920,6 @@ class TemporalK8SCharm(CharmBase):
         # advertised ingress scheme. Only advertise what the workload is running.
         self._host_info.publish()
         self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
-        self._publish_external_host_info()
 
         self._set_unit_status()
 
