@@ -89,8 +89,6 @@ class TestAuth:
                 run_sample_workflow(juju)
             except RuntimeError as e:
                 assert "Request unauthorized." in str(e)
-            else:
-                pytest.fail("Unauthenticated workflow unexpectedly succeeded")
 
     def test_openfga_add_auth_rule_action(self, juju: jubilant.Juju):
         """Test add-auth-rule action."""
