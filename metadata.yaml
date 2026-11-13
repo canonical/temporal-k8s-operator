@@ -81,6 +81,8 @@ provides:
     optional: true
   temporal-host-info:
     interface: temporal-host-info
+  temporal-external-host-info:
+    interface: temporal-host-info
 
 containers:
   temporal:

@@ -16,6 +16,7 @@ import os
 import re
 import socket
 from typing import Optional
+from urllib.parse import urlsplit
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -258,6 +259,50 @@ class TemporalK8SCharm(CharmBase):
         )
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+        self._external_host, port, self._external_tls = self._external_endpoint() or (None, 443, False)
+        self._external_host_info = TemporalHostInfoProvider(
+            self,
+            host=lambda: self._external_host,
+            port=port,
+            tls=lambda: self._external_tls,
+            relation_name="temporal-external-host-info",
+        )
+        for relation_name in ("temporal-external-host-info", "ingress"):
+            self.framework.observe(self.on[relation_name].relation_joined, self._update)
+            self.framework.observe(self.on[relation_name].relation_changed, self._update)
+            self.framework.observe(self.on[relation_name].relation_broken, self._update)
+
+    def _publish_external_host_info(self) -> None:
+        """Refresh external connection details before publishing them."""
+        self._external_host, self._external_host_info.port, self._external_tls = self._external_endpoint() or (
+            None,
+            443,
+            False,
+        )
+        self._external_host_info.publish()
+
+    def _external_endpoint(self) -> tuple[str, int, bool] | None:
+        """Return the ingress (hostname, port, tls_enabled), or None when unavailable.
+
+        The port falls back to the scheme default when the ingress URL omits it.
+        A missing or malformed URL is logged and treated as no endpoint, so a bad
+        URL from the ingress provider withdraws the details instead of erroring.
+        """
+        url = self.ingress.url if self.ingress.is_ready() else None
+        if not url:
+            logger.info("No external endpoint: ingress URL is not available")
+            return None
+        try:
+            address = urlsplit(url)
+            port = address.port
+        except ValueError as err:
+            logger.warning("No external endpoint: invalid ingress URL %r: %s", url, err)
+            return None
+        if not address.hostname or address.scheme not in ("http", "https"):
+            logger.warning("No external endpoint: invalid ingress URL %r", url)
+            return None
+        tls_enabled = address.scheme == "https"
+        return address.hostname, port or (443 if tls_enabled else 80), tls_enabled
 
     def _frontend_tls_enabled(self) -> bool:
         """Return whether the frontend is serving gRPC over TLS.
@@ -337,6 +382,7 @@ class TemporalK8SCharm(CharmBase):
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("This app's ingress URL: %s", event.url)
+        self._publish_external_host_info()
         # Without frontend TLS the charm advertises h2c. Traefik serves that
         # fine; ingress-configurator/HAProxy cannot, and will not reach the
         # backend. The provider is not identifiable from this side, so this is
@@ -354,6 +400,7 @@ class TemporalK8SCharm(CharmBase):
 
     def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent):
         logger.info("This app no longer has ingress")
+        self._publish_external_host_info()
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
@@ -493,6 +540,10 @@ class TemporalK8SCharm(CharmBase):
 
         should_update = self.postgresql.update_db_relation_data_in_state(event)
         if should_update:
+            self._update(event)
+            return
+
+        if self._relation_created("temporal-external-host-info") and not self._external_endpoint():
             self._update(event)
             return
 
@@ -870,7 +921,16 @@ class TemporalK8SCharm(CharmBase):
         self._host_info.publish()
         self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
 
-        self.unit.status = MaintenanceStatus("replanning application")
+        self._set_unit_status()
+
+    def _set_unit_status(self):
+        if self._relation_created("temporal-external-host-info") and not self._external_host:
+            if not self.model.get_relation("ingress"):
+                self.unit.status = BlockedStatus("Missing ingress relation for temporal-external-host-info")
+            else:
+                self.unit.status = WaitingStatus("Waiting for ingress info for temporal-external-host-info")
+        else:
+            self.unit.status = MaintenanceStatus("replanning application")
 
     def _configure_log_rotation(self, container):
         """Create the log directory and push the logrotate configuration.

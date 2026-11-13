@@ -103,6 +103,7 @@ def topology(juju_factory: pytest_jubilant.JujuFactory, charm: Path):
     k8s_juju.integrate(f"{APP_NAME}:db", f"{POSTGRESQL_K8S}:database")
     k8s_juju.integrate(f"{APP_NAME}:visibility", f"{POSTGRESQL_K8S}:database")
     k8s_juju.integrate(f"{APP_NAME}:admin", f"{TEMPORAL_ADMIN}:admin")
+    k8s_juju.integrate(f"{APP_NAME}:temporal-external-host-info", f"{TEMPORAL_ADMIN}:temporal-host-info")
     # Frontend serves gRPC over TLS.
     k8s_juju.integrate(f"{APP_NAME}:frontend-certificates", f"{SELF_SIGNED}:certificates")
     # Workload -> ingress-configurator (backend spoken over TLS).
@@ -186,6 +187,16 @@ def _check_grpc_health(haproxy_ip: str) -> "health_pb2.HealthCheckResponse.Servi
         stub = health_pb2_grpc.HealthStub(channel)
         request = health_pb2.HealthCheckRequest(service=FRONTEND_GRPC_SERVICE)
         return stub.Check(request, timeout=30).status
+
+
+@pytest.mark.abort_on_fail
+def test_external_host_info(topology):
+    """External clients receive the ingress hostname, listener port and TLS signal."""
+    juju = topology["k8s_juju"]
+    unit = f"{TEMPORAL_ADMIN}/0"
+    data = json.loads(juju.cli("show-unit", unit, "--format", "json"))
+    relation = next(r for r in data[unit]["relation-info"] if r["endpoint"] == "temporal-host-info")
+    assert relation["application-data"] == {"host": HOSTNAME, "port": "443", "tls": "true"}
 
 
 @pytest.mark.abort_on_fail
