@@ -35,6 +35,7 @@ def pending_state(state, admin_relation):
 
 @pytest.fixture
 def all_required_relations(
+    request,
     peer_relation,
     admin_relation,
     db_relation,
@@ -43,15 +44,17 @@ def all_required_relations(
     openfga_relation,
     s3_relation,
 ):
-    return [
+    relations = [
         peer_relation,
         admin_relation,
         db_relation,
         visibility_relation,
         nginx_route_relation,
         openfga_relation,
-        s3_relation,
     ]
+    if not request.node.get_closest_marker("s3_relation_skipped"):
+        relations.append(s3_relation)
+    return relations
 
 
 @pytest.fixture(params=[True, False], ids=["leader", "not leader"])
@@ -99,8 +102,6 @@ def test_blocked_by_missing_num_history_shards(context, state, temporal_containe
     assert state_out.get_container("temporal").plan == {}
 
 
-@pytest.mark.db_relation_skipped
-@pytest.mark.visibility_relation_skipped
 def test_blocked_by_missing_database_relations(
     context, state, temporal_container, all_required_relations, db_relation, visibility_relation
 ):
@@ -114,7 +115,6 @@ def test_blocked_by_missing_database_relations(
     assert state_out.get_container("temporal").plan == {}
 
 
-@pytest.mark.db_relation_skipped
 def test_blocked_by_missing_db_relation(context, state, temporal_container, all_required_relations, db_relation):
     all_required_relations.remove(db_relation)
     state = dataclasses.replace(state, relations=all_required_relations)
@@ -125,7 +125,6 @@ def test_blocked_by_missing_db_relation(context, state, temporal_container, all_
     assert state_out.get_container("temporal").plan == {}
 
 
-@pytest.mark.visibility_relation_skipped
 def test_blocked_by_missing_visibility_relation(
     context, state, temporal_container, all_required_relations, visibility_relation
 ):
@@ -278,43 +277,14 @@ def test_update_skipped_during_teardown(
     replan.assert_not_called()
 
 
-def _container_with_server(temporal_container_initialized, status):
-    """Add a temporal-server service in the given status to the container.
-
-    Args:
-        temporal_container_initialized: The initialized container.
-        status: The service status.
-
-    Returns:
-        The container with the service.
-    """
-    layer = ops.pebble.Layer(
-        {
-            "services": {
-                "temporal-server": {
-                    "override": "replace",
-                    "command": "temporal-server",
-                    "startup": "enabled",
-                    "on-check-failure": {"temporal-server-running": "ignore"},
-                }
-            }
-        }
-    )
-    return dataclasses.replace(
-        temporal_container_initialized,
-        layers={**temporal_container_initialized.layers, "server-layer": layer},
-        service_statuses={"temporal-server": status},
-    )
-
-
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_update_status_retries_replan_when_server_not_running(
-    context, state, temporal_container, temporal_container_initialized, admin_relation
+    context, state, temporal_container, temporal_container_initialized, admin_relation, configured_container
 ):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
-    stopped = _container_with_server(temporal_container_initialized, ops.pebble.ServiceStatus.INACTIVE)
+    stopped = configured_container(state_out, ops.pebble.ServiceStatus.INACTIVE)
     state_out = dataclasses.replace(state_out, containers=[stopped])
 
     state_final = context.run(context.on.update_status(), state_out)
@@ -325,12 +295,12 @@ def test_update_status_retries_replan_when_server_not_running(
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_update_status_keeps_blocked_when_replan_retry_fails(
-    context, state, temporal_container, temporal_container_initialized, admin_relation
+    context, state, temporal_container, temporal_container_initialized, admin_relation, configured_container
 ):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
-    stopped = _container_with_server(temporal_container_initialized, ops.pebble.ServiceStatus.INACTIVE)
+    stopped = configured_container(state_out, ops.pebble.ServiceStatus.INACTIVE)
     state_out = dataclasses.replace(state_out, containers=[stopped])
 
     with unittest.mock.patch.object(ops.model.Container, "replan", side_effect=_change_error()):
@@ -341,12 +311,12 @@ def test_update_status_keeps_blocked_when_replan_retry_fails(
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_update_status_does_not_replan_when_server_running(
-    context, state, temporal_container, temporal_container_initialized, admin_relation
+    context, state, temporal_container, temporal_container_initialized, admin_relation, configured_container
 ):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
-    running = _container_with_server(temporal_container_initialized, ops.pebble.ServiceStatus.ACTIVE)
+    running = configured_container(state_out, ops.pebble.ServiceStatus.ACTIVE)
     state_out = dataclasses.replace(state_out, containers=[running])
 
     with unittest.mock.patch.object(ops.model.Container, "replan") as replan:
@@ -408,6 +378,7 @@ def test_frontend_certificates_relation_blocked_on_not_frontend(
     admin_relation,
     frontend_certificates_relation,
     all_required_relations,
+    caplog,
 ):
     # Add frontend-certificates relation
     all_required_relations.append(frontend_certificates_relation)
@@ -428,11 +399,12 @@ def test_frontend_certificates_relation_blocked_on_not_frontend(
         state_out, containers=[temporal_container_initialized], relations=all_required_relations
     )
 
-    with context(context.on.relation_joined(frontend_certificates_relation), state=new_state) as manager:
-        manager.charm._handle_frontend_tls()
-        assert manager.charm.unit.status == ops.BlockedStatus(
-            f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration."
-        )
+    with caplog.at_level(logging.WARNING):
+        state_final = context.run(context.on.relation_joined(frontend_certificates_relation), state=new_state)
+
+    # The workload is still configured, without TLS: it is only reported in the logs.
+    assert f"Not a frontend service, please remove {FRONTEND_CERTIFICATES_RELATION_NAME} integration." in caplog.text
+    assert state_final.unit_status == ops.MaintenanceStatus("replanning application")
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -478,7 +450,7 @@ def test_frontend_certificates_relation(
         )
         certificate_available_event = MagicMock(spec=CertificateAvailableEvent)
 
-        manager.charm._update(certificate_available_event)
+        manager.charm._reconcile(certificate_available_event)
 
         assert FRONTEND_TLS_CONFIGURATION.items() <= manager.charm._extra_context.items()
         environment = manager.charm.container.get_plan().services["temporal-server"].environment
@@ -705,7 +677,7 @@ def test_s3_archival_relation(
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
 
-    with unittest.mock.patch("relations.s3_archival._create_bucket_if_not_exists"):
+    with unittest.mock.patch("charm.create_bucket_if_not_exists"):
         state_final = context.run(context.on.relation_changed(s3_relation), state_out)
         assert state_final.unit_status == ops.MaintenanceStatus("replanning application")
 
@@ -910,7 +882,7 @@ def test_invalid_config_value(
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
-    with unittest.mock.patch("relations.s3_archival._create_bucket_if_not_exists"):
+    with unittest.mock.patch("charm.create_bucket_if_not_exists"):
         state_out = context.run(context.on.relation_changed(s3_relation), state_out)
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
@@ -935,7 +907,7 @@ def test_database_connections(
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
 
     with context(context.on.relation_changed(s3_relation), state_out) as manager:
-        with unittest.mock.patch("relations.s3_archival._create_bucket_if_not_exists"):
+        with unittest.mock.patch("charm.create_bucket_if_not_exists"):
             state_out = manager.run()
 
             database_connections = {
@@ -1160,7 +1132,7 @@ def test_ingress_with_nginx(
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
-    with unittest.mock.patch("relations.s3_archival._create_bucket_if_not_exists"):
+    with unittest.mock.patch("charm.create_bucket_if_not_exists"):
         state_out = context.run(context.on.relation_changed(s3_relation), state_out)
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
@@ -1263,7 +1235,13 @@ def test_blocked_by_authorization_model(
 @pytest.mark.s3_relation_skipped
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_authorization_ready(
-    context, state, temporal_container, temporal_container_initialized, admin_relation, openfga_store_id, openfga_secret
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    openfga_store_id,
+    configured_container,
 ):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
@@ -1313,8 +1291,8 @@ def test_authorization_ready(
                     "OFGA_AUTH_MODEL_ID": "123",
                     "OFGA_API_HOST": "127.0.0.1",
                     "OFGA_API_SCHEME": "http",
-                    "OFGA_SECRETS_BEARER_TOKEN": openfga_secret.id,
-                    "OFGA_API_PORT": "8080",
+                    "OFGA_SECRETS_BEARER_TOKEN": "openfga_token",
+                    "OFGA_API_PORT": 8080,
                 },
                 "on-check-failure": {"temporal-server-running": "ignore"},
                 "user": "ubuntu",
@@ -1334,18 +1312,17 @@ def test_authorization_ready(
     assert state_out.get_container("temporal").plan.to_dict() == expected_plan
     assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
 
-    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
-    with (
-        unittest.mock.patch("charm.TemporalK8SCharm._validate_pebble_plan", return_value=True),
-        unittest.mock.patch("charm.TemporalK8SCharm._server_running", return_value=True),
-    ):
-        state_out = context.run(context.on.update_status(), state_out)
+    running = configured_container(state_out, ops.pebble.ServiceStatus.ACTIVE)
+    state_out = dataclasses.replace(state_out, containers=[running])
+    state_out = context.run(context.on.update_status(), state_out)
 
-        assert state_out.unit_status == ops.ActiveStatus("auth enabled")
+    assert state_out.unit_status == ops.ActiveStatus("auth enabled")
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
-def test_update_status_down(context, state, temporal_container, temporal_container_initialized, admin_relation):
+def test_update_status_down(
+    context, state, temporal_container, temporal_container_initialized, admin_relation, configured_container
+):
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
@@ -1355,19 +1332,16 @@ def test_update_status_down(context, state, temporal_container, temporal_contain
     )
     state_out = context.run(context.on.update_status(), state_out)
 
-    temporal_container_unsuccessful_check = dataclasses.replace(
-        temporal_container_initialized,
-        check_infos=[ops.testing.CheckInfo("temporal-server-running", status=ops.pebble.CheckStatus.DOWN)],
+    unsuccessful_check = configured_container(
+        state_out,
+        ops.pebble.ServiceStatus.ACTIVE,
+        check_status=ops.pebble.CheckStatus.DOWN,
     )
-    state_out = dataclasses.replace(state_out, containers=[temporal_container_unsuccessful_check])
+    state_out = dataclasses.replace(state_out, containers=[unsuccessful_check])
 
-    with (
-        unittest.mock.patch("charm.TemporalK8SCharm._validate_pebble_plan", return_value=True),
-        unittest.mock.patch("charm.TemporalK8SCharm._server_running", return_value=True),
-    ):
-        state_out = context.run(context.on.update_status(), state_out)
+    state_out = context.run(context.on.update_status(), state_out)
 
-        assert state_out.unit_status == ops.MaintenanceStatus("Status check: DOWN")
+    assert state_out.unit_status == ops.MaintenanceStatus("Status check: DOWN")
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -1394,11 +1368,10 @@ def test_missing_pebble_plan(context, state, temporal_container, temporal_contai
 
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
 
-    with unittest.mock.patch("charm.TemporalK8SCharm._validate_pebble_plan", return_value=False):
-        state_out = context.run(context.on.update_status(), state_out)
+    state_out = context.run(context.on.update_status(), state_out)
 
-        assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
-        assert state_out.get_container("temporal").plan.to_dict() is not None
+    assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
+    assert "temporal-server" in state_out.get_container("temporal").plan.services
 
 
 def test_rendering():
@@ -1454,42 +1427,38 @@ def test_db_tls_follows_relation_data(
     expected_tls,
 ):
     """SQL TLS is taken only from the PostgreSQL relation databag."""
-    # Start from the opposite peer value so update-status must rewrite state.
-    peer = state.get_relations("peer")[0]
-    connections = json.loads(peer.local_app_data["database_connections"])
-    connections["db"]["tls"] = not expected_tls
-    connections["visibility"]["tls"] = not expected_tls
-    peer = dataclasses.replace(
-        peer,
-        local_app_data={
-            **peer.local_app_data,
-            "database_connections": json.dumps(connections),
-        },
-    )
-
-    db_relation = dataclasses.replace(
-        db_relation,
-        remote_app_data={**postgres_db_data, "tls": tls_flag},
-    )
+    # Start from the opposite relation value so update-status must pick up the change.
+    opposite = str(not expected_tls)
+    db_relation = dataclasses.replace(db_relation, remote_app_data={**postgres_db_data, "tls": opposite})
     visibility_relation = dataclasses.replace(
-        visibility_relation,
-        remote_app_data={**postgres_visibility_data, "tls": tls_flag},
+        visibility_relation, remote_app_data={**postgres_visibility_data, "tls": opposite}
     )
-    other = [r for r in state.relations if r.endpoint not in ("peer", "db", "visibility")]
-    state = dataclasses.replace(
-        state,
-        relations=[peer, db_relation, visibility_relation, *other],
-    )
+    other = [r for r in state.relations if r.endpoint not in ("db", "visibility")]
+    state = dataclasses.replace(state, relations=[db_relation, visibility_relation, *other])
 
     state_out = context.run(context.on.pebble_ready(temporal_container), state)
     state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
     state_out = context.run(context.on.relation_changed(admin_relation), state_out)
-    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    environment = state_out.get_container("temporal").plan.services["temporal-server"].environment
+    assert environment["SQL_TLS_ENABLED"] is (not expected_tls)
+
+    db_relation = dataclasses.replace(
+        state_out.get_relation(db_relation.id), remote_app_data={**postgres_db_data, "tls": tls_flag}
+    )
+    visibility_relation = dataclasses.replace(
+        state_out.get_relation(visibility_relation.id), remote_app_data={**postgres_visibility_data, "tls": tls_flag}
+    )
+    other = [r for r in state_out.relations if r.endpoint not in ("db", "visibility")]
+    state_out = dataclasses.replace(
+        state_out,
+        relations=[db_relation, visibility_relation, *other],
+        containers=[temporal_container_initialized],
+    )
     state_out = context.run(context.on.update_status(), state_out)
 
-    peer_out = json.loads(state_out.get_relations("peer")[0].local_app_data["database_connections"])
-    assert peer_out["db"]["tls"] is expected_tls
-    assert peer_out["visibility"]["tls"] is expected_tls
+    admin_out = json.loads(state_out.get_relation(admin_relation.id).local_app_data["database_connections"])
+    assert admin_out["db"]["tls"] is expected_tls
+    assert admin_out["visibility"]["tls"] is expected_tls
     assert (
         state_out.get_container("temporal").plan.services["temporal-server"].environment["SQL_TLS_ENABLED"]
         is expected_tls
