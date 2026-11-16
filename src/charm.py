@@ -17,6 +17,7 @@ import os
 import re
 import socket
 from typing import Optional
+from urllib.parse import urlsplit
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.data_platform_libs.v0.s3 import (
@@ -282,6 +283,14 @@ class TemporalK8SCharm(CharmBase):
             relation_name="ingress",
             scheme=self._ingress_scheme,
         )
+        self._external_host, port, self._external_tls = self._external_endpoint() or (None, 443, False)
+        self._external_host_info = TemporalHostInfoProvider(
+            self,
+            host=lambda: self._external_host,
+            port=port,
+            tls=lambda: self._external_tls,
+            relation_name="temporal-external-host-info",
+        )
 
         # Every event the charm reacts to converges on the single reconciler.
         for event in [
@@ -308,10 +317,72 @@ class TemporalK8SCharm(CharmBase):
             self.certificates.on.certificate_available,
             self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_joined,
             self.on[FRONTEND_CERTIFICATES_RELATION_NAME].relation_broken,
+            self.on["temporal-external-host-info"].relation_joined,
+            self.on["temporal-external-host-info"].relation_changed,
+            self.on["temporal-external-host-info"].relation_broken,
+            self.on["ingress"].relation_joined,
+            self.on["ingress"].relation_changed,
+            self.on["ingress"].relation_broken,
             self.ingress.on.ready,
             self.ingress.on.revoked,
         ]:
             self.framework.observe(event, self._reconcile)
+
+    def _publish_external_host_info(self) -> None:
+        """Refresh external connection details before publishing them."""
+        self._external_host, self._external_host_info.port, self._external_tls = self._external_endpoint() or (
+            None,
+            443,
+            False,
+        )
+        self._external_host_info.publish()
+
+    def _external_endpoint(self) -> tuple[str, int, bool] | None:
+        """Return the ingress (hostname, port, tls_enabled), or None when unavailable.
+
+        The port falls back to the scheme default when the ingress URL omits it.
+        A missing or malformed URL is logged and treated as no endpoint, so a bad
+        URL from the ingress provider withdraws the details instead of erroring.
+        """
+        url = self.ingress.url if self.ingress.is_ready() else None
+        if not url:
+            logger.info("No external endpoint: ingress URL is not available")
+            return None
+        try:
+            address = urlsplit(url)
+            port = address.port
+        except ValueError as err:
+            logger.warning("No external endpoint: invalid ingress URL %r: %s", url, err)
+            return None
+        if not address.hostname or address.scheme not in ("http", "https"):
+            logger.warning("No external endpoint: invalid ingress URL %r", url)
+            return None
+        tls_enabled = address.scheme == "https"
+        return address.hostname, port or (443 if tls_enabled else 80), tls_enabled
+
+    def _external_host_info_status(self):
+        """Return the unit status required by external host-info consumers, if any."""
+        if not self.model.get_relation("temporal-external-host-info"):
+            return None
+        if not self.model.get_relation("ingress"):
+            return BlockedStatus("Missing ingress relation for temporal-external-host-info")
+        if not self._external_endpoint():
+            return WaitingStatus("Waiting for ingress info for temporal-external-host-info")
+        return None
+
+    def _set_external_host_info_status(self) -> None:
+        """Apply external endpoint readiness without masking workload failures."""
+        status = self._external_host_info_status()
+        if status is not None:
+            self.unit.status = status
+
+    def _pending_reconciliation_status(self, event):
+        """Return the pending status, prioritizing missing external endpoint details."""
+        pending_status = self._pending_status(event)
+        external_status = self._external_host_info_status()
+        if external_status is not None:
+            return external_status
+        return pending_status
 
     def _frontend_tls_enabled(self) -> bool:
         """Return whether the frontend is serving gRPC over TLS.
@@ -612,7 +683,8 @@ class TemporalK8SCharm(CharmBase):
             return True
         if isinstance(event, (IngressPerAppReadyEvent, IngressPerAppRevokedEvent)):
             self._log_ingress_event(event)
-            return True
+            self._publish_external_host_info()
+            return False
         if self._relation_name(event) == "ui":
             self._provide_server_status()
             return True
@@ -669,6 +741,10 @@ class TemporalK8SCharm(CharmBase):
             return WaitingStatus("configuring temporal")
         if relation_name == "admin":
             return WaitingStatus("handling schema ready change")
+        if relation_name in ("ingress", "temporal-external-host-info") or isinstance(
+            event, (IngressPerAppReadyEvent, IngressPerAppRevokedEvent)
+        ):
+            return WaitingStatus("updating external endpoint")
         if not self.unit.is_leader() and self._is_source_event(event):
             return WaitingStatus("configuring temporal")
         if relation_name in ("db", "visibility") and not isinstance(event, RelationBrokenEvent):
@@ -688,7 +764,7 @@ class TemporalK8SCharm(CharmBase):
         if self._handle_passive_event(event) or self._ignore_event(event):
             return
 
-        pending_status = self._pending_status(event)
+        pending_status = self._pending_reconciliation_status(event)
         try:
             if isinstance(event, ConfigChangedEvent):
                 self._check_frontend_dns()
@@ -728,8 +804,10 @@ class TemporalK8SCharm(CharmBase):
                 self.ingress.provide_ingress_requirements(port=SERVICE_PORTS["frontend"]["grpc"])
 
             if replanned:
+                self._publish_external_host_info()
                 raise ExitWithStatusError("replanning application", MaintenanceStatus)
             self._check_server_healthy(container)
+            self._publish_external_host_info()
             if isinstance(event, UpdateStatusEvent):
                 self._run_log_rotation(container)
                 self.unit.set_workload_version(WORKLOAD_VERSION)
@@ -739,10 +817,13 @@ class TemporalK8SCharm(CharmBase):
             return
         except ExitWithStatusError as e:
             self.unit.status = e.status
+            if e.msg == "replanning application":
+                self._set_external_host_info_status()
             return
 
         self.set_active_unit_status()
         self._provide_server_status()
+        self._set_external_host_info_status()
 
     def _check_ready(self, event):
         """Verify that the configuration and the relations are valid and ready.

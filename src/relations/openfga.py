@@ -154,8 +154,8 @@ class OpenFGA(framework.Object):
         Returns:
             The OpenFGA state dict, or None if there is neither a usable store nor persisted state.
         """
-        stored = self._stored_state()
-        return self._relation_state(stored) or stored
+        peer_state = self._peer_state()
+        return self._relation_state(peer_state) or peer_state
 
     def relation_state(self):
         """Return state from the live relation, retaining its persisted authorization model ID.
@@ -163,7 +163,7 @@ class OpenFGA(framework.Object):
         Returns:
             The OpenFGA state dict, or None if the relation does not provide a usable store.
         """
-        return self._relation_state(self._stored_state())
+        return self._relation_state(self._peer_state())
 
     def store_auth_model_id(self, store_id, auth_model_id):
         """Persist the authorization model ID created for an OpenFGA store.
@@ -172,8 +172,8 @@ class OpenFGA(framework.Object):
             store_id: ID of the OpenFGA store the model belongs to.
             auth_model_id: ID of the authorization model.
         """
-        stored = self._stored_state() or {}
-        self.charm._peer_set("openfga", {**stored, "store_id": store_id, "auth_model_id": auth_model_id})
+        peer_state = self._peer_state() or {}
+        self.charm._peer_set("openfga", {**peer_state, "store_id": store_id, "auth_model_id": auth_model_id})
 
     def reconcile_peer_state(self, event):
         """Keep OpenFGA peer state up to date with the relation; leader only.
@@ -186,24 +186,24 @@ class OpenFGA(framework.Object):
             charm._peer_delete("openfga")
             return
 
-        stored = self._stored_state()
+        peer_state = self._peer_state()
         if isinstance(event, OpenFGAStoreCreateEvent):
-            stored = None
+            peer_state = None
 
-        state = self._relation_state(stored)
+        state = self._relation_state(peer_state)
         if state is not None and state != charm._peer_get("openfga"):
             charm._peer_set("openfga", state)
 
-    def _stored_state(self):
+    def _peer_state(self):
         """Return the OpenFGA state persisted in the peer relation."""
-        stored = self.charm._peer_get("openfga")
-        return stored if isinstance(stored, dict) and stored else None
+        peer_state = self.charm._peer_get("openfga")
+        return peer_state if isinstance(peer_state, dict) and peer_state else None
 
-    def _relation_state(self, stored):
+    def _relation_state(self, peer_state):
         """Return usable OpenFGA connection info from the relation.
 
         Args:
-            stored: The OpenFGA state persisted in the peer relation, if any.
+            peer_state: The OpenFGA state persisted in the peer relation, if any.
 
         Returns:
             The state dict, or None if the relation does not provide a usable store.
@@ -217,8 +217,8 @@ class OpenFGA(framework.Object):
             return None
 
         auth_model_id = None
-        if stored and stored.get("store_id") == info.store_id:
-            auth_model_id = stored.get("auth_model_id")
+        if peer_state and peer_state.get("store_id") == info.store_id:
+            auth_model_id = peer_state.get("auth_model_id")
 
         try:
             return self._openfga_state_from_store_info(info, auth_model_id)

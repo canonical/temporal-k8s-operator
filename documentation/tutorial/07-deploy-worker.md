@@ -112,6 +112,11 @@ The worker discovers the Temporal frontend's host and port through the **`tempor
 
 Once the relation is in place, the worker re-reads the frontend address whenever the server publishes a change, with no manual reconfiguration required. If the relation is absent, the worker falls back to the deprecated `host` config. See the deprecation notice at the end of this section.
 
+`temporal-k8s` provides two endpoints that implement the `temporal-host-info` interface. Choose one based on where the worker runs:
+
+- **`temporal-host-info`** publishes the Temporal frontend's Kubernetes cluster-internal DNS hostname (for example `temporal-k8s.<model>.svc.cluster.local`). Use it when the worker runs on the **same Kubernetes cluster** as the server, whether in the same model or a different one.
+- **`temporal-external-host-info`** publishes the hostname configured for the server's `ingress` relation, along with the ingress listener port and whether it serves TLS. Use it when the worker runs on a **different Kubernetes cluster** from the server, where the cluster-internal hostname cannot be resolved. See [Different Kubernetes cluster](#different-kubernetes-cluster).
+
 ### Same-model integration
 
 If the worker and the server are in the same Juju model, integrate them directly:
@@ -130,7 +135,7 @@ juju status
 
 ### Cross-model integration
 
-If the worker lives in a separate model from the server, use a [cross-model relation](https://juju.is/docs/juju/manage-cross-model-integrations). This involves three commands: `juju offer` on the server side, `juju consume` on the worker side, then `juju integrate`.
+If the worker lives in a separate model from the server **on the same Kubernetes cluster**, use a [cross-model relation](https://juju.is/docs/juju/manage-cross-model-integrations) with the temporal-host-info endpoint. This involves three commands: `juju offer` on the server side, `juju consume` on the worker side, then `juju integrate`.
 
 1. In the **server model** (the model where `temporal-k8s` is deployed), expose `temporal-host-info` as an offer:
 
@@ -153,6 +158,42 @@ juju integrate temporal-worker-k8s:temporal-host-info temporal-host-info-offer
 ```
 
 3. Wait for the worker to reach `active`:
+
+```bash
+juju wait-for application temporal-worker-k8s --query='status=="active"' --timeout=10m
+
+juju status
+```
+
+### Different Kubernetes cluster
+
+If the worker runs on a different Kubernetes cluster from the server, use the `temporal-external-host-info` endpoint. It requires the server to be exposed through ingress (see [Configure ingress](../how-to/configure-ingress.md)), publishes nothing until ingress is ready, and withdraws its data when ingress is removed.
+
+1. In the **server model**, offer the external endpoint:
+
+```bash
+juju switch <server-model>
+
+juju offer temporal-k8s:temporal-external-host-info temporal-k8s-external
+```
+
+2. In the **worker model**, consume the offer and integrate it with the worker's `temporal-host-info` endpoint:
+
+```bash
+juju switch temporal-workers-model
+
+juju consume <controller>:admin/<server-model>.temporal-k8s-external
+
+juju integrate temporal-worker-k8s:temporal-host-info temporal-k8s-external
+```
+
+3. When the ingress serves TLS, set `tls-root-cas` to the CA that signed the ingress certificate; the host-info relation does not carry a CA:
+
+```bash
+juju config temporal-worker-k8s tls-root-cas="$(cat <ingress-ca>.pem)"
+```
+
+4. Wait for the worker to reach `active`:
 
 ```bash
 juju wait-for application temporal-worker-k8s --query='status=="active"' --timeout=10m

@@ -116,6 +116,29 @@ class CallableHostProviderCharm(ProviderCharm):
     HOST = staticmethod(lambda: SERVICE_FQDN)
 
 
+class DynamicHostProviderCharm(ops.CharmBase):
+    """Provider charm that updates its host, port and TLS before publishing.
+
+    Attributes:
+        host: The hostname, or None when unavailable.
+        tls: Whether the endpoint serves TLS.
+    """
+
+    host: str | None = None
+    tls = False
+
+    def __init__(self, framework: ops.Framework):
+        """Initialize the provider charm with host and TLS callables.
+
+        Args:
+            framework: The charm framework.
+        """
+        super().__init__(framework)
+        self.host_info = TemporalHostInfoProvider(
+            self, port=PROVIDER_PORT, host=lambda: self.host, tls=lambda: self.tls
+        )
+
+
 # Minimal requirer charm
 class RequirerCharm(ops.CharmBase):
     """Minimal charm for testing TemporalHostInfoRequirer.
@@ -230,6 +253,28 @@ def requirer_relation_no_data():
 # Provider tests
 class TestTemporalHostInfoProvider:
     """Unit tests for TemporalHostInfoProvider."""
+
+    @pytest.mark.parametrize(
+        "host,port,tls,expected",
+        [
+            (EXTERNAL_HOSTNAME, 443, True, {"host": EXTERNAL_HOSTNAME, "port": "443", "tls": "true"}),
+            (EXTERNAL_HOSTNAME, 8080, False, {"host": EXTERNAL_HOSTNAME, "port": "8080", "tls": "false"}),
+            (None, 443, False, {}),
+        ],
+    )
+    def test_provider_publishes_updated_connection_details(
+        self, provider_state_with_ext_hostname, provider_relation, provider_network, host, port, tls, expected
+    ):
+        """Updated host, port and TLS are published; a missing host withdraws stale details."""
+        context = ops.testing.Context(DynamicHostProviderCharm, meta=ProviderCharm.META, config=ProviderCharm.CONFIG)
+        stale = dataclasses.replace(provider_relation, local_app_data={"host": "stale", "port": "1", "tls": "false"})
+        state = dataclasses.replace(provider_state_with_ext_hostname, relations=[stale], networks={provider_network})
+        with context(context.on.relation_joined(stale), state) as manager:
+            manager.charm.host = host
+            manager.charm.host_info.port = port
+            manager.charm.tls = tls
+            state_out = manager.run()
+        assert state_out.get_relation(stale.id).local_app_data == expected
 
     @pytest.mark.parametrize("charm_type", [HostProviderCharm, CallableHostProviderCharm])
     def test_provider_writes_supplied_host_on_relation_joined(
@@ -497,12 +542,12 @@ class TestTemporalHostInfoRequirer:
         assert event.host == EXTERNAL_HOSTNAME
         assert event.port == PROVIDER_PORT
 
-    def test_requirer_noop_when_data_missing(
+    def test_requirer_emits_unavailable_when_data_missing(
         self,
         requirer_context,
         requirer_relation_no_data,
     ):
-        """Requirer does not emit changed event when host/port not yet in relation data."""
+        """Missing or withdrawn connection details emit unavailable, not changed."""
         state = ops.testing.State(
             leader=True,
             relations=[requirer_relation_no_data],
@@ -513,6 +558,7 @@ class TestTemporalHostInfoRequirer:
             manager.run()
 
         assert len(charm.received_host_info_changed) == 0
+        assert len(charm.received_host_info_unavailable) == 1
 
     def test_requirer_emits_broken_event_on_relation_broken(
         self,
