@@ -42,7 +42,12 @@ class TestAuth:
         juju.deploy("openfga-k8s", channel="2.0/stable")
 
         with fast_forward(juju):
-            wait_blocked(juju, APP_NAME, "openfga-k8s", timeout=1200)
+            juju.wait(
+                lambda status: jubilant.all_blocked(status, APP_NAME)
+                and jubilant.all_agents_idle(status, APP_NAME, "openfga-k8s"),
+                error=jubilant.any_error,
+                timeout=1200,
+            )
 
             logger.info("adding openfga postgresql relation")
             juju.integrate("openfga-k8s:database", "postgresql-k8s:database")

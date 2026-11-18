@@ -1,153 +1,104 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Define the Temporal server postgresql relation."""
+"""Manage the PostgreSQL relations used by Temporal."""
 
-import logging
+from ops.charm import RelationBrokenEvent
 
-from ops import framework
-from ops.model import WaitingStatus
-
-from literals import DB_NAME, DEFAULT_DB_DICT, VISIBILITY_DB_NAME
-from log import log_event_handler
-
-logger = logging.getLogger(__name__)
+from literals import DB_NAME, VISIBILITY_DB_NAME
 
 
-class Postgresql(framework.Object):
-    """Client for temporal:postgresql relations."""
+class Postgresql:
+    """Read PostgreSQL connection data and preserve it for rolling upgrades."""
 
     def __init__(self, charm):
-        """Construct.
+        """Construct the helper.
 
         Args:
-            charm: The charm to attach the hooks to.
+            charm: The charm that owns the database requirers and peer relation.
         """
-        super().__init__(charm, "db")
         self.charm = charm
 
-        # Handle db:pgsql and visibility:pgsql relations. The "db" and
-        # "visibility" strings in this code block reflect the relation names.
-        charm.framework.observe(charm.db.on.database_created, self._on_database_changed)
-        charm.framework.observe(charm.db.on.endpoints_changed, self._on_database_changed)
-        charm.framework.observe(charm.on.db_relation_broken, self._on_database_relation_broken)
+    def database_connections(self):
+        """Return connection info for the related databases.
 
-        charm.framework.observe(charm.visibility.on.database_created, self._on_database_changed)
-        charm.framework.observe(charm.visibility.on.endpoints_changed, self._on_database_changed)
-        charm.framework.observe(charm.on.visibility_relation_broken, self._on_database_relation_broken)
-
-    @log_event_handler(logger)
-    def _on_database_changed(self, event) -> None:
-        """Handle database creation/change events.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not self.charm._state.is_ready():
-            event.defer()
-            return
-
-        self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
-        if self.charm._state.database_connections is None:
-            self.charm._state.database_connections = DEFAULT_DB_DICT
-
-        self.update_db_relation_data_in_state(event)
-        self.charm._update(event)
-
-    @log_event_handler(logger)
-    def _on_database_relation_broken(self, event) -> None:
-        """Handle broken relations with the database.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not self.charm._state.is_ready():
-            event.defer()
-            return
-
-        self._update_db_connections(event.relation.name, None)
-        self.charm._update(event)
-
-    # flake8: noqa: C901
-    def update_db_relation_data_in_state(self, event) -> bool:
-        """Update database data from relation into peer relation databag.
-
-        Args:
-            event: The event triggering the DB update.
+        Raises:
+            ValueError: If either database is not connected yet.
 
         Returns:
-            True if the charm should update its pebble layer, False otherwise.
+            The database connection info for persistence and visibility.
         """
-        if not self.charm.unit.is_leader():
-            return False
+        connections = {
+            "db": self.database_connection("db"),
+            "visibility": self.database_connection("visibility"),
+        }
 
-        if not self.charm._state.is_ready():
-            logger.info("charm peer state not ready, deferring db update event")
-            event.defer()
-            return False
+        if all(connection is None for connection in connections.values()):
+            raise ValueError("database relation not ready")
 
-        should_update = False
-        for rel_name in ["db", "visibility"]:
-            if self.charm.model.get_relation(rel_name) is None:
-                continue
+        for relation_name, connection in connections.items():
+            if connection is None:
+                raise ValueError(f"{relation_name}:pgsql relation: no database connection available")
+        return connections
 
-            if rel_name == "db":
-                relation_id = self.charm.db.relations[0].id
-                relation_data = self.charm.db.fetch_relation_data()[relation_id]
-            elif rel_name == "visibility":
-                relation_id = self.charm.visibility.relations[0].id
-                relation_data = self.charm.visibility.fetch_relation_data()[relation_id]
-            else:
-                return False
-
-            endpoints = relation_data.get("endpoints", "").split(",")
-            if len(endpoints) < 1:
-                continue
-
-            primary_endpoint = endpoints[0].split(":")
-            if len(primary_endpoint) < 2:
-                continue
-
-            db_conn = {
-                "dbname": DB_NAME if rel_name == "db" else VISIBILITY_DB_NAME,
-                "host": primary_endpoint[0],
-                "port": primary_endpoint[1],
-                "password": relation_data.get("password"),
-                "user": relation_data.get("username"),
-                "tls": relation_data.get("tls") == "True",
-            }
-
-            if None in (db_conn["user"], db_conn["password"]):
-                continue
-
-            fields_to_check = ["host", "user", "password", "tls"]
-            database_connections = self.charm._state.database_connections or {}
-            if any(
-                (database_connections.get(rel_name) or {}).get(field, "") != db_conn[field] for field in fields_to_check
-            ):
-                should_update = True
-
-            self._update_db_connections(rel_name, db_conn)
-            self.charm.admin._provide_db_info()
-
-        return should_update
-
-    def _update_db_connections(self, rel_name, db_conn):
-        """Assign nested value in peer relation.
+    def database_connection(self, relation_name):
+        """Return connection info read from a database relation.
 
         Args:
-            rel_name: Name of the relation to update.
-            db_conn: Database connection dict.
-        """
-        if self.charm._state.database_connections is None:
-            self.charm._state.database_connections = DEFAULT_DB_DICT
+            relation_name: Name of the database relation, `db` or `visibility`.
 
-        database_connections = self.charm._state.database_connections
-        database_connections[rel_name] = db_conn
-        self.charm._state.database_connections = database_connections
+        Returns:
+            The connection info dict, or None if the relation has no usable connection yet.
+        """
+        charm = self.charm
+        if charm.model.get_relation(relation_name) is None:
+            return None
+
+        requirer = charm.db if relation_name == "db" else charm.visibility
+        relation_id = requirer.relations[0].id
+        relation_data = requirer.fetch_relation_data()[relation_id]
+
+        endpoints = relation_data.get("endpoints", "").split(",")
+        primary_endpoint = endpoints[0].split(":")
+        if len(primary_endpoint) < 2:
+            return None
+
+        connection = {
+            "dbname": DB_NAME if relation_name == "db" else VISIBILITY_DB_NAME,
+            "host": primary_endpoint[0],
+            "port": primary_endpoint[1],
+            "password": relation_data.get("password"),
+            "user": relation_data.get("username"),
+            "tls": relation_data.get("tls") == "True",
+        }
+
+        if None in (connection["user"], connection["password"]):
+            return None
+        return connection
+
+    def reconcile_peer_state(self, event):
+        """Keep legacy PostgreSQL connection data in peer data during rolling upgrades.
+
+        A database without usable connection info keeps its previous value until its relation
+        is gone.
+
+        Args:
+            event: The event being reconciled.
+        """
+        charm = self.charm
+        stored = charm._peer_get("database_connections")
+        current = stored if isinstance(stored, dict) else {}
+        connections = {}
+        for relation_name in ("db", "visibility"):
+            connection = self.database_connection(relation_name)
+            relation_gone = charm.model.get_relation(relation_name) is None or (
+                isinstance(event, RelationBrokenEvent) and event.relation.name == relation_name
+            )
+            if relation_gone:
+                connection = None
+            elif connection is None:
+                connection = current.get(relation_name)
+            connections[relation_name] = connection
+
+        if connections != stored and (stored is not None or any(connections.values())):
+            charm._peer_set("database_connections", connections)
