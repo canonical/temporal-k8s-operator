@@ -4,20 +4,22 @@
 
 """Temporal charm integration tests."""
 
-import json
+import asyncio
 import logging
-import time
 
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
 from helpers import (
     APP_NAME,
+    DENIED,
+    create_authorization_model,
+    get_application_url,
     perform_add_auth_rule_action,
     perform_check_auth_rule_action,
     perform_list_auth_rule_action,
     perform_list_system_admins_action,
     perform_remove_auth_rule_action,
-    run_sample_workflow,
+    probe,
     scale,
 )
 from pytest_operator.plugin import OpsTest
@@ -40,8 +42,10 @@ class TestAuth:
         await ops_test.model.deploy("openfga-k8s", channel="2.0/stable")
 
         async with ops_test.fast_forward():
+            # Only temporal-k8s is expected blocked (openfga relation not ready);
+            # openfga-k8s waits for its datastore relation, reported as waiting.
             await ops_test.model.wait_for_idle(
-                apps=[APP_NAME, "openfga-k8s"],
+                apps=[APP_NAME],
                 status="blocked",
                 raise_on_blocked=False,
                 raise_on_error=False,
@@ -69,28 +73,7 @@ class TestAuth:
             )
 
             logger.info("running the create authorization model action")
-            temporal_unit = ops_test.model.applications[APP_NAME].units[0]
-            with open("./temporal_auth_model.json", "r", encoding="utf-8") as model_file:
-                model_data = model_file.read()
-
-                # Remove whitespace and newlines from JSON object
-                json_text = "".join(model_data.split())
-                data = json.loads(json_text)
-                model_data = json.dumps(data, separators=(",", ":"))
-
-                for i in range(10):
-                    action = await temporal_unit.run_action(
-                        "create-authorization-model",
-                        model=model_data,
-                    )
-                    result = await action.wait()
-                    logger.info(f"attempt {i} -> action result {result.status} {result.results}")
-                    if result.status == "completed" and result.results == {
-                        "result": "successfully created authorization model",
-                        "return-code": 0,
-                    }:
-                        break
-                    time.sleep(2)
+            await create_authorization_model(ops_test)
 
             await ops_test.model.wait_for_idle(
                 apps=[APP_NAME],
@@ -101,10 +84,9 @@ class TestAuth:
 
             assert ops_test.model.applications[APP_NAME].status == "active"
 
-            try:
-                await run_sample_workflow(ops_test)
-            except RuntimeError as e:
-                assert "Request unauthorized." in str(e)
+            # Anonymous requests to the public frontend must be rejected.
+            url = await get_application_url(ops_test, application=APP_NAME, port=7233)
+            assert await asyncio.to_thread(probe, url, "default", "list") == DENIED
 
     async def test_openfga_add_auth_rule_action(self, ops_test: OpsTest):
         """Test add-auth-rule action."""
