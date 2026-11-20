@@ -1170,6 +1170,11 @@ class TemporalK8SCharm(CharmBase):
                     "AUTH_ADMIN_GROUPS": self.config["auth-admin-groups"],
                     "AUTH_OPEN_ACCESS_NAMESPACES": self.config["auth-open-access-namespaces"],
                     "AUTH_GOOGLE_CLIENT_ID": self.config["auth-google-client-id"],
+                    # The workload replaces these with its Google OAuth claim mapper
+                    # and OpenFGA authorizer. Upstream defaults ensure a workload
+                    # without them rejects requests instead of allowing them all.
+                    "TEMPORAL_AUTH_AUTHORIZER": "default",
+                    "TEMPORAL_AUTH_CLAIM_MAPPER": "default",
                 }
             )
 
