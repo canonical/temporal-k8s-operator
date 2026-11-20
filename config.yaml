@@ -41,6 +41,8 @@ options:
   auth-enabled:
     description: |
         Specifies whether authorization should be enabled through OpenFGA.
+        Requires a temporal-server image built with auth enforcement support
+        (Google OAuth claim mapper and OpenFGA authorizer).
     default: false
     type: boolean
 
