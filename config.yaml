@@ -57,7 +57,7 @@ options:
 
   auth-admin-groups:
     description: |
-        A comma-separated list of groups with read-access to all namespaces.
+        A comma-separated list of groups with admin access to the deployment.
         This group must be created in the OpenFGA store, and the corresponding
         users added to it as members.
     default: ""
@@ -65,7 +65,7 @@ options:
 
   auth-open-access-namespaces:
     description: |
-        A comma-separated list of namespaces which will be visible to all 
+        A comma-separated list of namespaces with writer access for all
         authenticated users.
     default: ""
     type: string
