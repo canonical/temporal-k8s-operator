@@ -253,7 +253,7 @@ async def create_authorization_model(ops_test: OpsTest):
             and result.results.get("return-code") == 0
         ):
             return
-        time.sleep(2)
+        await asyncio.sleep(2)
     raise AssertionError(f"create-authorization-model never succeeded: {result.status} {result.results}")
 
 
@@ -428,8 +428,9 @@ async def _perform(target: str, namespace: str, operation: str, metadata: dict[s
 def probe(target: str, namespace: str, operation: str, token: str | None = None, header: str | None = None) -> str:
     """Perform an operation against a frontend and classify the outcome.
 
-    Any error other than PermissionDenied is retried and then re-raised, so a
-    broken server is never mistaken for an authorization decision.
+    Transient connect/transport errors are retried and then re-raised, so a
+    broken server is never mistaken for an authorization decision. Any other
+    non-permission error is raised immediately.
 
     Args:
         target: Frontend gRPC address.
@@ -457,6 +458,11 @@ def probe(target: str, namespace: str, operation: str, token: str | None = None,
             result = ALLOWED
         except Exception as err:  # pylint: disable=broad-except
             if not _is_permission_denied(err):
+                if not (
+                    (isinstance(err, RPCError) and err.status == RPCStatusCode.UNAVAILABLE)
+                    or (isinstance(err, RuntimeError) and ("connect" in str(err) or "transport" in str(err)))
+                ):
+                    raise
                 logger.warning("probe %s %s on %s: transient error %s", operation, namespace, target, err)
                 last_error = err
                 asyncio.run(asyncio.sleep(10))
@@ -464,7 +470,7 @@ def probe(target: str, namespace: str, operation: str, token: str | None = None,
             result = DENIED
         logger.info(
             "probe target=%s namespace=%s operation=%s token=%s header=%s -> %s",
-            target, namespace, operation, token, header is not None, result,
+            target, namespace, operation, token is not None, header is not None, result,
         )  # fmt: skip
         return result
     assert last_error is not None
