@@ -87,6 +87,8 @@ from relations.s3_archival import S3Archival, create_bucket_if_not_exists
 
 CERTIFICATE_NAME = "temporal-frontend.pem"
 CERTS_DIR_PATH = "/etc/temporal"
+DB_CA_CERT_PATH = "/etc/temporal/db-ca.pem"
+VIS_DB_CA_CERT_PATH = "/etc/temporal/visibility-ca.pem"
 FRONTEND_CERTIFICATES_RELATION_NAME = "frontend-certificates"
 PRIVATE_KEY_NAME = "temporal-frontend.key"
 TEMPORAL_SERVICE_NAME = "temporal-server"
@@ -1155,6 +1157,16 @@ class TemporalK8SCharm(CharmBase):
                 "SQL_TLS_ENABLED": db_conn.get("tls", False),
             }
         )
+        db_ca = db_conn.get("tls_ca") if db_conn.get("tls") else None
+        vis_ca = visibility_conn.get("tls_ca") if visibility_conn.get("tls") else None
+        if db_ca:
+            context["SQL_CA"] = DB_CA_CERT_PATH
+        if vis_ca and vis_ca != db_ca:
+            context["SQL_VIS_CA"] = VIS_DB_CA_CERT_PATH
+        if db_ca or vis_ca:
+            # With a CA file, the driver verifies each connection's
+            # certificate against it (chain and connectAddr hostname).
+            context["SQL_HOST_VERIFICATION"] = True
 
         if self.config["auth-enabled"]:
             openfga = self.openfga_relation.state()
@@ -1215,6 +1227,17 @@ class TemporalK8SCharm(CharmBase):
         """
         config = render("config.jinja", context)
         self._push_if_changed(container, "/etc/temporal/config/charm.yaml", config)
+
+        connections = self.database_connections()
+        db_conn, visibility_conn = connections["db"], connections["visibility"]
+        if db_conn.get("tls") and db_conn.get("tls_ca"):
+            self._push_if_changed(container, DB_CA_CERT_PATH, db_conn["tls_ca"])
+        if (
+            visibility_conn.get("tls")
+            and visibility_conn.get("tls_ca")
+            and visibility_conn["tls_ca"] != db_conn.get("tls_ca")
+        ):
+            self._push_if_changed(container, VIS_DB_CA_CERT_PATH, visibility_conn["tls_ca"])
 
         dynamic_context = {
             "GLOBAL_RPS_LIMIT": self.config["global-rps-limit"],
