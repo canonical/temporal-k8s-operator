@@ -71,6 +71,11 @@ class Postgresql:
             "user": relation_data.get("username"),
             "tls": relation_data.get("tls") == "True",
         }
+        if connection["tls"]:
+            # The database CA may differ from the frontend CA, so it is
+            # forwarded separately to consumers (e.g. the admin relation's
+            # sql-tool) rather than relying on the frontend CA bundle.
+            connection["tls_ca"] = relation_data.get("tls-ca")
 
         if None in (connection["user"], connection["password"]):
             return None
