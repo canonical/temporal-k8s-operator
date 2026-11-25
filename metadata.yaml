@@ -92,4 +92,4 @@ resources:
   temporal-server-image:
     type: oci-image
     description: OCI image for Temporal
-    upstream-source: ubuntu/temporal-server:1.31-26.04_edge
+    upstream-source: ubuntu/temporal-server@sha256:eef3d98f5683d1fcb878212dc01941c310fcf55215b1816c589cfaeb95a36e27  # 1.31-26.04_edge
