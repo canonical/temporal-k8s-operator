@@ -6,6 +6,7 @@
 
 import asyncio
 import datetime
+import json
 import logging
 import time
 import uuid
@@ -13,10 +14,16 @@ from pathlib import Path
 
 import tenacity
 import yaml
+from google.protobuf.duration_pb2 import Duration
 from pytest_operator.plugin import OpsTest
 from temporal_client.activities import say_hello
 from temporal_client.workflows import SayHello
+from temporalio.api.workflowservice.v1 import (
+    ListWorkflowExecutionsRequest,
+    RegisterNamespaceRequest,
+)
 from temporalio.client import Client, WorkflowFailureError
+from temporalio.service import RPCError, RPCStatusCode
 from temporalio.worker import Worker
 
 try:
@@ -33,6 +40,9 @@ APP_NAME_UI = "temporal-ui-k8s"
 PGBOUNCER_APP_NAME = "pgbouncer-k8s"
 POSTGRESQL_APP_NAME = "postgresql-k8s"
 PGBOUNCER_CHANNEL = "1/stable"
+
+ALLOWED = "allowed"
+DENIED = "denied"
 
 
 async def scale(ops_test: OpsTest, app, units):
@@ -220,6 +230,33 @@ async def perform_temporal_integrations(ops_test: OpsTest):
     assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
 
 
+async def create_authorization_model(ops_test: OpsTest):
+    """Create the OpenFGA authorization model through the charm action.
+
+    Args:
+        ops_test: PyTest object.
+
+    Raises:
+        AssertionError: If the action never succeeds.
+    """
+    model_data = json.dumps(
+        json.loads(Path("./temporal_auth_model.json").read_text(encoding="utf-8")), separators=(",", ":")
+    )
+    temporal_unit = ops_test.model.applications[APP_NAME].units[0]
+    for i in range(10):
+        action = await temporal_unit.run_action("create-authorization-model", model=model_data)
+        result = await action.wait()
+        logger.info(f"attempt {i} -> action result {result.status} {result.results}")
+        if (
+            result.status == "completed"
+            and result.results.get("result") == "successfully created authorization model"
+            and result.results.get("return-code") == 0
+        ):
+            return
+        await asyncio.sleep(2)
+    raise AssertionError(f"create-authorization-model never succeeded: {result.status} {result.results}")
+
+
 async def perform_add_auth_rule_action(ops_test: OpsTest, user=None, group=None, namespace=None, role=None):
     """Perform add-auth-rule action tests.
 
@@ -333,3 +370,108 @@ async def perform_list_system_admins_action(ops_test: OpsTest):
         result.results["output"]["red"] == "['admin_one@example.com']"
         and result.results["output"]["green"] == "['admin_two@example.com']"
     )
+
+
+def _is_permission_denied(err: BaseException) -> bool:
+    """Return whether an error is a Temporal PermissionDenied response.
+
+    Args:
+        err: Error raised by the Temporal client.
+
+    Returns:
+        True for PermissionDenied.
+    """
+    if isinstance(err, RPCError):
+        return err.status == RPCStatusCode.PERMISSION_DENIED
+    # Client.connect surfaces connection-time RPC failures as a RuntimeError.
+    message = str(err)
+    return isinstance(err, RuntimeError) and ("PermissionDenied" in message or "Request unauthorized" in message)
+
+
+async def _perform(target: str, namespace: str, operation: str, metadata: dict[str, str]):
+    """Connect and perform a single operation.
+
+    Args:
+        target: Frontend gRPC address.
+        namespace: Namespace to operate on.
+        operation: One of "list", "start" or "register_namespace".
+        metadata: gRPC metadata to send.
+
+    Raises:
+        ValueError: If the operation is unknown.
+    """
+    client = await Client.connect(target, namespace=namespace, rpc_metadata=metadata)
+    if operation == "list":
+        await client.workflow_service.list_workflow_executions(
+            ListWorkflowExecutionsRequest(namespace=namespace, page_size=1)
+        )
+    elif operation == "start":
+        handle = await client.start_workflow(
+            "SayHello",
+            "auth",
+            id=f"auth-{uuid.uuid4().hex[:12]}",
+            task_queue="auth-test",
+            execution_timeout=datetime.timedelta(minutes=1),
+        )
+        await handle.terminate("auth test cleanup")
+    elif operation == "register_namespace":
+        await client.workflow_service.register_namespace(
+            RegisterNamespaceRequest(
+                namespace=f"auth-{uuid.uuid4().hex[:12]}",
+                workflow_execution_retention_period=Duration(seconds=86400),
+            )
+        )
+    else:
+        raise ValueError(f"unknown operation {operation}")
+
+
+def probe(target: str, namespace: str, operation: str, token: str | None = None, header: str | None = None) -> str:
+    """Perform an operation against a frontend and classify the outcome.
+
+    Transient connect/transport errors are retried and then re-raised, so a
+    broken server is never mistaken for an authorization decision. Any other
+    non-permission error is raised immediately.
+
+    Args:
+        target: Frontend gRPC address.
+        namespace: Namespace to operate on.
+        operation: One of "list", "start" or "register_namespace".
+        token: Bearer token to send, if any.
+        header: Raw authorization header value; overrides token.
+
+    Returns:
+        ALLOWED or DENIED.
+
+    Raises:
+        last_error: The non-authorization error seen on the final attempt.
+    """
+    metadata = {}
+    if header is not None:
+        metadata["authorization"] = header
+    elif token is not None:
+        metadata["authorization"] = f"Bearer {token}"
+
+    last_error: BaseException | None = None
+    for _ in range(12):
+        try:
+            asyncio.run(_perform(target, namespace, operation, metadata))
+            result = ALLOWED
+        except Exception as err:  # pylint: disable=broad-except
+            if not _is_permission_denied(err):
+                if not (
+                    (isinstance(err, RPCError) and err.status == RPCStatusCode.UNAVAILABLE)
+                    or (isinstance(err, RuntimeError) and ("connect" in str(err) or "transport" in str(err)))
+                ):
+                    raise
+                logger.warning("probe %s %s on %s: transient error %s", operation, namespace, target, err)
+                last_error = err
+                asyncio.run(asyncio.sleep(10))
+                continue
+            result = DENIED
+        logger.info(
+            "probe target=%s namespace=%s operation=%s token=%s header=%s -> %s",
+            target, namespace, operation, token is not None, header is not None, result,
+        )  # fmt: skip
+        return result
+    assert last_error is not None
+    raise last_error
