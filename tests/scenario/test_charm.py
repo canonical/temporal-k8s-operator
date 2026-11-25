@@ -1000,6 +1000,12 @@ def test_server_verifies_db_cert_with_forwarded_ca(
     assert "SQL_HOST_NAME" not in environment
     filesystem = state_out.get_container("temporal").get_filesystem(context)
     assert (filesystem / "etc/temporal/db-ca.pem").read_text() == db_ca
+    datastores = yaml.safe_load((filesystem / "etc/temporal/config/charm.yaml").read_text())["persistence"][
+        "datastores"
+    ]
+    assert datastores["default"]["sql"]["tls"]["caFile"] == "/etc/temporal/db-ca.pem"
+    # Without a separate visibility CA, visibility falls back to the db CA.
+    assert datastores["visibility"]["sql"]["tls"]["caFile"] == "/etc/temporal/db-ca.pem"
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -1039,6 +1045,11 @@ def test_server_gets_separate_ca_for_a_differently_signed_visibility_db(
     filesystem = state_out.get_container("temporal").get_filesystem(context)
     assert (filesystem / "etc/temporal/db-ca.pem").read_text() == db_ca
     assert (filesystem / "etc/temporal/visibility-ca.pem").read_text() == vis_ca
+    datastores = yaml.safe_load((filesystem / "etc/temporal/config/charm.yaml").read_text())["persistence"][
+        "datastores"
+    ]
+    assert datastores["default"]["sql"]["tls"]["caFile"] == "/etc/temporal/db-ca.pem"
+    assert datastores["visibility"]["sql"]["tls"]["caFile"] == "/etc/temporal/visibility-ca.pem"
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
