@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import ops
 import ops.testing
 import pytest
+import yaml
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateAvailableEvent,
     PrivateKey,
@@ -208,6 +209,13 @@ def test_charm_ready(context, pending_state, temporal_container, admin_relation)
     }
     assert state_final.get_container("temporal").plan.to_dict() == expected_plan
     assert state_final.get_container("temporal").service_statuses["temporal-server"] == ops.pebble.ServiceStatus.ACTIVE
+
+    rendered = yaml.safe_load(
+        (state_final.get_container("temporal").get_filesystem(context) / "etc/temporal/config/charm.yaml").read_text()
+    )
+    assert rendered["auth"]["enabled"] is False
+    assert rendered["global"]["authorization"]["authorizer"] is None
+    assert rendered["global"]["authorization"]["claimMapper"] is None
 
 
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
@@ -1297,6 +1305,8 @@ def test_authorization_ready(
                     "OFGA_API_SCHEME": "http",
                     "OFGA_SECRETS_BEARER_TOKEN": "openfga_token",
                     "OFGA_API_PORT": 8080,
+                    "TEMPORAL_AUTH_AUTHORIZER": "default",
+                    "TEMPORAL_AUTH_CLAIM_MAPPER": "default",
                 },
                 "on-check-failure": {"temporal-server-running": "ignore"},
                 "user": "ubuntu",
@@ -1315,6 +1325,14 @@ def test_authorization_ready(
 
     assert state_out.get_container("temporal").plan.to_dict() == expected_plan
     assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
+
+    # A workload that ignores the `auth` block must fail closed, not open.
+    rendered = yaml.safe_load(
+        (state_out.get_container("temporal").get_filesystem(context) / "etc/temporal/config/charm.yaml").read_text()
+    )
+    assert rendered["auth"]["enabled"] is True
+    assert rendered["global"]["authorization"]["authorizer"] == "default"
+    assert rendered["global"]["authorization"]["claimMapper"] == "default"
 
     running = configured_container(state_out, ops.pebble.ServiceStatus.ACTIVE)
     state_out = dataclasses.replace(state_out, containers=[running])

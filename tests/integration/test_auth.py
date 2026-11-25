@@ -4,24 +4,24 @@
 
 """Temporal charm integration tests."""
 
-import json
 import logging
-import time
 
 import jubilant
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
 from helpers import (
     APP_NAME,
+    DENIED,
+    create_authorization_model,
     fast_forward,
     perform_add_auth_rule_action,
     perform_check_auth_rule_action,
     perform_list_auth_rule_action,
     perform_list_system_admins_action,
     perform_remove_auth_rule_action,
-    run_action,
-    run_sample_workflow,
+    probe,
     scale,
+    unit_frontend,
     wait_active,
     wait_blocked,
 )
@@ -60,35 +60,14 @@ class TestAuth:
             wait_blocked(juju, APP_NAME, timeout=600)
 
             logger.info("running the create authorization model action")
-            with open("./temporal_auth_model.json", "r", encoding="utf-8") as model_file:
-                model_data = model_file.read()
-
-                # Remove whitespace and newlines from JSON object
-                json_text = "".join(model_data.split())
-                data = json.loads(json_text)
-                model_data = json.dumps(data, separators=(",", ":"))
-
-                for i in range(10):
-                    task = run_action(juju, f"{APP_NAME}/0", "create-authorization-model", model=model_data)
-                    logger.info(f"attempt {i} -> action result {task.status} {task.results}")
-                    if (
-                        task.status == "completed"
-                        and task.return_code == 0
-                        and task.results == {"result": "successfully created authorization model"}
-                    ):
-                        break
-                    time.sleep(2)
-                else:
-                    pytest.fail(f"create-authorization-model never succeeded: {task.status} {task.results}")
+            create_authorization_model(juju)
 
             wait_active(juju, APP_NAME, timeout=600, error=lambda status: jubilant.any_blocked(status, APP_NAME))
 
             assert juju.status().apps[APP_NAME].is_active
 
-            try:
-                run_sample_workflow(juju)
-            except RuntimeError as e:
-                assert "Request unauthorized." in str(e)
+            # Anonymous requests to the public frontend must be rejected.
+            assert probe(unit_frontend(juju, f"{APP_NAME}/0"), "default", "list") == DENIED
 
     def test_openfga_add_auth_rule_action(self, juju: jubilant.Juju):
         """Test add-auth-rule action."""
