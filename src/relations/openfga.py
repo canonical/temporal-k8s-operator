@@ -10,7 +10,6 @@ from enum import Enum
 from urllib.parse import urlsplit
 
 import requests
-from charms.openfga_k8s.v1.openfga import OpenFGAStoreCreateEvent
 from openfga_sdk import ReadRequestTupleKey
 from openfga_sdk.client import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models.check_request import ClientCheckRequest
@@ -187,8 +186,6 @@ class OpenFGA(framework.Object):
             return
 
         peer_state = self._peer_state()
-        if isinstance(event, OpenFGAStoreCreateEvent):
-            peer_state = None
 
         state = self._relation_state(peer_state)
         if state is not None and state != charm._peer_get("openfga"):
