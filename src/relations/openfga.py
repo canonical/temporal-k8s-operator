@@ -131,13 +131,19 @@ class OpenFGA(framework.Object):
         address = url_components.hostname
         http_port = url_components.port
 
+        # The store-created event fires on every provider databag update, not only when a new
+        # store is provisioned. Keep the authorization model ID while the store is unchanged;
+        # a rotated store invalidates the model created against it.
+        previous = self.charm._state.openfga or {}
+        auth_model_id = previous.get("auth_model_id") if previous.get("store_id") == info.store_id else None
+
         self.charm._state.openfga = {
             "store_id": info.store_id,
             "token": info.token,
             "address": address,
             "port": http_port,
             "scheme": scheme,
-            "auth_model_id": None,
+            "auth_model_id": auth_model_id,
         }
 
         self.charm._update(event)

@@ -572,6 +572,25 @@ def test_blocked_by_authorization_model(
     assert state_out.unit_status == ops.BlockedStatus("missing openfga authorization model")
 
 
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_store_created_keeps_the_authorization_model(
+    context, state, temporal_container, temporal_container_initialized, admin_relation, openfga_relation
+):
+    """A provider databag update for the same store keeps the authorization model."""
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+
+    state_out = dataclasses.replace(
+        state_out, config={"num-history-shards": 1, "auth-enabled": True}, containers=[temporal_container_initialized]
+    )
+
+    state_out = context.run(context.on.relation_changed(openfga_relation), state_out)
+
+    openfga_peer = yaml.safe_load(state_out.get_relations("peer")[0].local_app_data["openfga"])
+    assert openfga_peer["auth_model_id"] == "123"
+    assert state_out.unit_status != ops.BlockedStatus("missing openfga authorization model")
+
+
 @pytest.mark.s3_relation_skipped
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_authorization_ready(
