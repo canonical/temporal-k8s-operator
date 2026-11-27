@@ -1,0 +1,43 @@
+# Dependency monitoring required by the SSDLC process (SEC0025).
+#
+# Security updates (GHSA-driven) are enabled in the repository settings and
+# are grouped below to keep the number of PRs manageable. This file also turns
+# on weekly version updates so outdated dependencies surface before they turn
+# into vulnerabilities.
+version: 2
+
+updates:
+  - package-ecosystem: uv
+    directories:
+      - /
+    schedule:
+      interval: weekly
+      day: monday
+    # Wait a few days before proposing a fresh release (does not apply to
+    # security updates), as protection against compromised packages.
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      python-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      python-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      github-actions:
+        patterns: ["*"]
