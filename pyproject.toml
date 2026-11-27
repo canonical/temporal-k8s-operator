@@ -48,7 +48,7 @@ copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
 [project.optional-dependencies]
 # Runtime deps baked into the charm
 charm = [
-    "cryptography==45.0.3",
+    "cryptography==50.0.2",
     "Jinja2==3.1.4",
     "ops==2.21.1",
     "async-timeout==4.0.3",
@@ -64,7 +64,7 @@ unit = [
     "coverage[toml]==7.5.0",
     "pytest>=9.1.1,<10",
     "ipdb==0.13.9",
-    "cryptography==45.0.3",
+    "cryptography==50.0.2",
     "cosl==0.0.51",
     "requests==2.31.0",
     "openfga-sdk==0.6.0",
