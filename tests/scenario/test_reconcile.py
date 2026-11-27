@@ -868,16 +868,16 @@ def test_leader_drops_the_openfga_data_when_the_relation_is_broken(context, serv
 # OpenFGA authorization model
 
 
-def test_store_created_resets_the_authorization_model(context, server_state):
-    """Store created resets the authorization model."""
+def test_store_created_keeps_the_authorization_model(context, server_state):
+    """A provider databag update for the same store keeps the authorization model."""
     state = server_state(True, config={"num-history-shards": 1, "auth-enabled": True})
     openfga = state.get_relations("openfga")[0]
     assert _peer(state)["openfga"]["auth_model_id"] == "123"
 
     state_out = context.run(context.on.relation_changed(openfga), state)
 
-    assert _peer(state_out)["openfga"] == _openfga_blob(auth_model_id=None)
-    assert state_out.unit_status == ops.BlockedStatus("missing openfga authorization model")
+    assert _peer(state_out)["openfga"] == _openfga_blob()
+    assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
 
 
 def test_authorization_model_is_kept_while_the_store_is_not_delivered_again(context, server_state):
