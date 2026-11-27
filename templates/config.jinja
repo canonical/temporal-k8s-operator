@@ -57,7 +57,7 @@ persistence:
                 maxConnLifetime: {{ SQL_VIS_MAX_CONN_TIME | default("1h") }}
                 tls:
                     enabled: {{ SQL_TLS_ENABLED | default("false") }}
-                    caFile: {{ SQL_CA | default("") }}
+                    caFile: {{ SQL_VIS_CA | default(SQL_CA) | default("") }}
                     certFile: {{ SQL_CERT | default("") }}
                     keyFile: {{ SQL_CERT_KEY | default("") }}
                     enableHostVerification: {{ SQL_HOST_VERIFICATION | default("false") }}

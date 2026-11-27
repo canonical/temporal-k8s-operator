@@ -947,6 +947,111 @@ def test_database_connections(
                 assert isinstance(value, dict)
 
 
+def test_database_connections_forwards_db_tls_ca(
+    context, state, temporal_container, temporal_container_initialized, admin_relation, s3_relation, db_relation
+):
+    """The database CA is forwarded so consumers need not reuse the frontend CA."""
+    db_ca = "-----BEGIN CERTIFICATE-----\nDB-CA\n-----END CERTIFICATE-----"
+    tls_data = dict(db_relation.remote_app_data, tls="True", **{"tls-ca": db_ca})
+    tls_db_relation = dataclasses.replace(db_relation, remote_app_data=tls_data)
+    relations = [tls_db_relation if relation.id == db_relation.id else relation for relation in state.relations]
+    state = dataclasses.replace(state, relations=relations)
+
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+
+    with context(context.on.relation_changed(s3_relation), state_out) as manager:
+        with unittest.mock.patch("charm.create_bucket_if_not_exists"):
+            manager.run()
+
+            connections = manager.charm.database_connections()
+            assert connections["db"]["tls"] is True
+            assert connections["db"]["tls_ca"] == db_ca
+            # Visibility relation is plaintext, so no CA is attached.
+            assert "tls_ca" not in connections["visibility"]
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_server_verifies_db_cert_with_forwarded_ca(
+    context, state, temporal_container, temporal_container_initialized, admin_relation, db_relation
+):
+    """With tls-ca on the db relation, the workload gets the CA file and full verification."""
+    db_ca = "-----BEGIN CERTIFICATE-----\nDB-CA\n-----END CERTIFICATE-----"
+    tls_data = dict(db_relation.remote_app_data, tls="True", **{"tls-ca": db_ca})
+    tls_db_relation = dataclasses.replace(db_relation, remote_app_data=tls_data)
+    relations = [tls_db_relation if relation.id == db_relation.id else relation for relation in state.relations]
+    state = dataclasses.replace(state, relations=relations)
+
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    environment = state_out.get_container("temporal").plan.services["temporal-server"].environment
+    assert environment["SQL_TLS_ENABLED"] is True
+    assert environment["SQL_CA"] == "/etc/temporal/db-ca.pem"
+    assert environment["SQL_HOST_VERIFICATION"] is True
+    # serverName stays empty: the driver verifies against each connection's
+    # own connectAddr host, which also keeps the visibility connection correct
+    # when it uses a different server.
+    assert "SQL_HOST_NAME" not in environment
+    filesystem = state_out.get_container("temporal").get_filesystem(context)
+    assert (filesystem / "etc/temporal/db-ca.pem").read_text() == db_ca
+    datastores = yaml.safe_load((filesystem / "etc/temporal/config/charm.yaml").read_text())["persistence"][
+        "datastores"
+    ]
+    assert datastores["default"]["sql"]["tls"]["caFile"] == "/etc/temporal/db-ca.pem"
+    # Without a separate visibility CA, visibility falls back to the db CA.
+    assert datastores["visibility"]["sql"]["tls"]["caFile"] == "/etc/temporal/db-ca.pem"
+
+
+@pytest.mark.parametrize_skip_if(lambda leader: not leader)
+def test_server_gets_separate_ca_for_a_differently_signed_visibility_db(
+    context,
+    state,
+    temporal_container,
+    temporal_container_initialized,
+    admin_relation,
+    db_relation,
+    visibility_relation,
+    postgres_visibility_data,
+):
+    """A visibility DB signed by another CA gets its own CA file."""
+    db_ca = "-----BEGIN CERTIFICATE-----\nDB-CA\n-----END CERTIFICATE-----"
+    vis_ca = "-----BEGIN CERTIFICATE-----\nVIS-CA\n-----END CERTIFICATE-----"
+    db_relation = dataclasses.replace(
+        db_relation, remote_app_data={**db_relation.remote_app_data, "tls": "True", "tls-ca": db_ca}
+    )
+    visibility_relation = dataclasses.replace(
+        visibility_relation,
+        remote_app_data={**postgres_visibility_data, "tls": "True", "tls-ca": vis_ca},
+    )
+    other = [r for r in state.relations if r.endpoint not in ("db", "visibility")]
+    state = dataclasses.replace(state, relations=[db_relation, visibility_relation, *other])
+
+    state_out = context.run(context.on.pebble_ready(temporal_container), state)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.relation_changed(admin_relation), state_out)
+    state_out = dataclasses.replace(state_out, containers=[temporal_container_initialized])
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    environment = state_out.get_container("temporal").plan.services["temporal-server"].environment
+    assert environment["SQL_CA"] == "/etc/temporal/db-ca.pem"
+    assert environment["SQL_VIS_CA"] == "/etc/temporal/visibility-ca.pem"
+    assert environment["SQL_HOST_VERIFICATION"] is True
+    filesystem = state_out.get_container("temporal").get_filesystem(context)
+    assert (filesystem / "etc/temporal/db-ca.pem").read_text() == db_ca
+    assert (filesystem / "etc/temporal/visibility-ca.pem").read_text() == vis_ca
+    datastores = yaml.safe_load((filesystem / "etc/temporal/config/charm.yaml").read_text())["persistence"][
+        "datastores"
+    ]
+    assert datastores["default"]["sql"]["tls"]["caFile"] == "/etc/temporal/db-ca.pem"
+    assert datastores["visibility"]["sql"]["tls"]["caFile"] == "/etc/temporal/visibility-ca.pem"
+
+
 @pytest.mark.parametrize_skip_if(lambda leader: not leader)
 def test_blocked_on_two_ingresses(
     context,
